@@ -1,30 +1,23 @@
-You are working on a Shopify public embedded app repository.
+# Codex Start Prompt
 
-Before making any code changes:
-1. Read `AGENTS.md`.
-2. Read `docs/requirements.md`.
-3. Read `docs/technical_spec.md`.
-4. Read `.agent/PLANS.md`.
-5. Read `tickets/README.md`.
+このフォルダをプロジェクトルートとして読み込んでください。作業は次の順で進めます。
 
-Execution protocol:
-- Do not implement the whole app at once.
-- Work one ticket at a time.
-- Start with harness tickets H-001 to H-004.
-- For each ticket:
-  - restate scope,
-  - propose a short plan,
-  - implement only that ticket,
-  - run required checks,
-  - summarize changes, risks, and next ticket.
+1. `AGENTS.md` を最初に読む。
+2. `docs/shopify_app_requirements_definition_complete.md`、`docs/shopify_app_technical_spec_complete.md`、`docs/codex_harness_bootstrap.md` を読む。
+3. `tickets/README.md` を読み、**harness tickets から順番に**進める。
+4. 対象 ticket を開き、関連する ADR と skill を確認する。
+5. 非自明な変更の前に `.agent/PLANS.md` をテンプレとして `plans/<ticket-id>.md` を作る。
+6. ticket に設計判断が含まれるなら、実装前に `adr/NNNN-short-title.md` を追加または更新する。
+7. 実装後は、差分要約、実行した検証、ADR への追記、未解決事項、次の ticket を示す。
 
-Important constraints:
-- Follow Shopify official requirements in the technical spec.
-- Use Polaris for merchant-facing UI.
-- Use embedded auth with session token and token exchange.
-- Use Managed App Pricing.
-- Use app-specific HTTPS webhooks from app config.
-- Keep collection workflow out of GA scope.
-- Product GA only.
+## このセッションで守ること
+- **1 セッション 1 ticket**
+- harness tickets を先に完了する
+- launch GA は **Product Domain Parity MVP**
+- Orders / Customers / Discounts は scope 外
+- ticket に明示がない限り `shopify.app.toml`、scope、billing truth、webhook policy、privacy/delete contract を変えない
 
-If a requested change conflicts with the requirements or technical spec, stop and explain the conflict instead of guessing.
+## 最初にやること
+- `tickets/harness/H-001-harness-bootstrap.md` を読む
+- `plans/H-001.md` を作る
+- `H-001` だけを実装する

@@ -1,10 +1,17 @@
-# Codex external command rules
-# Purpose: require confirmation or block high-risk commands outside the sandbox.
+# codex/rules/default.rules
 
-block: git push
-block: gh pr merge
-block: shopify app deploy
-block: pnpm prisma migrate deploy
-block: prisma migrate deploy
-block: rm -rf /
-block: aws s3 rm
+# These are human-readable Codex safeguard rules for risky commands.
+# Repo-internal architecture enforcement belongs in lint/tests, not here.
+
+deny:
+  - git push
+  - gh pr merge
+  - shopify app deploy
+  - pnpm prisma migrate deploy
+  - aws s3 rm --recursive
+  - rm -rf
+
+warn:
+  - pnpm prisma migrate dev
+  - docker compose down -v
+  - terraform apply
