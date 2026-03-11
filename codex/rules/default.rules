@@ -1,0 +1,10 @@
+# Codex external command rules
+# Purpose: require confirmation or block high-risk commands outside the sandbox.
+
+block: git push
+block: gh pr merge
+block: shopify app deploy
+block: pnpm prisma migrate deploy
+block: prisma migrate deploy
+block: rm -rf /
+block: aws s3 rm
