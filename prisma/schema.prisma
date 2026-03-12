@@ -1,0 +1,42 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Session {
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+model WebhookInbox {
+  id               String   @id @default(cuid())
+  deliveryKey      String   @unique
+  eventId          String
+  shopDomain       String
+  topic            String
+  webhookId        String?
+  subscriptionName String?
+  rawBody          String
+  hmacHeader       String
+  createdAt        DateTime @default(now())
+  processedAt      DateTime?
+}

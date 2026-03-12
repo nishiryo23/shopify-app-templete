@@ -13,6 +13,7 @@ launch scope は web + worker + object storage + DB queue + secrets + observabil
 - KMS
 - CloudWatch
 - GitHub Actions
+- Prisma session storage も RDS PostgreSQL を truth とし、node-local SQLite は本番構成に使わない
 
 ## Consequences
 serverless 単機能構成より job orchestration と artifact retention を扱いやすい。

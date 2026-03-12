@@ -7,6 +7,9 @@ export default [
     ignores: [
       "node_modules/**",
       ".pnpm-store/**",
+      "**/*.d.ts",
+      ".react-router/**",
+      "build/**",
       "coverage/**",
       "test-results/**",
       "playwright-report/**",

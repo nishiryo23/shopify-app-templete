@@ -1,0 +1,7 @@
+name = "web"
+roles = ["frontend", "backend"]
+webhooks_path = "/webhooks/app"
+
+[commands]
+predev = "pnpm run prisma:generate"
+dev = "pnpm run prisma:migrate:deploy && pnpm exec react-router dev"

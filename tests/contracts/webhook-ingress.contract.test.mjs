@@ -263,10 +263,10 @@ test("same event id with different subscription names is enqueued for each subsc
   assert.equal(inbox.getWrites().length, 2);
 });
 
-test("same event id with same subscription name but different webhook ids is duplicate", async () => {
+test("same event id with same subscription name but different webhook ids is enqueued per webhook subscription", async () => {
   const inbox = createWebhookInboxStore();
 
-  await processWebhookIngress({
+  const firstResult = await processWebhookIngress({
     headers: buildHeaders({ "X-Shopify-Name": "products-subscription", "X-Shopify-Webhook-Id": "wh_1" }),
     rawBody,
     clientSecret,
@@ -280,12 +280,17 @@ test("same event id with same subscription name but different webhook ids is dup
     inbox,
   });
 
+  assert.deepEqual(firstResult, {
+    status: 200,
+    outcome: "accepted",
+    enqueued: true,
+  });
   assert.deepEqual(secondResult, {
     status: 200,
-    outcome: "duplicate-no-op",
-    enqueued: false,
+    outcome: "accepted",
+    enqueued: true,
   });
-  assert.equal(inbox.getWrites().length, 1);
+  assert.equal(inbox.getWrites().length, 2);
 });
 
 test("same event id with same subscription name is duplicate when webhook id is absent", async () => {
@@ -344,7 +349,7 @@ test("same event id with different webhook ids is accepted when subscription nam
   assert.equal(inbox.getWrites().length, 2);
 });
 
-test("delivery key scopes by shop topic event and prefers subscription name over webhook id", () => {
+test("delivery key scopes by shop topic event and prefers webhook id over subscription name", () => {
   assert.equal(
     buildWebhookDeliveryKey({
       shopDomain: "example.myshopify.com",
@@ -357,7 +362,7 @@ test("delivery key scopes by shop topic event and prefers subscription name over
       "example.myshopify.com",
       "products/update",
       "evt-1",
-      "products-primary",
+      "wh_1",
     ]),
   );
   assert.equal(

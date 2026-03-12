@@ -113,7 +113,7 @@ export async function processWebhookIngress({ headers, rawBody, clientSecret, in
 }
 
 function buildWebhookDeliveryKey({ shopDomain, topic, eventId, webhookId, subscriptionName }) {
-  const subscriptionKey = subscriptionName || webhookId || "default";
+  const subscriptionKey = webhookId || subscriptionName || "default";
   return JSON.stringify([shopDomain, topic, eventId, subscriptionKey]);
 }
 
