@@ -48,3 +48,19 @@
 - Notes:
   - 最新 reviewer で unresolved の architecture guardrail root cause は残っていない
   - App Store readiness 全体の blocked 項目（`shopify.app.toml`、review metadata）は別論点なので昇格していない
+
+- Date: 2026-03-13
+- App / Repo: `shopify_matri`
+- `/review` evidence: embedded shell / webhook dedupe に対する review のうち、Shopify docs・ADR-0004・contract 修正を踏まえて webhook dedupe の root cause を修正後、最新 `/review` が `既存動作を壊すと断定できる不具合は見つかりませんでした。` を返した
+- `/review` result: `finding removed`
+- Finding removed:
+  - delivery key が `X-Shopify-Name` を `X-Shopify-Webhook-Id` より優先し、同名 subscription の別 webhook delivery を duplicate 扱いする
+- Promoted invariant:
+  - webhook dedupe は webhook id を subscription 名より優先する
+- Updated pattern:
+  - `shopify-review-guard/references/pattern-catalog.md` の pattern 18 追加
+- Related tests:
+  - [webhook-ingress.contract.test.mjs](/Users/nishimuraryousuke/project/shopify_matri/tests/contracts/webhook-ingress.contract.test.mjs)
+- Notes:
+  - Polaris shell 指摘は Shopify docs と依存実装に照らして root cause と採用していないため昇格していない
+  - 最新 `/review` で webhook dedupe root cause の再指摘はない
