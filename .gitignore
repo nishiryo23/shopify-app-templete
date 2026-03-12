@@ -1,0 +1,11 @@
+node_modules/
+.pnpm-store/
+
+test-results/
+playwright-report/
+blob-report/
+playwright/.auth/
+*.storage-state.json
+
+.DS_Store
+*.log

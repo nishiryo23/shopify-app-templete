@@ -1,0 +1,50 @@
+# Shopify Review Promotions
+
+- Date: 2026-03-11
+- App / Repo: `shopify_matri`
+- `/review` evidence: architecture guardrail / smoke helper / webhook ingress contract に対する一連の修正後、最新 `/review` で別 root cause は残るが、以下 4 root cause は再指摘されなかった
+- `/review` result: `finding removed`
+- Finding removed:
+  - smoke helper の trailing slash false failure
+  - webhook ingress の missing topic / shop domain accepted
+  - guardrail の string / comparison false positive
+  - guardrail の exported binding / member-qualified request call false negative
+- Promoted invariant:
+  - smoke helper は reviewer URL と direct app URL の表記ゆれを吸収する
+  - webhook ingress は識別不能な delivery を成功扱いにしない
+  - guardrail の制御フロー判定は adapter 記法を business logic と混同しない
+  - guardrail は handler export と request call の別記法を等価に扱う
+- Updated pattern:
+  - `shopify-review-guard/references/pattern-catalog.md` の 4 パターン追加
+- Related tests:
+  - [smoke-helper.contract.test.mjs](/Users/nishimuraryousuke/project/shopify_matri/tests/contracts/smoke-helper.contract.test.mjs)
+  - [webhook-ingress.contract.test.mjs](/Users/nishimuraryousuke/project/shopify_matri/tests/contracts/webhook-ingress.contract.test.mjs)
+  - [check-architecture-guardrails.mjs](/Users/nishimuraryousuke/project/shopify_matri/scripts/check-architecture-guardrails.mjs)
+  - [tests/fixtures/guardrails](/Users/nishimuraryousuke/project/shopify_matri/tests/fixtures/guardrails)
+- Notes:
+  - 最新 `/review` で unresolved の root cause は昇格していない
+  - unresolved: dynamic import promise chain bypass / `new URL(...)` 経由の direct Admin API access
+
+- Date: 2026-03-12
+- App / Repo: `shopify_matri`
+- `/review` evidence: architecture guardrail の declaration file / webhook index route / typed handler assignment / axios alias chain / whitespace variance に対する一連の修正後、最新 `shopify_reviewer` が `No Shopify-specific findings.` を返した
+- `/review` result: `finding removed`
+- Finding removed:
+  - `*.d.ts` を route source と誤判定する false positive
+  - `webhooks._index` / `webhooks/index` を webhook endpoint と誤判定する false negative
+  - typed loader/action assignment の handler 未検査
+  - destructured / chained / typed axios alias の direct Admin API access 見逃し
+  - `url.href` と whitespace 変種の `as` / `satisfies` による parser bypass
+- Promoted invariant:
+  - guardrail は declaration file と non-endpoint index route を executable endpoint と混同しない
+  - guardrail は handler export / typed assignment / alias chain / static URL member access を同義として正規化する
+- Updated pattern:
+  - `shopify-review-guard/references/pattern-catalog.md` の pattern 13 更新
+  - `shopify-review-guard/references/pattern-catalog.md` の pattern 15 追加
+- Related tests:
+  - [architecture-guardrails.contract.test.mjs](/Users/nishimuraryousuke/project/shopify_matri/tests/contracts/architecture-guardrails.contract.test.mjs)
+  - [check-architecture-guardrails.mjs](/Users/nishimuraryousuke/project/shopify_matri/scripts/check-architecture-guardrails.mjs)
+  - [tests/fixtures/guardrails](/Users/nishimuraryousuke/project/shopify_matri/tests/fixtures/guardrails)
+- Notes:
+  - 最新 reviewer で unresolved の architecture guardrail root cause は残っていない
+  - App Store readiness 全体の blocked 項目（`shopify.app.toml`、review metadata）は別論点なので昇格していない

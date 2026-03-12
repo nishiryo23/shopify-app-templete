@@ -1,0 +1,22 @@
+{
+  "name": "shopify-matri-harness",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@9.12.2",
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@openai/codex-sdk": "^0.114.0",
+    "@playwright/test": "^1.54.2",
+    "@typescript-eslint/parser": "^8.46.1",
+    "eslint": "^9.39.1",
+    "globals": "^16.5.0"
+  },
+  "scripts": {
+    "codex:shopify-review-loop": "node scripts/run-codex-shopify-review-loop.mjs",
+    "lint": "eslint . --ext .js,.cjs,.mjs,.ts,.tsx,.mts,.cts",
+    "test:contracts": "node --test tests/contracts/*.test.mjs",
+    "test:smoke": "node scripts/validate-smoke-env.mjs && playwright test",
+    "test:smoke:list": "playwright test --list",
+    "check": "pnpm run lint && pnpm run test:contracts && node scripts/check-architecture-guardrails.mjs && pnpm run test:smoke:list"
+  }
+}
