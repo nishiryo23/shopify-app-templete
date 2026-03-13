@@ -128,6 +128,7 @@ test("lifecycle webhooks go through durable ingress before side effects", () => 
 test("authenticated admin loaders bootstrap shop state and custom session storage keeps offline tokens encrypted", () => {
   const server = readProjectFile("app/shopify.server.ts");
   const authBootstrap = readProjectFile("app/services/auth-bootstrap.server.ts");
+  const billing = readProjectFile("app/services/billing.server.ts");
   const storage = readProjectFile("app/services/shop-session-storage.server.ts");
   const crypto = readProjectFile("app/services/session-crypto.server.ts");
   const bootstrap = readProjectFile("app/services/shop-state.server.ts");
@@ -152,4 +153,6 @@ test("authenticated admin loaders bootstrap shop state and custom session storag
   assert.match(crypto, /if \(!encodedKey\) \{\s+return null;\s+\}/m);
   assert.match(crypto, /SHOP_TOKEN_ENCRYPTION_KEY is required for encrypted offline session storage/);
   assert.match(bootstrap, /const scopeDetail = await scopes\.query\(\);/);
+  assert.match(billing, /const authContext = await authenticateAndBootstrapShop\(request\);/);
+  assert.match(billing, /return Response\.json\(entitlement\);/);
 });
