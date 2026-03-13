@@ -78,6 +78,61 @@ test("prisma schema persists encrypted shop bootstrap state", () => {
   assert.match(migration, /"encryptedOfflineSession" JSONB/);
 });
 
+test("platform foundation persists queue and artifact metadata in PostgreSQL", () => {
+  const schema = readProjectFile("prisma/schema.prisma");
+  const migration = readProjectFile(
+    "prisma/migrations/20260313143000_add_job_and_artifact_foundation/migration.sql",
+  );
+  const queue = readProjectFile("domain/jobs/prisma-job-queue.mjs");
+  const catalog = readProjectFile("domain/artifacts/prisma-artifact-catalog.mjs");
+  const artifactStorage = readProjectFile("domain/artifacts/storage.mjs");
+  const provenanceCrypto = readProjectFile("app/services/provenance-crypto.server.ts");
+
+  assert.match(schema, /model Job \{/);
+  assert.match(schema, /state\s+JobState\s+@default\(queued\)/);
+  assert.match(schema, /model JobAttempt \{/);
+  assert.match(schema, /@@unique\(\[jobId, attemptNumber\]\)/);
+  assert.match(schema, /model Artifact \{/);
+  assert.match(schema, /visibility\s+ArtifactVisibility\s+@default\(private\)/);
+  assert.match(migration, /CREATE TABLE "Job"/);
+  assert.match(migration, /CREATE TABLE "JobAttempt"/);
+  assert.match(migration, /CREATE TABLE "Artifact"/);
+  assert.match(migration, /CREATE UNIQUE INDEX "Job_shopDomain_kind_dedupeKey_active_key"/);
+  assert.match(migration, /WHERE "dedupeKey" IS NOT NULL AND "state" IN \('queued', 'retryable', 'leased'\)/);
+  assert.match(queue, /await ensureJobLeaseRow\(tx, candidate\.shopDomain\)/);
+  assert.match(queue, /const lockedShop = await tx\.jobLease\.updateMany\(/);
+  assert.match(queue, /leaseToken = crypto\.randomUUID\(\)/);
+  assert.match(queue, /const updatedLease = await tx\.jobLease\.updateMany\(/);
+  assert.match(queue, /leaseExpiresAt: \{ gt: now \}/);
+  assert.match(queue, /const liveLease = await tx\.jobLease\.updateMany\(/);
+  assert.match(queue, /const shouldDeadLetter = job\.attempts >= job\.maxAttempts/);
+  assert.match(catalog, /bucket_objectKey/);
+  assert.match(artifactStorage, /only supports private visibility/);
+  assert.match(provenanceCrypto, /PROVENANCE_SIGNING_KEY/);
+  assert.doesNotMatch(provenanceCrypto, /SHOP_TOKEN_ENCRYPTION_KEY/);
+});
+
+test("prisma schema persists queue and artifact foundation tables", () => {
+  const schema = readProjectFile("prisma/schema.prisma");
+  const migration = readProjectFile("prisma/migrations/20260313143000_add_job_and_artifact_foundation/migration.sql");
+
+  assert.match(schema, /enum JobState \{/);
+  assert.match(schema, /enum ArtifactVisibility \{/);
+  assert.match(schema, /model Job \{/);
+  assert.match(schema, /dedupeKey\s+String\?/);
+  assert.doesNotMatch(schema, /@@unique\(\[shopDomain, kind, dedupeKey\]\)/);
+  assert.match(schema, /@@index\(\[shopDomain, kind, dedupeKey\]\)/);
+  assert.match(schema, /model JobAttempt \{/);
+  assert.match(schema, /@@unique\(\[jobId, attemptNumber\]\)/);
+  assert.match(schema, /model Artifact \{/);
+  assert.match(schema, /visibility\s+ArtifactVisibility\s+@default\(private\)/);
+  assert.match(migration, /CREATE TABLE "Job"/);
+  assert.match(migration, /CREATE TABLE "JobAttempt"/);
+  assert.match(migration, /CREATE TABLE "Artifact"/);
+  assert.match(migration, /CREATE UNIQUE INDEX "Job_shopDomain_kind_dedupeKey_active_key"/);
+  assert.match(migration, /CREATE UNIQUE INDEX "Artifact_bucket_objectKey_key"/);
+});
+
 test("app uninstall cleanup deletes sessions by shop even without an offline session object", () => {
   const handler = readProjectFile("domain/webhooks/enqueue.server.ts");
 
@@ -155,4 +210,29 @@ test("authenticated admin loaders bootstrap shop state and custom session storag
   assert.match(bootstrap, /const scopeDetail = await scopes\.query\(\);/);
   assert.match(billing, /const authContext = await authenticateAndBootstrapShop\(request\);/);
   assert.match(billing, /return Response\.json\(entitlement\);/);
+});
+
+test("queue, artifact, and provenance crypto foundations stay separated by responsibility", () => {
+  const queue = readProjectFile("domain/jobs/prisma-job-queue.mjs");
+  const artifactStorage = readProjectFile("domain/artifacts/storage.mjs");
+  const signing = readProjectFile("domain/provenance/signing.mjs");
+  const sessionCrypto = readProjectFile("app/services/session-crypto.server.ts");
+  const readme = readProjectFile("README.md");
+
+  assert.match(queue, /await ensureJobLeaseRow\(tx, candidate\.shopDomain\)/);
+  assert.match(queue, /leaseToken: job\.leaseToken/);
+  assert.match(queue, /leaseExpiresAt: \{ gt: now \}/);
+  assert.match(queue, /state: nextState/);
+  assert.match(queue, /outcome: shouldDeadLetter \? "dead_letter" : "retryable"/);
+  assert.match(artifactStorage, /Artifacts must remain private by default/);
+  assert.match(artifactStorage, /Artifact objectKey must stay within the configured storage root/);
+  assert.match(artifactStorage, /must not contain Windows path separators/);
+  assert.match(artifactStorage, /path\.resolve\(resolvedRootDir, objectKey\)/);
+  assert.match(artifactStorage, /const descriptors = new Map\(\)/);
+  assert.match(artifactStorage, /contentType: storedDescriptor\?\.contentType/);
+  assert.match(signing, /PROVENANCE_SIGNING_KEY is required for provenance signing/);
+  assert.doesNotMatch(signing, /SHOP_TOKEN_ENCRYPTION_KEY is required for encrypted offline session storage/);
+  assert.match(sessionCrypto, /SHOP_TOKEN_ENCRYPTION_KEY is required for encrypted offline session storage/);
+  assert.match(readme, /PROVENANCE_SIGNING_KEY/);
+  assert.match(readme, /未設定のまま署名が必要な処理を呼ぶと fail-fast/);
 });

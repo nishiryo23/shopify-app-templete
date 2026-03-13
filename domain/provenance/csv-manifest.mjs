@@ -1,12 +1,8 @@
-import crypto from "node:crypto";
-
-function sha256(value) {
-  return crypto.createHash("sha256").update(value).digest("hex");
-}
-
-function sign(value, signingKey) {
-  return crypto.createHmac("sha256", signingKey).update(value).digest("hex");
-}
+import {
+  buildRowFingerprint,
+  sha256Hex,
+  signHmacSha256Hex,
+} from "./signing.mjs";
 
 function normalizeCsv(csvText) {
   return csvText.replace(/\r\n/g, "\n");
@@ -69,22 +65,20 @@ function isManifestRecord(value) {
 export function buildCsvManifest({ csvText, signingKey }) {
   const normalizedCsv = normalizeCsv(csvText);
   const rows = splitCsvRecords(normalizedCsv);
-  const fileDigest = sha256(csvText);
+  const fileDigest = sha256Hex(csvText);
 
   return {
     fileDigest,
-    fileDigestSignature: sign(fileDigest, signingKey),
-    rowFingerprints: rows.map((row, index) => ({
-      rowNumber: index + 1,
-      digest: sha256(row),
-      signature: sign(`${index + 1}:${row}`, signingKey),
-    })),
+    fileDigestSignature: signHmacSha256Hex(fileDigest, signingKey),
+    rowFingerprints: rows.map((row, index) =>
+      buildRowFingerprint({ row, rowNumber: index + 1, signingKey }),
+    ),
   };
 }
 
 export function verifyCsvManifest({ csvText, signingKey, manifest }) {
   const normalizedCsv = normalizeCsv(csvText);
-  const actualFileDigest = sha256(csvText);
+  const actualFileDigest = sha256Hex(csvText);
 
   if (!isManifestRecord(manifest)) {
     return { ok: false, reason: "invalid-manifest" };
@@ -102,7 +96,7 @@ export function verifyCsvManifest({ csvText, signingKey, manifest }) {
     return { ok: false, reason: "file-digest-mismatch" };
   }
 
-  if (sign(manifest.fileDigest, signingKey) !== manifest.fileDigestSignature) {
+  if (signHmacSha256Hex(manifest.fileDigest, signingKey) !== manifest.fileDigestSignature) {
     return { ok: false, reason: "file-digest-signature-mismatch" };
   }
 
@@ -124,11 +118,14 @@ export function verifyCsvManifest({ csvText, signingKey, manifest }) {
 
   for (const fingerprint of manifest.rowFingerprints) {
     const row = rows[fingerprint.rowNumber - 1];
-    if (sha256(row) !== fingerprint.digest) {
+    if (sha256Hex(row) !== fingerprint.digest) {
       return { ok: false, reason: `row-digest-mismatch:${fingerprint.rowNumber}` };
     }
 
-    if (sign(`${fingerprint.rowNumber}:${row}`, signingKey) !== fingerprint.signature) {
+    if (
+      signHmacSha256Hex(`${fingerprint.rowNumber}:${row}`, signingKey) !==
+      fingerprint.signature
+    ) {
       return { ok: false, reason: `row-signature-mismatch:${fingerprint.rowNumber}` };
     }
   }
