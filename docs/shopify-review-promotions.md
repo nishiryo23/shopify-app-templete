@@ -64,3 +64,24 @@
 - Notes:
   - Polaris shell 指摘は Shopify docs と依存実装に照らして root cause と採用していないため昇格していない
   - 最新 `/review` で webhook dedupe root cause の再指摘はない
+
+- Date: 2026-03-13
+- App / Repo: `shopify_matri`
+- `/review` evidence: AWS infra bootstrap に対する review で migration exit code 未確認 / ECS rollout 未待機 / optional Shopify deploy の CLI・Partners token 不足 / Docker build context への host state 混入 / required app config 未検証 / worker shutdown 遅延を順に修正後、最新 `/review` が `AWS bootstrap 用の skeleton と検証もこのパッチの範囲では整合しています。` を返した
+- `/review` result: `finding removed`
+- Finding removed:
+  - migration one-off task failure を成功扱いする
+  - ECS service rollout failure を成功扱いする
+  - optional `shopify app deploy` が clean runner で実行不能
+  - Docker build context に host `node_modules` や local Shopify CLI state が混入する
+  - required app config 未設定でも壊れた ECS task を render / register できる
+  - worker shutdown が poll interval 分だけ遅延する
+- Promoted invariant:
+  - deploy workflow は task render 前に required app config を fail-fast し、migration task の `exitCode` と service rollout の `services-stable` まで確認する
+  - optional な `shopify app deploy` 経路は CI 単体で完結させ、Shopify CLI と `SHOPIFY_CLI_PARTNERS_TOKEN` を workflow 側で明示する
+  - Docker build context には host dependency と local Shopify CLI state を含めない
+- Related tests:
+  - [aws-infra-bootstrap.contract.test.mjs](/Users/nishimuraryousuke/project/shopify_matri/tests/contracts/aws-infra-bootstrap.contract.test.mjs)
+- Notes:
+  - 最新 `/review` の範囲では unresolved の AWS bootstrap root cause は残っていない
+  - `@shopify/cli` version pinning や deploy 後 smoke は改善余地として残るが、この promotion では昇格していない

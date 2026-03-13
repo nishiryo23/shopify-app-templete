@@ -230,3 +230,17 @@ test("dockerfile uses a multi-stage production build", () => {
   assert.match(dockerignore, /^\.shopify$/m);
   assert.match(dockerignore, /^\.local-home$/m);
 });
+
+test("agents and promotion docs preserve aws bootstrap review invariants", () => {
+  const agents = readProjectFile("AGENTS.md");
+  const promotions = readProjectFile("docs/shopify-review-promotions.md");
+
+  assert.match(agents, /deploy workflow は task render 前に必須 app config を fail-fast/);
+  assert.match(agents, /optional な CI deploy path は clean runner 前提で成立させる/);
+  assert.match(agents, /Docker build context には host 依存やローカル Shopify CLI state を混入させない/);
+
+  assert.match(promotions, /AWS infra bootstrap に対する review/);
+  assert.match(promotions, /migration task の `exitCode` と service rollout の `services-stable`/);
+  assert.match(promotions, /SHOPIFY_CLI_PARTNERS_TOKEN/);
+  assert.match(promotions, /host dependency と local Shopify CLI state/);
+});
