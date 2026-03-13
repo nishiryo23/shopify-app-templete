@@ -7,6 +7,8 @@
 - 既存判断の更新は supersede ではなく update でもよいが、差分を明記する
 - ADR 番号は 4 桁ゼロ埋め
 - ticket / PR / change summary に ADR 番号を残す
+- auth / billing / webhooks / config / schema の truth を変える差分は `pnpm check` で ADR 更新が必須になる
+- `plans/*.md` の `ADR impact` には `ADR required` と `ADR` 番号を明記する
 
 ## Seed ADR
 - 0001: repo truth and Codex harness

@@ -51,7 +51,7 @@
     "test:smoke": "node scripts/validate-smoke-env.mjs && playwright test",
     "test:smoke:list": "playwright test --list",
     "typecheck": "react-router typegen && tsc --noEmit",
-    "check": "pnpm run lint && pnpm run test:contracts && node scripts/check-architecture-guardrails.mjs && pnpm run typecheck && pnpm run build && pnpm run test:smoke:list"
+    "check": "pnpm run lint && pnpm run test:contracts && node scripts/check-architecture-guardrails.mjs && node scripts/check-adr-discipline.mjs && pnpm run typecheck && pnpm run build && pnpm run test:smoke:list"
   },
   "workspaces": {
     "packages": [

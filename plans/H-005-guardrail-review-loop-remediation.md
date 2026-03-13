@@ -23,8 +23,9 @@ architecture guardrail の `URL#toString()` bypass と、review loop fix prompt 
 4. `pnpm run test:contracts` と `pnpm check` で検証する
 
 ## ADR impact
-- 既存 ADR 更新で足りる
-- ADR-0001 に harness gate / remediation prompt の truth を補足する
+- ADR required: yes
+- ADR: 0001
+- Why: harness gate と remediation prompt の repo truth を更新するため。
 
 ## Validation
 - `pnpm run test:contracts`

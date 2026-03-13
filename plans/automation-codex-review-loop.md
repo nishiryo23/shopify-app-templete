@@ -22,9 +22,9 @@
 4. `pnpm check` を実行して通す
 
 ## ADR impact
-- 新規 ADR は不要
-- 既存 ADR 更新も不要
-- ADR 番号なし
+- ADR required: no
+- ADR: none
+- Why: review automation script の追加であり、Shopify app の設計判断は変更しないため。
 
 ## Validation
 - `pnpm run lint`

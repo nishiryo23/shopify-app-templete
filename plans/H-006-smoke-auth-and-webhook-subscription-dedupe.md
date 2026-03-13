@@ -24,9 +24,9 @@ Shopify admin reviewer URL を使う smoke 実行で認証 state 不足による
 4. `pnpm run test:contracts` と `pnpm check` で検証する
 
 ## ADR impact
-- 既存 ADR 更新で足りる
-- ADR-0004 に subscription 単位 dedupe truth を追記する
-- ADR-0001 に smoke reviewer URL の auth state requirement を追記する
+- ADR required: yes
+- ADR: 0001, 0004
+- Why: smoke auth requirement と webhook dedupe truth の両方を更新するため。
 
 ## Validation
 - `pnpm run test:contracts`

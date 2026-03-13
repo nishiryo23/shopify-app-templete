@@ -22,7 +22,9 @@ repo 共通の一般 lint を追加し、`pnpm check` で guardrail と contract
 3. lint 実行で出る既存コードの問題を修正し、harness が壊れていないことを確認する。
 
 ## ADR impact
-- `adr/0001-repo-truth-and-codex-harness.md` を更新
+- ADR required: yes
+- ADR: 0001
+- Why: `pnpm check` の構成と harness gate の truth を更新するため。
 
 ## Validation
 - `pnpm lint`

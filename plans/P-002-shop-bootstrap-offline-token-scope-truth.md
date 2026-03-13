@@ -26,8 +26,9 @@ install / reinstall 後の bootstrap と、encrypted offline token 保存と、q
 6. contract / integration 相当の test と `pnpm check` で検証する
 
 ## ADR impact
-- `adr/0002-embedded-auth-and-token-exchange.md` を更新する
-- `adr/0004-app-specific-https-webhooks-only.md` を更新する
+- ADR required: yes
+- ADR: 0002, 0004
+- Why: offline token bootstrap と scope/webhook lifecycle truth の両方を更新するため。
 
 ## Validation
 - `pnpm check`

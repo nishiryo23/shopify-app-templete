@@ -23,8 +23,9 @@
 4. 依存関係を導入して `pnpm check` と app-level type/build を確認する
 
 ## ADR impact
-- 既存 ADR 更新で足りる
-- ADR-0002 に minimal embedded shell / auth boundary を追記する
+- ADR required: yes
+- ADR: 0002
+- Why: embedded auth boundary と token exchange 前提の設計判断を更新するため。
 
 ## Validation
 - `pnpm check`

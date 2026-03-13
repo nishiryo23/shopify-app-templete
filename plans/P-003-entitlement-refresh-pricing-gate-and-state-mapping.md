@@ -28,7 +28,9 @@ Managed App Pricing の hosted flow を前提に、`currentAppInstallation` を 
 5. contract/integration/smoke を追加または更新し、status mapping、pricing gate、welcome 非付与、refresh flow を固定する。
 
 ## ADR impact
-- 既存 `adr/0003-managed-pricing-as-billing-source-of-truth.md` を正本とし、state mapping や refresh trigger の扱いに差分が出る場合のみ更新する。
+- ADR required: yes
+- ADR: 0003
+- Why: managed pricing の state mapping と refresh trigger の truth を更新するため。
 
 ## Validation
 - `pnpm check`

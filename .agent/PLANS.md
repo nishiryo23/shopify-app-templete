@@ -27,9 +27,9 @@
 3.
 
 ## ADR impact
-- 新規 ADR が必要か
-- 既存 ADR 更新で足りるか
-- ADR 番号
+- ADR required: yes|no
+- ADR: 0001,0004|none
+- Why: 1〜2 文で理由
 
 ## Validation
 - unit / integration / contract / smoke

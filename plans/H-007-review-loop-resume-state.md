@@ -22,8 +22,9 @@
 4. contract tests と docs を更新して `pnpm check` で検証する
 
 ## ADR impact
-- 既存 ADR 更新で足りる
-- ADR-0001 に review-loop resume state の truth を追記する
+- ADR required: yes
+- ADR: 0001
+- Why: review-loop resume state を harness truth として追加するため。
 
 ## Validation
 - `pnpm run test:contracts`

@@ -23,8 +23,9 @@ Shopify webhook inbox の重複排除を `X-Shopify-Event-Id` 基準へ修正し
 4. `pnpm run test:contracts` と `pnpm check` で検証する
 
 ## ADR impact
-- 既存 ADR 更新で足りる
-- ADR-0004 に webhook inbox dedupe truth を追記する
+- ADR required: yes
+- ADR: 0004
+- Why: webhook inbox dedupe と lifecycle truth の更新を伴うため。
 
 ## Validation
 - `pnpm run test:contracts`
