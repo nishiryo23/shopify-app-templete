@@ -5,7 +5,9 @@ import { pathToFileURL } from "node:url";
 import { createArtifactStorageFromEnv } from "../domain/artifacts/factory.mjs";
 import { createPrismaJobQueue } from "../domain/jobs/prisma-job-queue.mjs";
 import { PRODUCT_EXPORT_KIND } from "../domain/products/export-profile.mjs";
+import { PRODUCT_PREVIEW_KIND } from "../domain/products/preview-profile.mjs";
 import { runProductExportJob } from "./product-export.mjs";
+import { runProductPreviewJob } from "./product-preview.mjs";
 
 const ALWAYS_REQUIRED_WORKER_SECRETS = Object.freeze([
   "DATABASE_URL",
@@ -281,7 +283,7 @@ export async function runBootstrapWorker({
   jobQueue: providedJobQueue,
   prisma: providedPrisma,
   processRef = process,
-  runJob = runProductExportJob,
+  runJob = runWorkerJob,
   workerId = buildWorkerId(),
 } = {}) {
   const config = validateWorkerEnvironment(env);
@@ -318,7 +320,7 @@ export async function runBootstrapWorker({
   try {
     while (!stopping) {
       const job = await jobQueue.leaseNext({
-        kinds: [PRODUCT_EXPORT_KIND],
+        kinds: [PRODUCT_EXPORT_KIND, PRODUCT_PREVIEW_KIND],
         leaseMs: config.queueLeaseMs,
         workerId,
       });
@@ -381,30 +383,33 @@ export async function runBootstrapWorker({
           runSucceeded = true;
         } catch (error) {
           if (error instanceof JobFinalizeError) {
-            logger.error?.("Product export job completed but state finalization failed", {
+            logger.error?.("Worker job completed but state finalization failed", {
               error,
               jobId: job.id,
+              kind: job.kind,
               runSucceeded,
               workerId,
             });
             throw error;
           }
 
-          logger.error?.("Product export job failed", {
+          logger.error?.("Worker job failed", {
             error,
             jobId: job.id,
+            kind: job.kind,
           });
           const failed = await jobQueue.fail({
             delayMs: 0,
-            errorMessage: error?.code ?? error?.message ?? "product-export-failed",
+            errorMessage: error?.code ?? error?.message ?? `${job.kind}-failed`,
             jobId: job.id,
             workerId,
           });
 
           if (!failed) {
-            logger.error?.("Product export job state could not be finalized", {
+            logger.error?.("Worker job state could not be finalized", {
               error,
               jobId: job.id,
+              kind: job.kind,
               workerId,
             });
           }
@@ -427,6 +432,14 @@ export async function runBootstrapWorker({
     logger.info?.("Bootstrap worker disconnecting from PostgreSQL");
     await prisma.$disconnect();
   }
+}
+
+export async function runWorkerJob(args = {}) {
+  if (args.job?.kind === PRODUCT_PREVIEW_KIND) {
+    return runProductPreviewJob(args);
+  }
+
+  return runProductExportJob(args);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
