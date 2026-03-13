@@ -65,6 +65,19 @@ test("prisma schema persists webhook inbox deliveries for durable ingress", () =
   assert.match(migration, /"processedAt" TIMESTAMP\(3\)/);
 });
 
+test("prisma schema persists encrypted shop bootstrap state", () => {
+  const schema = readProjectFile("prisma/schema.prisma");
+  const migration = readProjectFile("prisma/migrations/20260313103000_add_shop_table/migration.sql");
+
+  assert.match(schema, /model Shop \{/);
+  assert.match(schema, /shopDomain\s+String\s+@id/);
+  assert.match(schema, /offlineSessionId\s+String\?\s+@unique/);
+  assert.match(schema, /encryptedOfflineSession\s+Json\?/);
+  assert.match(schema, /grantedScopes\s+String\[\]/);
+  assert.match(migration, /CREATE TABLE "Shop"/);
+  assert.match(migration, /"encryptedOfflineSession" JSONB/);
+});
+
 test("app uninstall cleanup deletes sessions by shop even without an offline session object", () => {
   const handler = readProjectFile("domain/webhooks/enqueue.server.ts");
 
@@ -72,22 +85,22 @@ test("app uninstall cleanup deletes sessions by shop even without an offline ses
     handler,
     /if \(normalizedTopic === "app\/uninstalled"\) \{\s+await prisma\.session\.deleteMany\(\{ where: \{ shop \} \}\);/m,
   );
-  assert.doesNotMatch(
+  assert.match(
     handler,
-    /if \(normalizedTopic === "app\/uninstalled"\) \{\s+if \(session\)/m,
+    /if \(normalizedTopic === "app\/uninstalled"\) \{[\s\S]+await shopStateStore\.deleteShop\(shop\);/m,
   );
 });
 
-test("scope updates are synchronized across all sessions for the shop", () => {
+test("scope updates no longer trust webhook payload as scope truth", () => {
   const handler = readProjectFile("domain/webhooks/enqueue.server.ts");
 
   assert.match(
     handler,
-    /if \(normalizedTopic === "app\/scopes\/update"\) \{[\s\S]+const currentScopes = Array\.isArray\(payload\.current\)[\s\S]+await prisma\.session\.updateMany\(\{\s+where: \{ shop \},\s+data: \{ scope: currentScopes \},\s+\}\);/m,
+    /if \(normalizedTopic === "app\/scopes\/update"\) \{[\s\S]+await shopStateStore\.markScopesStale\(shop\);[\s\S]+await prisma\.webhookInbox\.update\(\{/m,
   );
   assert.doesNotMatch(
     handler,
-    /if \(session\) \{[\s\S]+updateMany/m,
+    /payload\.current|updateMany\(\{\s+where: \{ shop \},\s+data: \{ scope:/m,
   );
 });
 
@@ -110,4 +123,33 @@ test("lifecycle webhooks go through durable ingress before side effects", () => 
     handler,
     /await prisma\.webhookInbox\.update\(\{\s+where: \{ deliveryKey \},\s+data: \{ processedAt: new Date\(\) \},\s+\}\);/m,
   );
+});
+
+test("authenticated admin loaders bootstrap shop state and custom session storage keeps offline tokens encrypted", () => {
+  const server = readProjectFile("app/shopify.server.ts");
+  const authBootstrap = readProjectFile("app/services/auth-bootstrap.server.ts");
+  const storage = readProjectFile("app/services/shop-session-storage.server.ts");
+  const crypto = readProjectFile("app/services/session-crypto.server.ts");
+  const bootstrap = readProjectFile("app/services/shop-state.server.ts");
+
+  assert.match(server, /sessionStorage: new ShopSessionStorage\(prisma\)/);
+  assert.doesNotMatch(server, /validateShopTokenEncryptionKey\(\);/);
+  assert.match(authBootstrap, /const authContext = await authenticate\.admin\(request\);/);
+  assert.match(authBootstrap, /const bootstrapState = await shopStateStore\.getBootstrapState\(shopDomain\);/);
+  assert.match(authBootstrap, /if \(!bootstrapState\.lastBootstrapAt\) \{\s+return true;\s+\}/m);
+  assert.match(authBootstrap, /if \(!\(await shouldBootstrapShopState\(authContext\.session\.shop\)\)\) \{\s+return;\s+\}/m);
+  assert.match(authBootstrap, /try \{\s+await bootstrapShopState\(\{\s+scopes: authContext\.scopes,\s+shopDomain: authContext\.session\.shop,\s+store: shopStateStore,\s+\}\);\s+\} catch \(error\) \{/m);
+  assert.match(authBootstrap, /console\.error\("Failed to bootstrap shop state after authentication"/);
+  assert.match(storage, /if \(session\.isOnline\) \{\s+return this\.onlineStorage\.storeSession\(session\);/m);
+  assert.match(storage, /if \(!this\.encryptedOfflineSessionsEnabled\) \{\s+return this\.onlineStorage\.storeSession\(session\);/m);
+  assert.match(storage, /await this\.onlineStorage\.storeSession\(session\);/);
+  assert.doesNotMatch(storage, /await this\.onlineStorage\.deleteSession\(session\.id\);/);
+  assert.match(storage, /if \(prismaSession\?\.isOnline\) \{\s+return prismaSession;\s+\}/m);
+  assert.match(storage, /return prismaSession \?\? undefined;/);
+  assert.match(storage, /Discarding unreadable encrypted offline session/);
+  assert.match(storage, /await this\.clearUnreadableOfflineSession\(\{ offlineSessionId: id \}\);/);
+  assert.match(storage, /await this\.prisma\.shop\.upsert\(\{/);
+  assert.match(crypto, /if \(!encodedKey\) \{\s+return null;\s+\}/m);
+  assert.match(crypto, /SHOP_TOKEN_ENCRYPTION_KEY is required for encrypted offline session storage/);
+  assert.match(bootstrap, /const scopeDetail = await scopes\.query\(\);/);
 });

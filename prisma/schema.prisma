@@ -27,6 +27,16 @@ model Session {
   refreshTokenExpires DateTime?
 }
 
+model Shop {
+  shopDomain              String   @id
+  offlineSessionId        String?  @unique
+  encryptedOfflineSession Json?
+  grantedScopes           String[]
+  lastBootstrapAt         DateTime?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+}
+
 model WebhookInbox {
   id               String   @id @default(cuid())
   deliveryKey      String   @unique

@@ -1,9 +1,9 @@
 import type { LoaderFunctionArgs } from "react-router";
 
-import { authenticate } from "../shopify.server";
+import { authenticateAndBootstrapShop } from "./auth-bootstrap.server";
 
 export async function loadEmbeddedAppShell({ request }: LoaderFunctionArgs) {
-  await authenticate.admin(request);
+  await authenticateAndBootstrapShop(request);
   return {
     apiKey: process.env.SHOPIFY_API_KEY || "",
   };

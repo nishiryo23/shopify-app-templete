@@ -1,8 +1,11 @@
 import type { ActionFunctionArgs } from "react-router";
 
 import prisma from "../../app/db.server";
+import { createPrismaShopStateStore } from "../../app/services/prisma-shop-state-store.server";
 import { buildWebhookDeliveryKey, processWebhookIngress } from "./inbox-contract.mjs";
 import { createPrismaWebhookInboxStore } from "./prisma-inbox-store.mjs";
+
+const shopStateStore = createPrismaShopStateStore(prisma);
 
 function normalizeTopic(topic: string) {
   return topic.toLowerCase().replaceAll("_", "/");
@@ -53,11 +56,11 @@ export async function enqueueWebhookInboxEvent({ request }: ActionFunctionArgs) 
     return new Response(null, { status: 200 });
   }
 
-  const payload = JSON.parse(rawBody);
   const normalizedTopic = normalizeTopic(topic);
 
   if (normalizedTopic === "app/uninstalled") {
     await prisma.session.deleteMany({ where: { shop } });
+    await shopStateStore.deleteShop(shop);
     await prisma.webhookInbox.update({
       where: { deliveryKey },
       data: { processedAt: new Date() },
@@ -67,14 +70,7 @@ export async function enqueueWebhookInboxEvent({ request }: ActionFunctionArgs) 
   }
 
   if (normalizedTopic === "app/scopes/update") {
-    const currentScopes = Array.isArray(payload.current)
-      ? payload.current.join(",")
-      : "";
-
-    await prisma.session.updateMany({
-      where: { shop },
-      data: { scope: currentScopes },
-    });
+    await shopStateStore.markScopesStale(shop);
     await prisma.webhookInbox.update({
       where: { deliveryKey },
       data: { processedAt: new Date() },
