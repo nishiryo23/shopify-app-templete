@@ -1,0 +1,58 @@
+{
+  "family": "__TASK_FAMILY__",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "__TASK_EXECUTION_ROLE_ARN__",
+  "taskRoleArn": "__TASK_ROLE_ARN__",
+  "containerDefinitions": [
+    {
+      "name": "web",
+      "image": "__IMAGE_URI__",
+      "essential": true,
+      "command": ["pnpm", "start"],
+      "portMappings": [
+        {
+          "containerPort": 3000,
+          "hostPort": 3000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        { "name": "NODE_ENV", "value": "production" },
+        { "name": "PORT", "value": "3000" },
+        { "name": "SHOPIFY_API_KEY", "value": "__SHOPIFY_API_KEY__" },
+        { "name": "SHOPIFY_APP_URL", "value": "__SHOPIFY_APP_URL__" },
+        { "name": "SCOPES", "value": "__SCOPES__" },
+        { "name": "AWS_REGION", "value": "__AWS_REGION__" },
+        { "name": "S3_ARTIFACT_BUCKET", "value": "__S3_ARTIFACT_BUCKET__" },
+        { "name": "S3_ARTIFACT_PREFIX", "value": "__S3_ARTIFACT_PREFIX__" },
+        { "name": "LOG_LEVEL", "value": "__LOG_LEVEL__" },
+        { "name": "QUEUE_POLL_INTERVAL_MS", "value": "__QUEUE_POLL_INTERVAL_MS__" },
+        { "name": "QUEUE_LEASE_MS", "value": "__QUEUE_LEASE_MS__" }
+      ],
+      "secrets": [
+        { "name": "DATABASE_URL", "valueFrom": "__DATABASE_URL_SECRET_ARN__" },
+        { "name": "SHOPIFY_API_SECRET", "valueFrom": "__SHOPIFY_API_SECRET_ARN__" },
+        {
+          "name": "SHOP_TOKEN_ENCRYPTION_KEY",
+          "valueFrom": "__SHOP_TOKEN_ENCRYPTION_KEY_SECRET_ARN__"
+        },
+        {
+          "name": "PROVENANCE_SIGNING_KEY",
+          "valueFrom": "__PROVENANCE_SIGNING_KEY_SECRET_ARN__"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-create-group": "true",
+          "awslogs-group": "__LOG_GROUP__",
+          "awslogs-region": "__AWS_REGION__",
+          "awslogs-stream-prefix": "web"
+        }
+      }
+    }
+  ]
+}
