@@ -195,7 +195,14 @@ function createQueuePrismaDouble(seedJobs = []) {
         leases.push(created);
         return created;
       },
+      async findFirst({ where }) {
+        return leases.find((lease) => matchesWhere(lease, where)) ?? null;
+      },
       async updateMany({ data, where }) {
+        if (Object.keys(data).length === 0) {
+          throw new Error("Prisma updateMany requires at least one field in data");
+        }
+
         const matched = leases.filter((lease) => matchesWhere(lease, where));
         matched.forEach((lease) => applyJobData(lease, data));
         return { count: matched.length };
@@ -205,6 +212,20 @@ function createQueuePrismaDouble(seedJobs = []) {
       async create({ data }) {
         attempts.push({ ...data });
         return data;
+      },
+      async delete({ where }) {
+        const index = attempts.findIndex(
+          (entry) =>
+            entry.jobId === where.jobId_attemptNumber.jobId &&
+            entry.attemptNumber === where.jobId_attemptNumber.attemptNumber,
+        );
+
+        if (index === -1) {
+          throw new Error("attempt not found");
+        }
+
+        const [attempt] = attempts.splice(index, 1);
+        return attempt;
       },
       async update({ data, where }) {
         const attempt = attempts.find(
@@ -550,6 +571,54 @@ test("stale worker cannot fail a re-leased job", async () => {
   assert.equal(staleFailure, null);
   assert.equal(prisma.jobs[0].state, "leased");
   assert.equal(prisma.jobs[0].leasedBy, "worker-2");
+});
+
+test("worker can release an unstarted leased job back to queued during shutdown drain", async () => {
+  const now = new Date("2026-03-13T05:30:00.000Z");
+  const prisma = createQueuePrismaDouble([
+    {
+      attempts: 1,
+      id: "job-a",
+      kind: "product.write",
+      leaseExpiresAt: new Date("2026-03-13T05:31:00.000Z"),
+      leaseToken: "lease-active",
+      leasedAt: new Date("2026-03-13T05:29:00.000Z"),
+      leasedBy: "worker-1",
+      payload: { id: 1 },
+      shopDomain: "a.myshopify.com",
+      state: "leased",
+    },
+  ]);
+  prisma.leases.push({
+    shopDomain: "a.myshopify.com",
+    jobId: "job-a",
+    leaseExpiresAt: new Date("2026-03-13T05:31:00.000Z"),
+    leaseToken: "lease-active",
+    workerId: "worker-1",
+  });
+  prisma.attempts.push({
+    attemptNumber: 1,
+    jobId: "job-a",
+    leaseExpiresAt: new Date("2026-03-13T05:31:00.000Z"),
+    leaseToken: "lease-active",
+    startedAt: new Date("2026-03-13T05:29:00.000Z"),
+    workerId: "worker-1",
+  });
+  const queue = createPrismaJobQueue(prisma);
+
+  const released = await queue.release({
+    jobId: "job-a",
+    now,
+    workerId: "worker-1",
+  });
+
+  assert.equal(released, true);
+  assert.equal(prisma.jobs[0].state, "queued");
+  assert.equal(prisma.jobs[0].attempts, 0);
+  assert.equal(prisma.jobs[0].leasedBy, null);
+  assert.equal(prisma.jobs[0].leaseToken, null);
+  assert.equal(prisma.leases[0].jobId, null);
+  assert.equal(prisma.attempts.length, 0);
 });
 
 test("expired worker cannot complete after its lease timed out even without re-lease", async () => {

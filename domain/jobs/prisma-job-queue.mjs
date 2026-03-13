@@ -273,16 +273,21 @@ export function createPrismaJobQueue(prisma) {
         return false;
       }
 
+      const attemptNumber = job.attempts;
+      const leaseExpiresAt = job.leaseExpiresAt;
+      const leaseToken = job.leaseToken;
+      const shopDomain = job.shopDomain;
+
       const completed = await prisma.$transaction(async (tx) => {
         const liveLease = await tx.jobLease.updateMany({
           data: {
-            leaseExpiresAt: job.leaseExpiresAt,
+            leaseExpiresAt,
           },
           where: {
             jobId,
             leaseExpiresAt: { gt: now },
-            leaseToken: job.leaseToken,
-            shopDomain: job.shopDomain,
+            leaseToken,
+            shopDomain,
             workerId,
           },
         });
@@ -303,7 +308,7 @@ export function createPrismaJobQueue(prisma) {
           where: {
             id: jobId,
             leaseExpiresAt: { gt: now },
-            leaseToken: job.leaseToken,
+            leaseToken,
             leasedBy: workerId,
             state: "leased",
           },
@@ -320,7 +325,7 @@ export function createPrismaJobQueue(prisma) {
           },
           where: {
             jobId_attemptNumber: {
-              attemptNumber: job.attempts,
+              attemptNumber,
               jobId,
             },
           },
@@ -328,7 +333,7 @@ export function createPrismaJobQueue(prisma) {
 
         await releaseJobLease(tx, {
           jobId,
-          leaseToken: job.leaseToken,
+          leaseToken,
           now,
           workerId,
         });
@@ -337,6 +342,87 @@ export function createPrismaJobQueue(prisma) {
       });
 
       return completed;
+    },
+
+    async release({
+      jobId,
+      now = new Date(),
+      workerId,
+    }) {
+      const job = await prisma.job.findUnique({ where: { id: jobId } });
+
+      if (!job || job.state !== "leased" || job.leasedBy !== workerId || !job.leaseToken) {
+        return false;
+      }
+
+      const attemptNumber = job.attempts;
+      const leaseToken = job.leaseToken;
+      const shopDomain = job.shopDomain;
+
+      return prisma.$transaction(async (tx) => {
+        const liveLease = await tx.jobLease.findFirst({
+          where: {
+            jobId,
+            leaseExpiresAt: { gt: now },
+            leaseToken,
+            shopDomain,
+            workerId,
+          },
+        });
+
+        if (!liveLease) {
+          return false;
+        }
+
+        const updated = await tx.job.updateMany({
+          data: {
+            attempts: Math.max(0, attemptNumber - 1),
+            lastError: null,
+            leaseExpiresAt: null,
+            leaseToken: null,
+            leasedAt: null,
+            leasedBy: null,
+            state: "queued",
+          },
+          where: {
+            id: jobId,
+            leaseExpiresAt: { gt: now },
+            leaseToken,
+            leasedBy: workerId,
+            state: "leased",
+          },
+        });
+
+        if (updated.count === 0) {
+          return false;
+        }
+
+        await tx.jobAttempt.delete({
+          where: {
+            jobId_attemptNumber: {
+              attemptNumber,
+              jobId,
+            },
+          },
+        });
+
+        await tx.jobLease.updateMany({
+          data: {
+            jobId: null,
+            leaseExpiresAt: now,
+            leaseToken: null,
+            workerId: null,
+          },
+          where: {
+            jobId,
+            leaseToken,
+            shopDomain,
+            workerId,
+          },
+        });
+
+        return true;
+      });
     },
 
     async fail({
@@ -355,17 +441,21 @@ export function createPrismaJobQueue(prisma) {
       const shouldDeadLetter = job.attempts >= job.maxAttempts;
       const nextState = shouldDeadLetter ? "dead_letter" : "retryable";
       const availableAt = shouldDeadLetter ? job.availableAt : addMilliseconds(now, delayMs);
+      const attemptNumber = job.attempts;
+      const leaseExpiresAt = job.leaseExpiresAt;
+      const leaseToken = job.leaseToken;
+      const shopDomain = job.shopDomain;
 
       return prisma.$transaction(async (tx) => {
         const liveLease = await tx.jobLease.updateMany({
           data: {
-            leaseExpiresAt: job.leaseExpiresAt,
+            leaseExpiresAt,
           },
           where: {
             jobId,
             leaseExpiresAt: { gt: now },
-            leaseToken: job.leaseToken,
-            shopDomain: job.shopDomain,
+            leaseToken,
+            shopDomain,
             workerId,
           },
         });
@@ -388,7 +478,7 @@ export function createPrismaJobQueue(prisma) {
           where: {
             id: jobId,
             leaseExpiresAt: { gt: now },
-            leaseToken: job.leaseToken,
+            leaseToken,
             leasedBy: workerId,
             state: "leased",
           },
@@ -406,7 +496,7 @@ export function createPrismaJobQueue(prisma) {
           },
           where: {
             jobId_attemptNumber: {
-              attemptNumber: job.attempts,
+              attemptNumber,
               jobId,
             },
           },
@@ -414,7 +504,7 @@ export function createPrismaJobQueue(prisma) {
 
         await releaseJobLease(tx, {
           jobId,
-          leaseToken: job.leaseToken,
+          leaseToken,
           now,
           workerId,
         });

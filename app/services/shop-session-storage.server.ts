@@ -94,6 +94,16 @@ export class ShopSessionStorage implements PrismaSessionStorageInterface {
     });
   }
 
+  private async clearOfflineSessionReference(where: { offlineSessionId?: string | { in: string[] } }) {
+    await this.prisma.shop.updateMany({
+      where,
+      data: {
+        encryptedOfflineSession: Prisma.JsonNull,
+        offlineSessionId: null,
+      },
+    });
+  }
+
   async storeSession(session: Session) {
     if (session.isOnline) {
       return this.onlineStorage.storeSession(session);
@@ -104,8 +114,6 @@ export class ShopSessionStorage implements PrismaSessionStorageInterface {
     }
 
     const encryptedOfflineSession = encryptOfflineSession(session);
-
-    await this.onlineStorage.storeSession(session);
 
     await this.prisma.shop.upsert({
       where: { shopDomain: session.shop },
@@ -120,6 +128,7 @@ export class ShopSessionStorage implements PrismaSessionStorageInterface {
         offlineSessionId: session.id,
       },
     });
+    await this.onlineStorage.deleteSession(session.id);
 
     return true;
   }
@@ -156,13 +165,13 @@ export class ShopSessionStorage implements PrismaSessionStorageInterface {
 
   async deleteSession(id: string) {
     await this.onlineStorage.deleteSession(id);
-    await this.prisma.shop.deleteMany({ where: { offlineSessionId: id } });
+    await this.clearOfflineSessionReference({ offlineSessionId: id });
     return true;
   }
 
   async deleteSessions(ids: string[]) {
     await this.onlineStorage.deleteSessions(ids);
-    await this.prisma.shop.deleteMany({ where: { offlineSessionId: { in: ids } } });
+    await this.clearOfflineSessionReference({ offlineSessionId: { in: ids } });
     return true;
   }
 

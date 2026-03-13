@@ -23,6 +23,8 @@ RUN pnpm install --frozen-lockfile --prod
 RUN pnpm run prisma:generate
 
 COPY --from=build /app/build ./build
+COPY --from=build /app/domain ./domain
+COPY --from=build /app/platform ./platform
 COPY --from=build /app/workers ./workers
 
 CMD ["pnpm", "start"]

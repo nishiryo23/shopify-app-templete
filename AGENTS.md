@@ -39,3 +39,6 @@
 - 標準チェックは `pnpm check`。
 - 実装変更には、少なくとも 1 つの test / contract fixture / smoke 変更を伴わせる。
 - Product write path を変える変更では verification test を必須とする。
+- deploy workflow は task render 前に必須 app config を fail-fast すること。
+- optional な CI deploy path は clean runner 前提で成立させること。
+- Docker build context には host 依存やローカル Shopify CLI state を混入させないこと。

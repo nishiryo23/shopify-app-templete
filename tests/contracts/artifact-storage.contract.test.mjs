@@ -7,6 +7,7 @@ import path from "node:path";
 import {
   createFilesystemArtifactStorage,
   createMemoryArtifactStorage,
+  createS3ArtifactStorage,
 } from "../../domain/artifacts/storage.mjs";
 import { createPrismaArtifactCatalog } from "../../domain/artifacts/prisma-artifact-catalog.mjs";
 
@@ -109,6 +110,46 @@ test("filesystem artifact storage preserves descriptor metadata on structured re
   assert.equal(stored.descriptor.key, "jobs/job-1/result.csv");
 
   await rm(baseDir, { force: true, recursive: true });
+});
+
+test("S3 artifact storage preserves descriptor metadata on structured reads", async () => {
+  const commands = [];
+  const storage = createS3ArtifactStorage({
+    bucket: "private-artifacts",
+    client: {
+      async send(command) {
+        commands.push(command);
+
+        if (command.constructor.name === "PutObjectCommand") {
+          return {};
+        }
+
+        if (command.constructor.name === "GetObjectCommand") {
+          return {
+            Body: Buffer.from("artifact"),
+            ContentType: "text/csv",
+            Metadata: {
+              codex_metadata_json: JSON.stringify({ source: "export" }),
+            },
+          };
+        }
+
+        return {};
+      },
+    },
+  });
+
+  const descriptor = await storage.put({
+    body: Buffer.from("artifact"),
+    contentType: "text/csv",
+    key: "jobs/job-1/result.csv",
+    metadata: { source: "export" },
+  });
+  const stored = await storage.get(descriptor);
+
+  assert.equal(commands[0].input.Metadata.codex_metadata_json, JSON.stringify({ source: "export" }));
+  assert.equal(stored.body.toString("utf8"), "artifact");
+  assert.deepEqual(stored.descriptor.metadata, { source: "export" });
 });
 
 test("artifact catalog upserts metadata and soft deletes by object key", async () => {

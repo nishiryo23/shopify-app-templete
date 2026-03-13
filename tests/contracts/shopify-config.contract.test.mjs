@@ -198,12 +198,14 @@ test("authenticated admin loaders bootstrap shop state and custom session storag
   assert.match(authBootstrap, /console\.error\("Failed to bootstrap shop state after authentication"/);
   assert.match(storage, /if \(session\.isOnline\) \{\s+return this\.onlineStorage\.storeSession\(session\);/m);
   assert.match(storage, /if \(!this\.encryptedOfflineSessionsEnabled\) \{\s+return this\.onlineStorage\.storeSession\(session\);/m);
-  assert.match(storage, /await this\.onlineStorage\.storeSession\(session\);/);
-  assert.doesNotMatch(storage, /await this\.onlineStorage\.deleteSession\(session\.id\);/);
+  assert.doesNotMatch(storage, /const encryptedOfflineSession = encryptOfflineSession\(session\);\s+await this\.onlineStorage\.storeSession\(session\);/m);
+  assert.match(storage, /await this\.onlineStorage\.deleteSession\(session\.id\);/);
   assert.match(storage, /if \(prismaSession\?\.isOnline\) \{\s+return prismaSession;\s+\}/m);
   assert.match(storage, /return prismaSession \?\? undefined;/);
   assert.match(storage, /Discarding unreadable encrypted offline session/);
   assert.match(storage, /await this\.clearUnreadableOfflineSession\(\{ offlineSessionId: id \}\);/);
+  assert.match(storage, /await this\.clearOfflineSessionReference\(\{ offlineSessionId: id \}\);/);
+  assert.match(storage, /await this\.clearOfflineSessionReference\(\{ offlineSessionId: \{ in: ids \} \}\);/);
   assert.match(storage, /await this\.prisma\.shop\.upsert\(\{/);
   assert.match(crypto, /if \(!encodedKey\) \{\s+return null;\s+\}/m);
   assert.match(crypto, /SHOP_TOKEN_ENCRYPTION_KEY is required for encrypted offline session storage/);
