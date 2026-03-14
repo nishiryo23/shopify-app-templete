@@ -6,7 +6,9 @@ const PRODUCT_VARIANT_EXPORT_QUERY = `#graphql
         node {
           id
           barcode
+          compareAtPrice
           inventoryPolicy
+          price
           taxable
           title
           updatedAt
@@ -50,7 +52,9 @@ const PRODUCT_VARIANT_READ_QUERY = `#graphql
           nodes {
             id
             barcode
+            compareAtPrice
             inventoryPolicy
+            price
             taxable
             title
             updatedAt
@@ -151,6 +155,7 @@ function mapLiveVariantRow(product, variant) {
 
   return {
     barcode: variant?.barcode ?? "",
+    compare_at_price: variant?.compareAtPrice ?? "",
     command: "",
     inventory_policy: variant?.inventoryPolicy ?? "",
     option1_name: optionNames[0],
@@ -159,6 +164,7 @@ function mapLiveVariantRow(product, variant) {
     option2_value: optionValues[1],
     option3_name: optionNames[2],
     option3_value: optionValues[2],
+    price: variant?.price ?? "",
     product_handle: product?.handle ?? "",
     product_id: product?.id ?? "",
     requires_shipping: variant?.inventoryItem?.requiresShipping == null

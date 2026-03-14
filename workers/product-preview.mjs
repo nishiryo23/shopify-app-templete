@@ -1,6 +1,7 @@
 import { createPrismaArtifactCatalog } from "../domain/artifacts/prisma-artifact-catalog.mjs";
 import { buildPreviewDigest, buildPreviewRows, indexRowsByProductId, parseProductPreviewCsv } from "../domain/products/preview-csv.mjs";
 import {
+  PRODUCT_VARIANT_PRICES_EXPORT_PROFILE,
   PRODUCT_VARIANTS_EXPORT_PROFILE,
 } from "../domain/products/export-profile.mjs";
 import {
@@ -9,6 +10,12 @@ import {
 } from "../domain/products/preview-profile.mjs";
 import { verifyCsvManifest } from "../domain/provenance/csv-manifest.mjs";
 import { requireProvenanceSigningKey, sha256Hex } from "../domain/provenance/signing.mjs";
+import {
+  buildVariantPricePreviewDigest,
+  buildVariantPricePreviewRows,
+  indexVariantPriceRows,
+  parseVariantPricePreviewCsv,
+} from "../domain/variant-prices/preview-csv.mjs";
 import { readProductsForPreview } from "../platform/shopify/product-preview.server.mjs";
 import { buildVariantPreviewDigest, buildVariantPreviewRows, indexVariantRows, parseVariantPreviewCsv } from "../domain/variants/preview-csv.mjs";
 import { readVariantsForProducts } from "../platform/shopify/product-variants.server.mjs";
@@ -115,7 +122,29 @@ export async function runProductPreviewJob({
     let summary;
 
     assertJobLeaseActive();
-    if (payload.profile === PRODUCT_VARIANTS_EXPORT_PROFILE) {
+    if (payload.profile === PRODUCT_VARIANT_PRICES_EXPORT_PROFILE) {
+      const baselineRows = parseVariantPricePreviewCsv(sourceCsvText);
+      const editedRows = parseVariantPricePreviewCsv(editedCsvText);
+      const { productIds } = indexVariantPriceRows(editedRows);
+      const {
+        productIds: baselineProductIds,
+        rowsByVariantId: baselineRowsByVariantId,
+      } = indexVariantPriceRows(baselineRows);
+      const {
+        variantsByProductId: currentVariantsByProductId,
+      } = await readLiveVariants(
+        admin,
+        [...new Set([...productIds, ...baselineProductIds])],
+        { assertJobLeaseActive },
+      );
+      const preview = buildVariantPricePreviewRows({
+        baselineRowsByVariantId,
+        currentVariantsByProductId,
+        editedRows,
+      });
+      rows = preview.rows;
+      summary = preview.summary;
+    } else if (payload.profile === PRODUCT_VARIANTS_EXPORT_PROFILE) {
       const baselineRows = parseVariantPreviewCsv(sourceCsvText);
       const editedRows = parseVariantPreviewCsv(editedCsvText);
       const { productIds: baselineProductIds, rowsByKey: editedRowsByKey } = indexVariantRows(editedRows);
@@ -165,7 +194,16 @@ export async function runProductPreviewJob({
 
     const baselineDigest = sha256Hex(sourceCsvText);
     const editedDigest = sha256Hex(editedCsvText);
-    const previewDigest = payload.profile === PRODUCT_VARIANTS_EXPORT_PROFILE
+    const previewDigest = payload.profile === PRODUCT_VARIANT_PRICES_EXPORT_PROFILE
+      ? buildVariantPricePreviewDigest({
+        baselineDigest,
+        editedDigest,
+        exportJobId: payload.exportJobId,
+        profile: payload.profile,
+        rows,
+        summary,
+      })
+      : payload.profile === PRODUCT_VARIANTS_EXPORT_PROFILE
       ? buildVariantPreviewDigest({
         baselineDigest,
         editedDigest,

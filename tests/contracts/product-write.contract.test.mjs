@@ -11,6 +11,7 @@ import {
   buildProductUpdateInputFromPreviewRow,
   getWritablePreviewRows,
 } from "../../domain/products/write-rows.mjs";
+import { buildVariantPriceMutationFromPreviewRow } from "../../domain/variant-prices/write-rows.mjs";
 import { buildVariantMutationFromPreviewRow } from "../../domain/variants/write-rows.mjs";
 
 const rootDir = path.resolve(import.meta.dirname, "../..");
@@ -124,6 +125,48 @@ test("variant write input preserves blank SKU clears", () => {
   assert.deepEqual(result.input.inventoryItem, {
     sku: "",
   });
+});
+
+test("variant price write input clears compare-at when edited to blank", () => {
+  const result = buildVariantPriceMutationFromPreviewRow({
+    changedFields: ["compare_at_price"],
+    editedRow: {
+      compare_at_price: "",
+      variant_id: "gid://shopify/ProductVariant/1",
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.input.compareAtPrice, null);
+});
+
+test("variant price write input rejects blank price changes", () => {
+  const result = buildVariantPriceMutationFromPreviewRow({
+    changedFields: ["price"],
+    editedRow: {
+      price: "",
+      variant_id: "gid://shopify/ProductVariant/1",
+    },
+  });
+
+  assert.equal(result.ok, false);
+  assert.match(result.errors[0], /price cannot be blank/);
+});
+
+test("variant price write input accepts three-decimal money values", () => {
+  const result = buildVariantPriceMutationFromPreviewRow({
+    changedFields: ["price", "compare_at_price"],
+    editedRow: {
+      compare_at_price: "11.125",
+      price: "10.500",
+      variant_id: "gid://shopify/ProductVariant/1",
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.input.id, "gid://shopify/ProductVariant/1");
+  assert.equal(result.input.price, "10.5");
+  assert.equal(result.input.compareAtPrice, "11.125");
 });
 
 test("latest rollbackable write lookup includes partial_failure with snapshot metadata", async () => {
@@ -723,6 +766,167 @@ test("variant write worker stores revalidation_failed result when create rows no
   assert.match(String(puts[0].key), /result\.json$/);
 });
 
+test("product write worker dispatches variant price profile and verifies compare-at clears", async () => {
+  const { runProductWriteJob } = await importProductWriteWorker();
+  const puts = [];
+  let readCount = 0;
+
+  const result = await runProductWriteJob({
+    artifactCatalog: {
+      async record(args) {
+        return { id: `${args.kind}-record`, ...args };
+      },
+    },
+    artifactStorage: {
+      async get() {
+        return {
+          body: Buffer.from(JSON.stringify({
+            previewDigest: "preview-digest-price",
+            profile: "product-variants-prices-v1",
+            rows: [{
+              classification: "changed",
+              changedFields: ["price", "compare_at_price"],
+              currentRow: {
+                compare_at_price: "12.00",
+                option1_name: "Color",
+                option1_value: "Red",
+                option2_name: "",
+                option2_value: "",
+                option3_name: "",
+                option3_value: "",
+                price: "10.00",
+                product_handle: "hat",
+                product_id: "gid://shopify/Product/1",
+                updated_at: "2026-03-14T00:00:00Z",
+                variant_id: "gid://shopify/ProductVariant/1",
+              },
+              editedRow: {
+                compare_at_price: "",
+                option1_name: "Color",
+                option1_value: "Red",
+                option2_name: "",
+                option2_value: "",
+                option3_name: "",
+                option3_value: "",
+                price: "11.00",
+                product_handle: "hat",
+                product_id: "gid://shopify/Product/1",
+                updated_at: "2026-03-14T00:00:00Z",
+                variant_id: "gid://shopify/ProductVariant/1",
+              },
+              editedRowNumber: 2,
+              operation: "update",
+              productId: "gid://shopify/Product/1",
+              variantId: "gid://shopify/ProductVariant/1",
+            }],
+            summary: { error: 0, total: 1 },
+          })),
+        };
+      },
+      async put(args) {
+        puts.push(args);
+        return {
+          bucket: "bucket",
+          checksumSha256: "checksum",
+          contentType: args.contentType,
+          metadata: args.metadata,
+          objectKey: args.key,
+        };
+      },
+    },
+    job: {
+      id: "write-job-price-1",
+      payload: {
+        previewArtifactId: "preview-artifact-price-1",
+        previewDigest: "preview-digest-price",
+        previewJobId: "preview-job-price-1",
+        profile: "product-variants-prices-v1",
+      },
+      shopDomain: "example.myshopify.com",
+    },
+    prisma: {
+      artifact: {
+        async findFirst() {
+          return {
+            id: "preview-artifact-price-1",
+            kind: "product.preview.result",
+            objectKey: "preview/result-price.json",
+            shopDomain: "example.myshopify.com",
+          };
+        },
+      },
+    },
+    readLiveProducts: async () => {
+      readCount += 1;
+      const liveRow = readCount === 1
+        ? {
+          compare_at_price: "12.00",
+          option1_name: "Color",
+          option1_value: "Red",
+          option2_name: "",
+          option2_value: "",
+          option3_name: "",
+          option3_value: "",
+          price: "10.00",
+          product_handle: "hat",
+          product_id: "gid://shopify/Product/1",
+          updated_at: "2026-03-14T00:00:00Z",
+          variant_id: "gid://shopify/ProductVariant/1",
+        }
+        : {
+          compare_at_price: "",
+          option1_name: "Color",
+          option1_value: "Red",
+          option2_name: "",
+          option2_value: "",
+          option3_name: "",
+          option3_value: "",
+          price: "11.0",
+          product_handle: "hat",
+          product_id: "gid://shopify/Product/1",
+          updated_at: "2026-03-14T00:00:00Z",
+          variant_id: "gid://shopify/ProductVariant/1",
+        };
+
+      return {
+        variantsByProductId: new Map([
+          ["gid://shopify/Product/1", [liveRow]],
+        ]),
+      };
+    },
+    resolveAdminContext: async () => ({ admin: {} }),
+    updateProduct: async (_admin, input) => {
+      assert.equal(input.variants[0].price, "11");
+      assert.equal(input.variants[0].compareAtPrice, null);
+      return { userErrors: [] };
+    },
+  });
+
+  assert.equal(result.outcome, "verified_success");
+  assert.equal(result.rows[0].verificationStatus, "verified");
+  assert.equal(puts.length, 2);
+});
+
+test("variant price write input targets baseline variant id even if edited row was retargeted", () => {
+  const row = {
+    baselineRow: {
+      variant_id: "gid://shopify/ProductVariant/1",
+    },
+    changedFields: ["price"],
+    editedRow: {
+      price: "11.00",
+      variant_id: "gid://shopify/ProductVariant/2",
+    },
+    variantId: "gid://shopify/ProductVariant/1",
+  };
+
+  const mutation = buildVariantPriceMutationFromPreviewRow(row);
+
+  assert.equal(mutation.ok, true);
+  assert.equal(mutation.input.id, "gid://shopify/ProductVariant/1");
+  assert.equal(mutation.input.price, "11");
+});
+
 test("product write worker preserves missing-offline-session code when deps are injected", async () => {
   const { runProductWriteJob } = await importProductWriteWorker();
   const { MissingOfflineSessionError } = await importMissingOfflineSessionError();
@@ -999,6 +1203,7 @@ test("product undo worker preserves missing-offline-session code when deps are i
 test("preview page exposes write and undo controls", () => {
   const route = readProjectFile("app/routes/app.preview.tsx");
   assert.match(route, /product-variants-v1/);
+  assert.match(route, /product-variants-prices-v1/);
   assert.match(route, /Create export/);
   assert.match(route, /Confirm and write/);
   assert.match(route, /Undo latest rollbackable write/);

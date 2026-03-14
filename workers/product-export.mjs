@@ -9,12 +9,14 @@ import {
   PRODUCT_EXPORT_FORMAT,
   PRODUCT_EXPORT_MANIFEST_ARTIFACT_KIND,
   PRODUCT_EXPORT_SOURCE_ARTIFACT_KIND,
+  PRODUCT_VARIANT_PRICES_EXPORT_PROFILE,
   PRODUCT_VARIANTS_EXPORT_PROFILE,
 } from "../domain/products/export-profile.mjs";
 import { requireProvenanceSigningKey } from "../domain/provenance/signing.mjs";
 import { readProductPagesForExport } from "../platform/shopify/product-export.server.mjs";
 import { readProductVariantPagesForExport } from "../platform/shopify/product-variants.server.mjs";
 import { createVariantExportCsvBuilder } from "../domain/variants/export-csv.mjs";
+import { createVariantPriceExportCsvBuilder } from "../domain/variant-prices/export-csv.mjs";
 import { MissingOfflineSessionError, loadOfflineAdminContext } from "./offline-admin.mjs";
 
 async function deleteIfPresent(storage, descriptor) {
@@ -63,17 +65,21 @@ export async function runProductExportJob({
     const tempCsvPath = path.join(tempDirPath, "source.csv");
     const csvBuilder = profile === PRODUCT_VARIANTS_EXPORT_PROFILE
       ? createVariantExportCsvBuilder({ signingKey })
-      : createProductExportCsvBuilder({ signingKey });
+      : profile === PRODUCT_VARIANT_PRICES_EXPORT_PROFILE
+        ? createVariantPriceExportCsvBuilder({ signingKey })
+        : createProductExportCsvBuilder({ signingKey });
     const tempCsvFile = await open(tempCsvPath, "w");
 
     try {
-      const pageIterator = profile === PRODUCT_VARIANTS_EXPORT_PROFILE
+      const pageIterator = profile === PRODUCT_VARIANTS_EXPORT_PROFILE || profile === PRODUCT_VARIANT_PRICES_EXPORT_PROFILE
         ? readVariantPages(admin, { assertJobLeaseActive })
         : readProductPages(admin, { assertJobLeaseActive });
       for await (const rows of pageIterator) {
         assertJobLeaseActive();
         const csvChunk = profile === PRODUCT_VARIANTS_EXPORT_PROFILE
           ? csvBuilder.appendVariants(rows)
+          : profile === PRODUCT_VARIANT_PRICES_EXPORT_PROFILE
+            ? csvBuilder.appendVariants(rows)
           : csvBuilder.appendProducts(rows);
         if (csvChunk.length > 0) {
           await tempCsvFile.writeFile(csvChunk);

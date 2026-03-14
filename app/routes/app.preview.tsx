@@ -220,6 +220,7 @@ export default function PreviewRoute() {
               >
                 <option value="product-core-seo-v1">product-core-seo-v1</option>
                 <option value="product-variants-v1">product-variants-v1</option>
+                <option value="product-variants-prices-v1">product-variants-prices-v1</option>
               </select>
             </label>
             <exportFetcher.Form action="/app/product-exports" method="post">

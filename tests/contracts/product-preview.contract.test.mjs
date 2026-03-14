@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import { buildProductExportArtifacts } from "../../domain/products/export-csv.mjs";
+import { createVariantPriceExportCsvBuilder } from "../../domain/variant-prices/export-csv.mjs";
 import {
   filterPreviewableExportJobs,
 } from "../../domain/products/preview-baselines.mjs";
@@ -18,6 +19,11 @@ import {
   buildVariantPreviewRows,
   parseVariantPreviewCsv,
 } from "../../domain/variants/preview-csv.mjs";
+import {
+  buildVariantPricePreviewDigest,
+  buildVariantPricePreviewRows,
+  parseVariantPricePreviewCsv,
+} from "../../domain/variant-prices/preview-csv.mjs";
 import {
   buildActiveProductPreviewWhere,
   enqueueOrFindActiveProductPreviewJob,
@@ -61,6 +67,13 @@ test("variant preview CSV parser requires exact product-variants-v1 headers", ()
   );
 });
 
+test("variant price preview CSV parser requires exact product-variants-prices-v1 headers", () => {
+  assert.throws(
+    () => parseVariantPricePreviewCsv("product_id,variant_id\n1,2\n"),
+    /CSV header must exactly match product-variants-prices-v1/,
+  );
+});
+
 test("variant preview rejects create rows outside the baseline product set", () => {
   const editedRows = parseVariantPreviewCsv(
     "command,product_id,product_handle,variant_id,option1_name,option1_value,option2_name,option2_value,option3_name,option3_value,sku,barcode,taxable,requires_shipping,inventory_policy,updated_at\n"
@@ -80,6 +93,55 @@ test("variant preview rejects create rows outside the baseline product set", () 
 
   assert.equal(rows[0].classification, "error");
   assert.match(rows[0].messages[0], /selected export baseline/);
+  assert.equal(summary.error, 1);
+});
+
+test("variant price preview rejects mismatched product_id for baseline variant", () => {
+  const editedRows = parseVariantPricePreviewCsv(
+    "product_id,product_handle,variant_id,option1_name,option1_value,option2_name,option2_value,option3_name,option3_value,price,compare_at_price,updated_at\n"
+    + "gid://shopify/Product/2,hat,gid://shopify/ProductVariant/1,Color,Red,,,,,10.00,12.00,2026-03-14T00:00:00Z\n",
+  );
+  const { rows, summary } = buildVariantPricePreviewRows({
+    baselineRowsByVariantId: new Map([
+      ["gid://shopify/ProductVariant/1", {
+        row: {
+          compare_at_price: "12.00",
+          option1_name: "Color",
+          option1_value: "Red",
+          option2_name: "",
+          option2_value: "",
+          option3_name: "",
+          option3_value: "",
+          price: "10.00",
+          product_handle: "hat",
+          product_id: "gid://shopify/Product/1",
+          updated_at: "2026-03-14T00:00:00Z",
+          variant_id: "gid://shopify/ProductVariant/1",
+        },
+        rowNumber: 2,
+      }],
+    ]),
+    currentVariantsByProductId: new Map([
+      ["gid://shopify/Product/2", [{
+        compare_at_price: "12.00",
+        option1_name: "Color",
+        option1_value: "Red",
+        option2_name: "",
+        option2_value: "",
+        option3_name: "",
+        option3_value: "",
+        price: "10.00",
+        product_handle: "hat",
+        product_id: "gid://shopify/Product/2",
+        updated_at: "2026-03-14T00:00:00Z",
+        variant_id: "gid://shopify/ProductVariant/1",
+      }]],
+    ]),
+    editedRows,
+  });
+
+  assert.equal(rows[0].classification, "error");
+  assert.match(rows[0].messages[0], /owns the baseline variant/);
   assert.equal(summary.error, 1);
 });
 
@@ -146,6 +208,325 @@ test("variant preview digest remains stable for canonical payload", () => {
   });
 
   assert.equal(digestA, digestB);
+});
+
+test("variant price preview digest remains stable for canonical payload", () => {
+  const digestA = buildVariantPricePreviewDigest({
+    baselineDigest: "baseline",
+    editedDigest: "edited",
+    exportJobId: "export-1",
+    profile: "product-variants-prices-v1",
+    rows: [{
+      baselineRow: { price: "10.00", compare_at_price: "12.00" },
+      changedFields: ["price"],
+      classification: "changed",
+      currentRow: { price: "10.00", compare_at_price: "12.00" },
+      editedRow: {
+        compare_at_price: "12.00",
+        price: "10",
+        product_id: "1",
+        variant_id: "2",
+      },
+      editedRowNumber: 2,
+      operation: "update",
+      productId: "1",
+      sourceRowNumber: 2,
+      variantId: "2",
+    }],
+    summary: { total: 1, changed: 1, unchanged: 0, warning: 0, error: 0 },
+  });
+  const digestB = buildVariantPricePreviewDigest({
+    baselineDigest: "baseline",
+    editedDigest: "edited",
+    exportJobId: "export-1",
+    profile: "product-variants-prices-v1",
+    rows: [{
+      baselineRow: { compare_at_price: "12.00", price: "10.00" },
+      changedFields: ["price"],
+      classification: "changed",
+      currentRow: { compare_at_price: "12.00", price: "10.00" },
+      editedRow: {
+        compare_at_price: "12.0",
+        price: "10.00",
+        product_id: "1",
+        variant_id: "2",
+      },
+      editedRowNumber: 2,
+      operation: "update",
+      productId: "1",
+      sourceRowNumber: 2,
+      variantId: "2",
+    }],
+    summary: { error: 0, warning: 0, unchanged: 0, changed: 1, total: 1 },
+  });
+
+  assert.equal(digestA, digestB);
+});
+
+test("variant price preview worker builds preview rows from price profile", async () => {
+  const sourceBuilder = createVariantPriceExportCsvBuilder({
+    signingKey: "test-signing-key",
+  });
+  const sourceCsv = sourceBuilder.appendVariants([{
+    compare_at_price: "12.00",
+    option1_name: "Color",
+    option1_value: "Red",
+    option2_name: "",
+    option2_value: "",
+    option3_name: "",
+    option3_value: "",
+    price: "10.00",
+    product_handle: "hat",
+    product_id: "gid://shopify/Product/1",
+    updated_at: "2026-03-14T00:00:00Z",
+    variant_id: "gid://shopify/ProductVariant/1",
+  }]);
+  const { manifest } = sourceBuilder.finalize();
+
+  const result = await runProductPreviewJob({
+    artifactCatalog: {
+      async record(args) {
+        return { id: `${args.kind}-record`, ...args };
+      },
+    },
+    artifactStorage: {
+      async get(key) {
+        if (key === "edited-artifact") {
+          return {
+            body: Buffer.from(
+              "product_id,product_handle,variant_id,option1_name,option1_value,option2_name,option2_value,option3_name,option3_value,price,compare_at_price,updated_at\n"
+              + "gid://shopify/Product/1,hat,gid://shopify/ProductVariant/1,Color,Red,,,,,11.00,,2026-03-14T00:00:00Z\n",
+            ),
+          };
+        }
+        if (key === "manifest-artifact") {
+          return { body: Buffer.from(JSON.stringify(manifest)) };
+        }
+        return {
+          body: Buffer.from(sourceCsv),
+        };
+      },
+      async put(args) {
+        return {
+          bucket: "bucket",
+          checksumSha256: "checksum",
+          contentType: args.contentType,
+          metadata: args.metadata,
+          objectKey: args.key,
+        };
+      },
+    },
+    job: {
+      id: "preview-job-price-1",
+      payload: {
+        editedUploadArtifactId: "edited-artifact",
+        exportJobId: "export-job-1",
+        manifestArtifactId: "manifest-artifact",
+        profile: "product-variants-prices-v1",
+        sourceArtifactId: "source-artifact",
+      },
+      shopDomain: "example.myshopify.com",
+    },
+    prisma: {
+      artifact: {
+        async findFirst({ where }) {
+          return {
+            id: where.id,
+            kind: where.kind,
+            objectKey: where.id,
+            shopDomain: "example.myshopify.com",
+          };
+        },
+      },
+    },
+    readLiveVariants: async () => ({
+      variantsByProductId: new Map([
+        ["gid://shopify/Product/1", [{
+          compare_at_price: "12.00",
+          option1_name: "Color",
+          option1_value: "Red",
+          option2_name: "",
+          option2_value: "",
+          option3_name: "",
+          option3_value: "",
+          price: "10.00",
+          product_handle: "hat",
+          product_id: "gid://shopify/Product/1",
+          updated_at: "2026-03-14T00:00:00Z",
+          variant_id: "gid://shopify/ProductVariant/1",
+        }]],
+      ]),
+    }),
+    resolveAdminContext: async () => ({ admin: {} }),
+    signingKey: "test-signing-key",
+  });
+
+  assert.equal(result.summary.total, 1);
+  assert.equal(result.summary.changed, 1);
+});
+
+test("variant price preview rejects edited rows that retarget variant_id", () => {
+  const editedRows = parseVariantPricePreviewCsv(
+    "product_id,product_handle,variant_id,option1_name,option1_value,option2_name,option2_value,option3_name,option3_value,price,compare_at_price,updated_at\n"
+    + "gid://shopify/Product/1,hat,gid://shopify/ProductVariant/2,Color,Red,,,,,11.00,12.00,2026-03-14T00:00:00Z\n",
+  );
+  const { rows, summary } = buildVariantPricePreviewRows({
+    baselineRowsByVariantId: new Map([
+      ["gid://shopify/ProductVariant/1", {
+        row: {
+          compare_at_price: "12.00",
+          option1_name: "Color",
+          option1_value: "Red",
+          option2_name: "",
+          option2_value: "",
+          option3_name: "",
+          option3_value: "",
+          price: "10.00",
+          product_handle: "hat",
+          product_id: "gid://shopify/Product/1",
+          updated_at: "2026-03-14T00:00:00Z",
+          variant_id: "gid://shopify/ProductVariant/1",
+        },
+        rowNumber: 2,
+      }],
+      ["gid://shopify/ProductVariant/2", {
+        row: {
+          compare_at_price: "12.00",
+          option1_name: "Color",
+          option1_value: "Blue",
+          option2_name: "",
+          option2_value: "",
+          option3_name: "",
+          option3_value: "",
+          price: "10.00",
+          product_handle: "hat",
+          product_id: "gid://shopify/Product/1",
+          updated_at: "2026-03-14T00:00:01Z",
+          variant_id: "gid://shopify/ProductVariant/2",
+        },
+        rowNumber: 3,
+      }],
+    ]),
+    currentVariantsByProductId: new Map([
+      ["gid://shopify/Product/1", [{
+        compare_at_price: "12.00",
+        option1_name: "Color",
+        option1_value: "Red",
+        option2_name: "",
+        option2_value: "",
+        option3_name: "",
+        option3_value: "",
+        price: "10.00",
+        product_handle: "hat",
+        product_id: "gid://shopify/Product/1",
+        updated_at: "2026-03-14T00:00:00Z",
+        variant_id: "gid://shopify/ProductVariant/1",
+      }, {
+        compare_at_price: "12.00",
+        option1_name: "Color",
+        option1_value: "Blue",
+        option2_name: "",
+        option2_value: "",
+        option3_name: "",
+        option3_value: "",
+        price: "10.00",
+        product_handle: "hat",
+        product_id: "gid://shopify/Product/1",
+        updated_at: "2026-03-14T00:00:01Z",
+        variant_id: "gid://shopify/ProductVariant/2",
+      }]],
+    ]),
+    editedRows,
+  });
+
+  assert.equal(rows[0].classification, "error");
+  assert.match(rows[0].messages[0], /option1_value is read-only/);
+  assert.equal(rows[0].variantId, "gid://shopify/ProductVariant/2");
+  assert.equal(summary.error, 1);
+});
+
+test("variant price preview matches baseline by variant_id after CSV reorder", () => {
+  const editedRows = parseVariantPricePreviewCsv(
+    "product_id,product_handle,variant_id,option1_name,option1_value,option2_name,option2_value,option3_name,option3_value,price,compare_at_price,updated_at\n"
+    + "gid://shopify/Product/1,hat,gid://shopify/ProductVariant/2,Color,Blue,,,,,10.50,12.00,2026-03-14T00:00:01Z\n"
+    + "gid://shopify/Product/1,hat,gid://shopify/ProductVariant/1,Color,Red,,,,,11.00,12.00,2026-03-14T00:00:00Z\n",
+  );
+  const { rows, summary } = buildVariantPricePreviewRows({
+    baselineRowsByVariantId: new Map([
+      ["gid://shopify/ProductVariant/1", {
+        row: {
+          compare_at_price: "12.00",
+          option1_name: "Color",
+          option1_value: "Red",
+          option2_name: "",
+          option2_value: "",
+          option3_name: "",
+          option3_value: "",
+          price: "10.00",
+          product_handle: "hat",
+          product_id: "gid://shopify/Product/1",
+          updated_at: "2026-03-14T00:00:00Z",
+          variant_id: "gid://shopify/ProductVariant/1",
+        },
+        rowNumber: 2,
+      }],
+      ["gid://shopify/ProductVariant/2", {
+        row: {
+          compare_at_price: "12.00",
+          option1_name: "Color",
+          option1_value: "Blue",
+          option2_name: "",
+          option2_value: "",
+          option3_name: "",
+          option3_value: "",
+          price: "10.00",
+          product_handle: "hat",
+          product_id: "gid://shopify/Product/1",
+          updated_at: "2026-03-14T00:00:01Z",
+          variant_id: "gid://shopify/ProductVariant/2",
+        },
+        rowNumber: 3,
+      }],
+    ]),
+    currentVariantsByProductId: new Map([
+      ["gid://shopify/Product/1", [{
+        compare_at_price: "12.00",
+        option1_name: "Color",
+        option1_value: "Red",
+        option2_name: "",
+        option2_value: "",
+        option3_name: "",
+        option3_value: "",
+        price: "10.00",
+        product_handle: "hat",
+        product_id: "gid://shopify/Product/1",
+        updated_at: "2026-03-14T00:00:00Z",
+        variant_id: "gid://shopify/ProductVariant/1",
+      }, {
+        compare_at_price: "12.00",
+        option1_name: "Color",
+        option1_value: "Blue",
+        option2_name: "",
+        option2_value: "",
+        option3_name: "",
+        option3_value: "",
+        price: "10.00",
+        product_handle: "hat",
+        product_id: "gid://shopify/Product/1",
+        updated_at: "2026-03-14T00:00:01Z",
+        variant_id: "gid://shopify/ProductVariant/2",
+      }]],
+    ]),
+    editedRows,
+  });
+
+  assert.equal(rows[0].classification, "changed");
+  assert.equal(rows[1].classification, "changed");
+  assert.deepEqual(rows.map((row) => row.variantId), [
+    "gid://shopify/ProductVariant/2",
+    "gid://shopify/ProductVariant/1",
+  ]);
+  assert.equal(summary.changed, 2);
 });
 
 test("preview row index rejects duplicate product ids", () => {
@@ -663,6 +1044,7 @@ test("preview route and page delegate to the shared services", () => {
   assert.match(routeFile, /createProductPreview/);
   assert.match(pageFile, /loadProductPreviewPage/);
   assert.match(pageFile, /preview-shell/);
+  assert.match(pageFile, /product-variants-prices-v1/);
   assert.match(pageFile, /useSearchParams/);
   assert.match(pageFile, /Request error:/);
   assert.match(workerBootstrap, /PRODUCT_PREVIEW_KIND/);

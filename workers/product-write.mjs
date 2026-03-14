@@ -1,4 +1,5 @@
 import {
+  PRODUCT_VARIANT_PRICES_EXPORT_PROFILE,
   PRODUCT_VARIANTS_EXPORT_PROFILE,
 } from "../domain/products/export-profile.mjs";
 import {
@@ -12,6 +13,7 @@ import {
   changedFieldsMatch,
   getWritablePreviewRows,
 } from "../domain/products/write-rows.mjs";
+import { runVariantPriceProductWriteJob } from "./product-write-variant-prices.mjs";
 import { runVariantProductWriteJob } from "./product-write-variants.mjs";
 
 function extractArtifactBody(record) {
@@ -156,6 +158,20 @@ export async function runProductWriteJob({
   resolveAdminContext,
   updateProduct,
 } = {}) {
+  if (job?.payload?.profile === PRODUCT_VARIANT_PRICES_EXPORT_PROFILE) {
+    return runVariantPriceProductWriteJob({
+      artifactCatalog,
+      artifactKeyPrefix,
+      artifactStorage,
+      assertJobLeaseActive,
+      job,
+      prisma,
+      readLiveVariants: readLiveProducts,
+      resolveAdminContext,
+      updateVariants: updateProduct,
+    });
+  }
+
   if (job?.payload?.profile === PRODUCT_VARIANTS_EXPORT_PROFILE) {
     return runVariantProductWriteJob({
       artifactCatalog,

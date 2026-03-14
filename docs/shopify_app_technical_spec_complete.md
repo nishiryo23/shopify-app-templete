@@ -394,6 +394,8 @@ Product Domain Parity MVP では、1 file = 1 atomic transaction は目指さな
 2. Product core metafields
 3. Variants create/update/delete
 4. Prices / compare-at
+   - launch 実装では `product-variants-prices-v1` profile として独立させる
+   - `product-variants-v1` には price columns を混在させない
 5. Inventory
 6. Media
 7. Collections membership

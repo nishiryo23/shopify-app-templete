@@ -14,6 +14,9 @@ import {
   createVariantExportCsvBuilder,
 } from "../../domain/variants/export-csv.mjs";
 import {
+  createVariantPriceExportCsvBuilder,
+} from "../../domain/variant-prices/export-csv.mjs";
+import {
   buildActiveProductExportWhere,
   enqueueOrFindActiveProductExportJob,
   enqueueProductExportJob,
@@ -25,6 +28,8 @@ import {
   PRODUCT_CORE_SEO_EXPORT_PROFILE,
   PRODUCT_EXPORT_FORMAT,
   PRODUCT_EXPORT_KIND,
+  PRODUCT_VARIANT_PRICES_EXPORT_HEADERS,
+  PRODUCT_VARIANT_PRICES_EXPORT_PROFILE,
   PRODUCT_VARIANTS_EXPORT_HEADERS,
   PRODUCT_VARIANTS_EXPORT_PROFILE,
 } from "../../domain/products/export-profile.mjs";
@@ -147,6 +152,67 @@ test("variant export CSV profile keeps variant headers and rows", () => {
   assert.equal(manifest.rowFingerprints.length, 2);
 });
 
+test("variant price export CSV profile keeps price headers and rows", () => {
+  const builder = createVariantPriceExportCsvBuilder({
+    signingKey: "test-signing-key",
+  });
+  const chunk = builder.appendVariants([{
+    compare_at_price: "12.00",
+    option1_name: "Color",
+    option1_value: "Red",
+    price: "10.00",
+    product_handle: "sample-product",
+    product_id: "gid://shopify/Product/1",
+    updated_at: "2026-03-14T00:00:00Z",
+    variant_id: "gid://shopify/ProductVariant/1",
+  }]);
+  const { manifest, rowCount } = builder.finalize();
+
+  assert.equal(chunk.split("\n")[0], PRODUCT_VARIANT_PRICES_EXPORT_HEADERS.join(","));
+  assert.match(chunk, /10\.00/);
+  assert.match(chunk, /12\.00/);
+  assert.equal(rowCount, 1);
+  assert.equal(manifest.rowFingerprints.length, 2);
+});
+
+test("variant price export CSV maps Shopify variant nodes into price rows", () => {
+  const builder = createVariantPriceExportCsvBuilder({
+    signingKey: "test-signing-key",
+  });
+  const chunk = builder.appendVariants([{
+    compareAtPrice: "12.00",
+    id: "gid://shopify/ProductVariant/1",
+    price: "10.00",
+    product: {
+      handle: "sample-product",
+      id: "gid://shopify/Product/1",
+      options: [
+        { name: "Color", position: 1 },
+        { name: "Size", position: 2 },
+      ],
+    },
+    selectedOptions: [
+      { name: "Color", value: "Red" },
+      { name: "Size", value: "M" },
+    ],
+    updatedAt: "2026-03-14T00:00:00Z",
+  }]);
+  const [, dataRow] = chunk.trimEnd().split("\n");
+  const row = dataRow.split(",");
+
+  assert.equal(chunk.split("\n")[0], PRODUCT_VARIANT_PRICES_EXPORT_HEADERS.join(","));
+  assert.equal(row[0], "gid://shopify/Product/1");
+  assert.equal(row[1], "sample-product");
+  assert.equal(row[2], "gid://shopify/ProductVariant/1");
+  assert.equal(row[3], "Color");
+  assert.equal(row[4], "Red");
+  assert.equal(row[5], "Size");
+  assert.equal(row[6], "M");
+  assert.equal(row[9], "10.00");
+  assert.equal(row[10], "12.00");
+  assert.equal(row[11], "2026-03-14T00:00:00Z");
+});
+
 test("product export enqueue supports variant profile dedupe", async () => {
   const calls = [];
   const jobQueue = {
@@ -166,6 +232,24 @@ test("product export enqueue supports variant profile dedupe", async () => {
   assert.equal(calls[0].dedupeKey, "product-export:product-variants-v1:csv");
 });
 
+test("product export enqueue supports variant price profile dedupe", async () => {
+  const calls = [];
+  const jobQueue = {
+    async enqueue(args) {
+      calls.push(args);
+      return { id: "job-variant-prices", state: "queued", ...args };
+    },
+  };
+
+  const job = await enqueueProductExportJob({
+    jobQueue,
+    profile: PRODUCT_VARIANT_PRICES_EXPORT_PROFILE,
+    shopDomain: "example.myshopify.com",
+  });
+
+  assert.equal(job.payload.profile, PRODUCT_VARIANT_PRICES_EXPORT_PROFILE);
+  assert.equal(calls[0].dedupeKey, "product-export:product-variants-prices-v1:csv");
+});
 test("product export job lookup uses active states only", async () => {
   const calls = [];
   const prisma = {

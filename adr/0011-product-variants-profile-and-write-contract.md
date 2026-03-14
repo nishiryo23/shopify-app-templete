@@ -25,6 +25,7 @@
 - create row の baseline なしケースを許容しつつ、closed-loop preview の product-level binding は維持できる。
 - update は partial failure を row-level に表現でき、delete は性能より outcome の明確性を優先できる。
 - variant write が latest rollbackable write lookup に混ざらず、既存 undo surface を壊さない。
+- price / compare-at の追加は `ADR-0012` で別 profile contract として拡張できる。
 
 ## Alternatives considered
 - `product-core-seo-v1` を variants で拡張する案
@@ -36,6 +37,7 @@
 
 ## References
 - `tickets/product-domain/PD-004-variants-pipeline.md`
+- `adr/0012-product-variant-prices-profile-and-write-contract.md`
 - `adr/0008-product-export-route-and-artifact-contract.md`
 - `adr/0009-product-preview-route-and-provenance-contract.md`
 - `adr/0010-product-write-verify-and-undo-contract.md`
