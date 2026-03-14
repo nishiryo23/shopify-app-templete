@@ -33,6 +33,7 @@ type PreviewLoaderData = {
     }> | null;
     summary: Record<string, number> | null;
   };
+  selectedProfile: string;
   undo: null | {
     jobState: string;
     lastError: string | null;
@@ -51,10 +52,17 @@ type PreviewLoaderData = {
 
 export default function PreviewRoute() {
   const data = useLoaderData<typeof loader>() as PreviewLoaderData;
+  const exportFetcher = useFetcher<{
+    error?: string;
+    jobId: string;
+    profile: string;
+    state: string;
+  }>();
   const createFetcher = useFetcher<{
     error?: string;
     exportJobId: string;
     jobId: string;
+    profile: string;
     state: string;
   }>();
   const writeFetcher = useFetcher<{
@@ -71,11 +79,21 @@ export default function PreviewRoute() {
   }>();
   const detailFetcher = useFetcher<PreviewLoaderData>();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [selectedExportJobId, setSelectedExportJobId] = useState(data.exports[0]?.id ?? "");
-  const latestWrite = detailFetcher.data?.latestWrite ?? data.latestWrite;
-  const activePreview = detailFetcher.data?.preview ?? data.preview;
-  const activeWrite = detailFetcher.data?.write ?? data.write;
-  const activeUndo = detailFetcher.data?.undo ?? data.undo;
+  const selectedProfile = searchParams.get("profile") ?? data.selectedProfile;
+  const selectedLoaderData = detailFetcher.data?.selectedProfile === selectedProfile
+    ? detailFetcher.data
+    : data.selectedProfile === selectedProfile
+      ? data
+      : null;
+  const loadedExports = selectedLoaderData?.exports ?? [];
+  const [selectedExportJobId, setSelectedExportJobId] = useState(loadedExports[0]?.id ?? "");
+  const latestWrite = selectedLoaderData?.latestWrite ?? null;
+  const activePreview = selectedLoaderData?.preview ?? null;
+  const activeWrite = selectedLoaderData?.write ?? null;
+  const activeUndo = selectedLoaderData?.undo ?? null;
+  const activeExportJobId = exportFetcher.data?.profile === selectedProfile
+    ? exportFetcher.data.jobId
+    : null;
   const activePreviewJobId = createFetcher.data?.jobId ?? searchParams.get("previewJobId") ?? searchParams.get("jobId");
   const activeWriteJobId = writeFetcher.data?.jobId ?? searchParams.get("writeJobId");
   const activeUndoJobId = undoFetcher.data?.jobId ?? searchParams.get("undoJobId");
@@ -92,7 +110,16 @@ export default function PreviewRoute() {
     && !latestWriteMatchesPreview;
   const canUndo = data.isAccountOwner
     && data.entitlementState === "ACTIVE_PAID"
+    && selectedProfile === "product-core-seo-v1"
     && Boolean(latestWrite?.writeJobId);
+
+  useEffect(() => {
+    if (loadedExports.some((job) => job.id === selectedExportJobId)) {
+      return;
+    }
+
+    setSelectedExportJobId(loadedExports[0]?.id ?? "");
+  }, [loadedExports, selectedExportJobId]);
 
   useEffect(() => {
     if (!createFetcher.data?.jobId) {
@@ -102,8 +129,9 @@ export default function PreviewRoute() {
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set("previewJobId", createFetcher.data.jobId);
     nextParams.delete("jobId");
+    nextParams.set("profile", selectedProfile);
     setSearchParams(nextParams, { replace: true });
-  }, [createFetcher.data?.jobId, searchParams, setSearchParams]);
+  }, [createFetcher.data?.jobId, searchParams, selectedProfile, setSearchParams]);
 
   useEffect(() => {
     if (!writeFetcher.data?.jobId) {
@@ -112,8 +140,9 @@ export default function PreviewRoute() {
 
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set("writeJobId", writeFetcher.data.jobId);
+    nextParams.set("profile", selectedProfile);
     setSearchParams(nextParams, { replace: true });
-  }, [searchParams, setSearchParams, writeFetcher.data?.jobId]);
+  }, [searchParams, selectedProfile, setSearchParams, writeFetcher.data?.jobId]);
 
   useEffect(() => {
     if (!undoFetcher.data?.jobId) {
@@ -122,15 +151,17 @@ export default function PreviewRoute() {
 
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set("undoJobId", undoFetcher.data.jobId);
+    nextParams.set("profile", selectedProfile);
     setSearchParams(nextParams, { replace: true });
-  }, [searchParams, setSearchParams, undoFetcher.data?.jobId]);
+  }, [searchParams, selectedProfile, setSearchParams, undoFetcher.data?.jobId]);
 
   useEffect(() => {
-    if (!activePreviewJobId && !activeWriteJobId && !activeUndoJobId) {
+    if (!activeExportJobId && !activePreviewJobId && !activeWriteJobId && !activeUndoJobId) {
       return;
     }
 
     const params = new URLSearchParams();
+    params.set("profile", selectedProfile);
     if (activePreviewJobId) {
       params.set("previewJobId", activePreviewJobId);
     }
@@ -144,11 +175,12 @@ export default function PreviewRoute() {
     const load = () => detailFetcher.load(`/app/preview?${params.toString()}`);
     load();
 
+    const exportVisible = !activeExportJobId || loadedExports.some((job) => job.id === activeExportJobId);
     const isPreviewTerminal = !activePreview || activePreview.jobState === "completed" || activePreview.jobState === "dead_letter";
     const isWriteTerminal = !activeWrite || activeWrite.jobState === "completed" || activeWrite.jobState === "dead_letter";
     const isUndoTerminal = !activeUndo || activeUndo.jobState === "completed" || activeUndo.jobState === "dead_letter";
 
-    if (isPreviewTerminal && isWriteTerminal && isUndoTerminal) {
+    if (exportVisible && isPreviewTerminal && isWriteTerminal && isUndoTerminal) {
       return;
     }
 
@@ -156,17 +188,51 @@ export default function PreviewRoute() {
 
     return () => clearInterval(timer);
   }, [
+    activeExportJobId,
     activePreview?.jobState,
     activePreviewJobId,
     activeUndo?.jobState,
     activeUndoJobId,
     activeWrite?.jobState,
     activeWriteJobId,
+    loadedExports,
+    selectedProfile,
   ]);
 
   return (
     <div data-testid="preview-shell">
       <s-page heading="Preview">
+        <s-section heading="Profile">
+          <div style={{ display: "grid", gap: "0.75rem", maxWidth: "24rem" }}>
+            <label>
+              <span>Profile</span>
+              <select
+                onChange={(event) => {
+                  const nextParams = new URLSearchParams(searchParams);
+                  nextParams.set("profile", event.currentTarget.value);
+                  nextParams.delete("previewJobId");
+                  nextParams.delete("jobId");
+                  nextParams.delete("writeJobId");
+                  nextParams.delete("undoJobId");
+                  setSearchParams(nextParams);
+                }}
+                value={selectedProfile}
+              >
+                <option value="product-core-seo-v1">product-core-seo-v1</option>
+                <option value="product-variants-v1">product-variants-v1</option>
+              </select>
+            </label>
+            <exportFetcher.Form action="/app/product-exports" method="post">
+              <input name="profile" type="hidden" value={selectedProfile} />
+              <button type="submit">
+                {exportFetcher.state === "submitting" ? "Exporting..." : "Create export"}
+              </button>
+            </exportFetcher.Form>
+            {exportFetcher.data?.jobId ? (
+              <s-paragraph>Export job: {exportFetcher.data.jobId}</s-paragraph>
+            ) : null}
+          </div>
+        </s-section>
         <s-section heading="Upload source and edited CSV">
           <s-paragraph>
             source CSV は未編集の export 原本のみ有効です。選択した export と完全一致しない場合は provenance verify に失敗します。
@@ -180,13 +246,14 @@ export default function PreviewRoute() {
                   onChange={(event) => setSelectedExportJobId(event.currentTarget.value)}
                   value={selectedExportJobId}
                 >
-                  {data.exports.map((job) => (
+                  {loadedExports.map((job) => (
                     <option key={job.id} value={job.id}>
                       {job.id} ({job.createdAt})
                     </option>
                   ))}
                 </select>
               </label>
+              <input name="profile" type="hidden" value={selectedProfile} />
               <label>
                 <span>Source CSV</span>
                 <input name="sourceFile" required type="file" accept=".csv,text/csv" />
@@ -259,28 +326,34 @@ export default function PreviewRoute() {
           ) : null}
         </s-section>
         <s-section heading="Undo">
-          {latestWrite?.writeJobId ? (
+          {selectedProfile !== "product-core-seo-v1" ? (
+            <s-paragraph>Undo is only available for product-core-seo-v1.</s-paragraph>
+          ) : latestWrite?.writeJobId ? (
             <s-paragraph>
               Latest rollbackable write: {latestWrite.writeJobId} ({latestWrite.outcome})
             </s-paragraph>
           ) : (
             <s-paragraph>No rollbackable write yet.</s-paragraph>
           )}
-          <undoFetcher.Form action="/app/product-undos" method="post">
-            <input name="writeJobId" type="hidden" value={latestWrite?.writeJobId ?? ""} />
-            <button disabled={!canUndo} type="submit">
-              {undoFetcher.state === "submitting" ? "Undoing..." : "Undo latest rollbackable write"}
-            </button>
-          </undoFetcher.Form>
-          {undoFetcher.data?.error ? (
-            <s-paragraph>Undo error: {undoFetcher.data.error}</s-paragraph>
-          ) : null}
-          <s-paragraph>State: {activeUndo?.jobState ?? undoFetcher.data?.state ?? "idle"}</s-paragraph>
-          {activeUndo?.outcome ? (
-            <s-paragraph>Outcome: {activeUndo.outcome}</s-paragraph>
-          ) : null}
-          {activeUndo?.lastError ? (
-            <s-paragraph>Last error: {activeUndo.lastError}</s-paragraph>
+          {selectedProfile === "product-core-seo-v1" ? (
+            <>
+              <undoFetcher.Form action="/app/product-undos" method="post">
+                <input name="writeJobId" type="hidden" value={latestWrite?.writeJobId ?? ""} />
+                <button disabled={!canUndo} type="submit">
+                  {undoFetcher.state === "submitting" ? "Undoing..." : "Undo latest rollbackable write"}
+                </button>
+              </undoFetcher.Form>
+              {undoFetcher.data?.error ? (
+                <s-paragraph>Undo error: {undoFetcher.data.error}</s-paragraph>
+              ) : null}
+              <s-paragraph>State: {activeUndo?.jobState ?? undoFetcher.data?.state ?? "idle"}</s-paragraph>
+              {activeUndo?.outcome ? (
+                <s-paragraph>Outcome: {activeUndo.outcome}</s-paragraph>
+              ) : null}
+              {activeUndo?.lastError ? (
+                <s-paragraph>Last error: {activeUndo.lastError}</s-paragraph>
+              ) : null}
+            </>
           ) : null}
         </s-section>
         <s-section heading="Rows">

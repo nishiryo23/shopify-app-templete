@@ -8,7 +8,10 @@ import { queryCurrentAppInstallationEntitlement } from "./billing.server";
 import { createArtifactStorageFromEnv } from "~/domain/artifacts/factory.mjs";
 import { createPrismaArtifactCatalog } from "~/domain/artifacts/prisma-artifact-catalog.mjs";
 import { createPrismaJobQueue } from "~/domain/jobs/prisma-job-queue.mjs";
-import { PRODUCT_CORE_SEO_EXPORT_PROFILE } from "~/domain/products/export-profile.mjs";
+import {
+  PRODUCT_CORE_SEO_EXPORT_PROFILE,
+  resolveProductExportProfile,
+} from "~/domain/products/export-profile.mjs";
 import { enqueueOrFindActiveProductPreviewJob } from "~/domain/products/preview-jobs.mjs";
 import { filterPreviewableExportJobs } from "~/domain/products/preview-baselines.mjs";
 import {
@@ -121,6 +124,7 @@ async function loadCompletedExportBaseline({
   return {
     job,
     manifestArtifact,
+    profile: (job.payload as { profile?: string } | null)?.profile ?? PRODUCT_CORE_SEO_EXPORT_PROFILE,
     sourceArtifact,
   };
 }
@@ -206,7 +210,7 @@ export async function createProductPreview({ request }: ActionFunctionArgs) {
           exportJobId,
           jobId: existingActiveJob.id,
           kind: PRODUCT_PREVIEW_KIND,
-          profile: PRODUCT_CORE_SEO_EXPORT_PROFILE,
+          profile: baseline.profile,
           state: existingActiveJob.state,
         }, { status: 202 });
       }
@@ -224,7 +228,7 @@ export async function createProductPreview({ request }: ActionFunctionArgs) {
         metadata: {
           editedDigest,
           exportJobId,
-          profile: PRODUCT_CORE_SEO_EXPORT_PROFILE,
+          profile: baseline.profile,
         } as never,
       });
 
@@ -243,7 +247,7 @@ export async function createProductPreview({ request }: ActionFunctionArgs) {
         jobQueue,
         manifestArtifactId: baseline.manifestArtifact.id,
         prisma,
-        profile: PRODUCT_CORE_SEO_EXPORT_PROFILE,
+        profile: baseline.profile,
         shopDomain,
         sourceArtifactId: baseline.sourceArtifact.id,
       });
@@ -260,7 +264,7 @@ export async function createProductPreview({ request }: ActionFunctionArgs) {
         exportJobId,
         jobId: job.id,
         kind: PRODUCT_PREVIEW_KIND,
-        profile: PRODUCT_CORE_SEO_EXPORT_PROFILE,
+        profile: baseline.profile,
         state: job.state,
       }, { status: 202 });
     } catch (error) {
@@ -277,31 +281,43 @@ export async function createProductPreview({ request }: ActionFunctionArgs) {
   }
 }
 
-async function loadLatestCompletedExports(shopDomain: string) {
-  const jobs = await prisma.job.findMany({
-    orderBy: [{ createdAt: "desc" }],
-    take: 10,
-    where: {
-      kind: "product.export",
-      shopDomain,
-      state: "completed",
-    },
-  });
+async function loadLatestCompletedExports(shopDomain: string, profile: string) {
+  const matchingJobs = [];
+  const take = 20;
+  let skip = 0;
 
-  if (jobs.length === 0) {
-    return [];
+  while (matchingJobs.length < 20) {
+    const jobs = await prisma.job.findMany({
+      orderBy: [{ createdAt: "desc" }],
+      skip,
+      take,
+      where: {
+        kind: "product.export",
+        shopDomain,
+        state: "completed",
+      },
+    });
+
+    if (jobs.length === 0) {
+      break;
+    }
+
+    matchingJobs.push(...jobs.filter(
+      (job: Job) => ((job.payload as { profile?: string } | null)?.profile ?? PRODUCT_CORE_SEO_EXPORT_PROFILE) === profile,
+    ));
+    skip += jobs.length;
   }
 
   const artifacts = await prisma.artifact.findMany({
     where: {
       deletedAt: null,
-      jobId: { in: jobs.map((job) => job.id) },
+      jobId: { in: matchingJobs.map((job) => job.id) },
       kind: { in: ["product.export.source", "product.export.manifest"] },
       shopDomain,
     },
   });
 
-  return filterPreviewableExportJobs({ artifacts, jobs });
+  return filterPreviewableExportJobs({ artifacts, jobs: matchingJobs }).slice(0, 20);
 }
 
 async function loadPreviewJobDetail({ jobId, shopDomain }: { jobId: string; shopDomain: string }) {
@@ -469,10 +485,14 @@ async function loadUndoJobDetail({ jobId, shopDomain }: { jobId: string; shopDom
   };
 }
 
-async function loadLatestSuccessfulWrite(shopDomain: string) {
+async function loadLatestSuccessfulWrite(shopDomain: string, profile: string) {
+  if (profile !== PRODUCT_CORE_SEO_EXPORT_PROFILE) {
+    return null;
+  }
+
   const artifact = await findLatestSuccessfulProductWriteArtifact({
     prisma,
-    profile: PRODUCT_CORE_SEO_EXPORT_PROFILE,
+    profile,
     shopDomain,
   });
 
@@ -492,6 +512,7 @@ export async function loadProductPreviewPage({ request }: LoaderFunctionArgs) {
   const authContext = await authenticateAndBootstrapShop(request);
   const session = authContext.session as unknown as AdminSession;
   const url = new URL(request.url);
+  const profile = resolveProductExportProfile(url.searchParams.get("profile") ?? "");
   const previewJobId = url.searchParams.get("previewJobId") ?? url.searchParams.get("jobId");
   const writeJobId = url.searchParams.get("writeJobId");
   const undoJobId = url.searchParams.get("undoJobId");
@@ -502,14 +523,15 @@ export async function loadProductPreviewPage({ request }: LoaderFunctionArgs) {
 
   return json({
     entitlementState: entitlement.state,
-    exports: (await loadLatestCompletedExports(shopDomain)).map((job: Job) => ({
+    exports: (await loadLatestCompletedExports(shopDomain, profile)).map((job: Job) => ({
       createdAt: job.createdAt.toISOString(),
       id: job.id,
       profile: (job.payload as { profile?: string } | null)?.profile ?? PRODUCT_CORE_SEO_EXPORT_PROFILE,
     })),
     isAccountOwner: session.accountOwner === true,
-    latestWrite: await loadLatestSuccessfulWrite(shopDomain),
+    latestWrite: await loadLatestSuccessfulWrite(shopDomain, profile),
     preview: previewJobId ? await loadPreviewJobDetail({ jobId: previewJobId, shopDomain }) : null,
+    selectedProfile: profile,
     undo: undoJobId ? await loadUndoJobDetail({ jobId: undoJobId, shopDomain }) : null,
     write: writeJobId ? await loadWriteJobDetail({ jobId: writeJobId, shopDomain }) : null,
   });

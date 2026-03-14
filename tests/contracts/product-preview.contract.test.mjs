@@ -14,6 +14,11 @@ import {
   parseProductPreviewCsv,
 } from "../../domain/products/preview-csv.mjs";
 import {
+  buildVariantPreviewDigest,
+  buildVariantPreviewRows,
+  parseVariantPreviewCsv,
+} from "../../domain/variants/preview-csv.mjs";
+import {
   buildActiveProductPreviewWhere,
   enqueueOrFindActiveProductPreviewJob,
 } from "../../domain/products/preview-jobs.mjs";
@@ -47,6 +52,100 @@ test("preview CSV parser preserves row numbers and values", () => {
   assert.equal(rows.length, 1);
   assert.equal(rows[0].rowNumber, 2);
   assert.equal(rows[0].row.product_id, "gid://shopify/Product/1");
+});
+
+test("variant preview CSV parser requires exact product-variants-v1 headers", () => {
+  assert.throws(
+    () => parseVariantPreviewCsv("product_id,variant_id\n1,2\n"),
+    /CSV header must exactly match product-variants-v1/,
+  );
+});
+
+test("variant preview rejects create rows outside the baseline product set", () => {
+  const editedRows = parseVariantPreviewCsv(
+    "command,product_id,product_handle,variant_id,option1_name,option1_value,option2_name,option2_value,option3_name,option3_value,sku,barcode,taxable,requires_shipping,inventory_policy,updated_at\n"
+    + "CREATE,gid://shopify/Product/2,,,,Color,Red,,,,SKU-1,,true,true,DENY,\n",
+  );
+  const { rows, summary } = buildVariantPreviewRows({
+    baselineProductIds: new Set(["gid://shopify/Product/1"]),
+    baselineRowsByVariantId: new Map(),
+    currentProductsById: new Map([
+      ["gid://shopify/Product/2", { id: "gid://shopify/Product/2", options: [{ name: "Color", position: 1 }] }],
+    ]),
+    currentVariantsByProductId: new Map([
+      ["gid://shopify/Product/2", []],
+    ]),
+    editedRows,
+  });
+
+  assert.equal(rows[0].classification, "error");
+  assert.match(rows[0].messages[0], /selected export baseline/);
+  assert.equal(summary.error, 1);
+});
+
+test("variant preview rejects create rows with edited option names that do not match the live product schema", () => {
+  const editedRows = parseVariantPreviewCsv(
+    "command,product_id,product_handle,variant_id,option1_name,option1_value,option2_name,option2_value,option3_name,option3_value,sku,barcode,taxable,requires_shipping,inventory_policy,updated_at\n"
+    + "CREATE,gid://shopify/Product/2,,,,Shade,Red,,,,SKU-1,,true,true,DENY,\n",
+  );
+  const { rows, summary } = buildVariantPreviewRows({
+    baselineProductIds: new Set(["gid://shopify/Product/2"]),
+    baselineRowsByVariantId: new Map(),
+    currentProductsById: new Map([
+      ["gid://shopify/Product/2", { id: "gid://shopify/Product/2", options: [{ name: "Color", position: 1 }] }],
+    ]),
+    currentVariantsByProductId: new Map([
+      ["gid://shopify/Product/2", []],
+    ]),
+    editedRows,
+  });
+
+  assert.equal(rows[0].classification, "error");
+  assert.match(rows[0].messages[0], /option1_name must match the live product option name/);
+  assert.equal(summary.error, 1);
+});
+
+test("variant preview digest remains stable for canonical payload", () => {
+  const digestA = buildVariantPreviewDigest({
+    baselineDigest: "baseline",
+    editedDigest: "edited",
+    exportJobId: "export-1",
+    profile: "product-variants-v1",
+    rows: [{
+      baselineRow: null,
+      changedFields: ["sku"],
+      classification: "changed",
+      currentRow: null,
+      editedRow: { product_id: "1", sku: "A" },
+      editedRowNumber: 2,
+      operation: "create",
+      productId: "1",
+      sourceRowNumber: null,
+      variantId: null,
+    }],
+    summary: { total: 1, changed: 1, unchanged: 0, warning: 0, error: 0 },
+  });
+  const digestB = buildVariantPreviewDigest({
+    baselineDigest: "baseline",
+    editedDigest: "edited",
+    exportJobId: "export-1",
+    profile: "product-variants-v1",
+    rows: [{
+      baselineRow: null,
+      changedFields: ["sku"],
+      classification: "changed",
+      currentRow: null,
+      editedRow: { sku: "A", product_id: "1" },
+      editedRowNumber: 2,
+      operation: "create",
+      productId: "1",
+      sourceRowNumber: null,
+      variantId: null,
+    }],
+    summary: { error: 0, warning: 0, unchanged: 0, changed: 1, total: 1 },
+  });
+
+  assert.equal(digestA, digestB);
 });
 
 test("preview row index rejects duplicate product ids", () => {
@@ -567,4 +666,24 @@ test("preview route and page delegate to the shared services", () => {
   assert.match(pageFile, /useSearchParams/);
   assert.match(pageFile, /Request error:/);
   assert.match(workerBootstrap, /PRODUCT_PREVIEW_KIND/);
+});
+
+test("completed exports are paged until enough profile-matching baselines are found", () => {
+  const serviceFile = readProjectFile("app/services/product-previews.server.ts");
+
+  assert.match(serviceFile, /while \(matchingJobs\.length < 20\)/);
+  assert.match(serviceFile, /skip \+= jobs\.length/);
+  assert.match(serviceFile, /matchingJobs\.push\(\.\.\.jobs\.filter/);
+  assert.match(serviceFile, /filterPreviewableExportJobs\(\{ artifacts, jobs: matchingJobs \}\)\.slice\(0, 20\)/);
+});
+
+test("preview page keeps reloading until a newly started export appears in the baseline list", () => {
+  const pageFile = readProjectFile("app/routes/app.preview.tsx");
+
+  assert.match(pageFile, /const loadedExports = selectedLoaderData\?\.exports \?\? \[\]/);
+  assert.match(pageFile, /const activeExportJobId = exportFetcher\.data\?\.profile === selectedProfile/);
+  assert.match(pageFile, /const exportVisible = !activeExportJobId \|\| loadedExports\.some\(\(job\) => job\.id === activeExportJobId\)/);
+  assert.match(pageFile, /if \(!activeExportJobId && !activePreviewJobId && !activeWriteJobId && !activeUndoJobId\)/);
+  assert.match(pageFile, /if \(loadedExports\.some\(\(job\) => job\.id === selectedExportJobId\)\)/);
+  assert.match(pageFile, /\{loadedExports\.map\(\(job\) => \(/);
 });

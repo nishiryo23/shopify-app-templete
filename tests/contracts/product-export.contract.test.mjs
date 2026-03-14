@@ -11,6 +11,9 @@ import {
   mapProductNodeToExportRow,
 } from "../../domain/products/export-csv.mjs";
 import {
+  createVariantExportCsvBuilder,
+} from "../../domain/variants/export-csv.mjs";
+import {
   buildActiveProductExportWhere,
   enqueueOrFindActiveProductExportJob,
   enqueueProductExportJob,
@@ -22,6 +25,8 @@ import {
   PRODUCT_CORE_SEO_EXPORT_PROFILE,
   PRODUCT_EXPORT_FORMAT,
   PRODUCT_EXPORT_KIND,
+  PRODUCT_VARIANTS_EXPORT_HEADERS,
+  PRODUCT_VARIANTS_EXPORT_PROFILE,
 } from "../../domain/products/export-profile.mjs";
 import {
   readProductPagesForExport,
@@ -110,6 +115,55 @@ test("product export CSV builder appends pages without buffering prior rows", ()
   assert.equal(secondChunk.split("\n")[0], "gid://shopify/Product/2,sample-product-2,Sample Product 2,DRAFT,Matri,Bag,new,<p>Two</p>,SEO title 2,SEO description 2,2026-03-13T00:00:01Z");
   assert.equal(rowCount, 2);
   assert.equal(manifest.rowFingerprints.length, 3);
+});
+
+test("variant export CSV profile keeps variant headers and rows", () => {
+  const builder = createVariantExportCsvBuilder({
+    signingKey: "test-signing-key",
+  });
+  const chunk = builder.appendVariants([{
+    barcode: "barcode-1",
+    id: "gid://shopify/ProductVariant/1",
+    inventoryItem: {
+      requiresShipping: true,
+      sku: "SKU-1",
+    },
+    inventoryPolicy: "DENY",
+    product: {
+      handle: "sample-product",
+      id: "gid://shopify/Product/1",
+      options: [{ name: "Color", position: 1 }],
+    },
+    selectedOptions: [{ name: "Color", value: "Red" }],
+    taxable: true,
+    updatedAt: "2026-03-14T00:00:00Z",
+  }]);
+  const { manifest, rowCount } = builder.finalize();
+
+  assert.equal(chunk.split("\n")[0], PRODUCT_VARIANTS_EXPORT_HEADERS.join(","));
+  assert.match(chunk, /sample-product/);
+  assert.match(chunk, /SKU-1/);
+  assert.equal(rowCount, 1);
+  assert.equal(manifest.rowFingerprints.length, 2);
+});
+
+test("product export enqueue supports variant profile dedupe", async () => {
+  const calls = [];
+  const jobQueue = {
+    async enqueue(args) {
+      calls.push(args);
+      return { id: "job-variants", state: "queued", ...args };
+    },
+  };
+
+  const job = await enqueueProductExportJob({
+    jobQueue,
+    profile: PRODUCT_VARIANTS_EXPORT_PROFILE,
+    shopDomain: "example.myshopify.com",
+  });
+
+  assert.equal(job.payload.profile, PRODUCT_VARIANTS_EXPORT_PROFILE);
+  assert.equal(calls[0].dedupeKey, "product-export:product-variants-v1:csv");
 });
 
 test("product export job lookup uses active states only", async () => {

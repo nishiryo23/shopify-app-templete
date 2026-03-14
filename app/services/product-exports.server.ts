@@ -7,18 +7,21 @@ import {
   enqueueOrFindActiveProductExportJob,
 } from "~/domain/products/export-jobs.mjs";
 import {
-  PRODUCT_CORE_SEO_EXPORT_PROFILE,
   PRODUCT_EXPORT_FORMAT,
   PRODUCT_EXPORT_KIND,
+  resolveProductExportProfile,
 } from "~/domain/products/export-profile.mjs";
 
 const jobQueue = createPrismaJobQueue(prisma);
 
 export async function createProductExport({ request }: ActionFunctionArgs) {
   const authContext = await authenticateAndBootstrapShop(request);
+  const formData = await request.formData();
   const shopDomain = authContext.session.shop;
+  const profile = resolveProductExportProfile(String(formData.get("profile") ?? ""));
   const job = await enqueueOrFindActiveProductExportJob({
     jobQueue,
+    profile,
     prisma,
     shopDomain,
   });
@@ -32,7 +35,7 @@ export async function createProductExport({ request }: ActionFunctionArgs) {
       format: PRODUCT_EXPORT_FORMAT,
       jobId: job.id,
       kind: PRODUCT_EXPORT_KIND,
-      profile: PRODUCT_CORE_SEO_EXPORT_PROFILE,
+      profile,
       state: job.state,
     }),
     {

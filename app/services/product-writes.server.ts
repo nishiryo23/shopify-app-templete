@@ -6,6 +6,9 @@ import { queryCurrentAppInstallationEntitlement } from "./billing.server";
 import { createArtifactStorageFromEnv } from "~/domain/artifacts/factory.mjs";
 import { createPrismaJobQueue } from "~/domain/jobs/prisma-job-queue.mjs";
 import {
+  PRODUCT_CORE_SEO_EXPORT_PROFILE,
+} from "~/domain/products/export-profile.mjs";
+import {
   enqueueOrFindActiveProductUndoJob,
   enqueueOrFindActiveProductWriteJob,
   findActiveProductUndoJob,
@@ -100,7 +103,7 @@ async function loadCompletedPreviewOrThrow({
 async function readLatestRollbackableWriteOrNull(shopDomain: string) {
   return findLatestSuccessfulProductWriteArtifact({
     prisma,
-    profile: "product-core-seo-v1",
+    profile: PRODUCT_CORE_SEO_EXPORT_PROFILE,
     shopDomain,
   });
 }
@@ -126,10 +129,20 @@ export async function createProductWrite({ request }: ActionFunctionArgs) {
 
     const shopDomain = authContext.session.shop;
     const preview = await loadCompletedPreviewOrThrow({ previewJobId, shopDomain });
+    const previewPayload = preview.artifact.metadata as { previewDigest?: string } | null;
+    const previewFile = await artifactStorage.get(preview.artifact.objectKey);
+    const previewBody = Buffer.isBuffer(previewFile) ? previewFile : previewFile?.body;
+
+    if (!previewBody) {
+      throw new Error("preview result artifact body could not be read");
+    }
+
+    const payload = JSON.parse(previewBody.toString("utf8"));
+    const profile = payload.profile ?? PRODUCT_CORE_SEO_EXPORT_PROFILE;
     const existingVerifiedSuccess = await findVerifiedSuccessfulProductWriteArtifactByPreviewJobId({
       previewJobId,
       prisma,
-      profile: "product-core-seo-v1",
+      profile,
       shopDomain,
     });
     if (existingVerifiedSuccess) {
@@ -155,15 +168,6 @@ export async function createProductWrite({ request }: ActionFunctionArgs) {
       }, { status: 202 });
     }
 
-    const previewPayload = preview.artifact.metadata as { previewDigest?: string } | null;
-    const previewFile = await artifactStorage.get(preview.artifact.objectKey);
-    const previewBody = Buffer.isBuffer(previewFile) ? previewFile : previewFile?.body;
-
-    if (!previewBody) {
-      throw new Error("preview result artifact body could not be read");
-    }
-
-    const payload = JSON.parse(previewBody.toString("utf8"));
     const rowState = findPreviewJobRows(payload);
     if (rowState.hasErrors) {
       return json({ error: "preview contains error rows and cannot be confirmed" }, { status: 400 });
@@ -182,7 +186,7 @@ export async function createProductWrite({ request }: ActionFunctionArgs) {
       previewDigest: payload.previewDigest ?? previewPayload?.previewDigest ?? null,
       previewJobId,
       prisma,
-      profile: payload.profile ?? "product-core-seo-v1",
+      profile,
       shopDomain,
     });
 
@@ -248,10 +252,15 @@ export async function createProductUndo({ request }: ActionFunctionArgs) {
       return json({ error: "latest rollbackable write is missing snapshot artifact" }, { status: 400 });
     }
 
+    const profile = (latestRollbackableWrite.metadata as { profile?: string } | null)?.profile ?? PRODUCT_CORE_SEO_EXPORT_PROFILE;
+    if (profile !== PRODUCT_CORE_SEO_EXPORT_PROFILE) {
+      return json({ error: "undo is not available for this write profile" }, { status: 400 });
+    }
+
     const job = await enqueueOrFindActiveProductUndoJob({
       jobQueue,
       prisma,
-      profile: (latestRollbackableWrite.metadata as { profile?: string } | null)?.profile ?? "product-core-seo-v1",
+      profile,
       requestedBy: {
         email: authContext.session.email ?? null,
         userId: authContext.session.userId?.toString() ?? null,

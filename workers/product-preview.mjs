@@ -1,12 +1,17 @@
 import { createPrismaArtifactCatalog } from "../domain/artifacts/prisma-artifact-catalog.mjs";
 import { buildPreviewDigest, buildPreviewRows, indexRowsByProductId, parseProductPreviewCsv } from "../domain/products/preview-csv.mjs";
 import {
+  PRODUCT_VARIANTS_EXPORT_PROFILE,
+} from "../domain/products/export-profile.mjs";
+import {
   buildProductPreviewArtifactKey,
   PRODUCT_PREVIEW_RESULT_ARTIFACT_KIND,
 } from "../domain/products/preview-profile.mjs";
 import { verifyCsvManifest } from "../domain/provenance/csv-manifest.mjs";
 import { requireProvenanceSigningKey, sha256Hex } from "../domain/provenance/signing.mjs";
 import { readProductsForPreview } from "../platform/shopify/product-preview.server.mjs";
+import { buildVariantPreviewDigest, buildVariantPreviewRows, indexVariantRows, parseVariantPreviewCsv } from "../domain/variants/preview-csv.mjs";
+import { readVariantsForProducts } from "../platform/shopify/product-variants.server.mjs";
 import { MissingOfflineSessionError, loadOfflineAdminContext } from "./offline-admin.mjs";
 
 async function deleteIfPresent(storage, descriptor) {
@@ -49,6 +54,7 @@ export async function runProductPreviewJob({
   job,
   prisma,
   readLiveProducts = readProductsForPreview,
+  readLiveVariants = readVariantsForProducts,
   resolveAdminContext = loadOfflineAdminContext,
   signingKey = requireProvenanceSigningKey(),
 } = {}) {
@@ -101,38 +107,81 @@ export async function runProductPreviewJob({
       throw new Error(sourceVerification.reason);
     }
 
-    assertJobLeaseActive();
-    const baselineRows = parseProductPreviewCsv(sourceCsvText);
-    const editedRows = parseProductPreviewCsv(editedCsvText);
-    const baselineRowsByProductId = indexRowsByProductId(baselineRows);
-    indexRowsByProductId(editedRows);
-
     const { admin } = await resolveAdminContext({
       prisma,
       shopDomain: job.shopDomain,
     });
-    const currentRowsByProductId = await readLiveProducts(
-      admin,
-      editedRows.map((entry) => entry.row.product_id).filter(Boolean),
-      { assertJobLeaseActive },
-    );
+    let rows;
+    let summary;
 
-    const { rows, summary } = buildPreviewRows({
-      baselineRowsByProductId,
-      currentRowsByProductId,
-      editedRows,
-    });
+    assertJobLeaseActive();
+    if (payload.profile === PRODUCT_VARIANTS_EXPORT_PROFILE) {
+      const baselineRows = parseVariantPreviewCsv(sourceCsvText);
+      const editedRows = parseVariantPreviewCsv(editedCsvText);
+      const { productIds: baselineProductIds, rowsByKey: editedRowsByKey } = indexVariantRows(editedRows);
+      const { rowsByKey: baselineRowsByKey } = indexVariantRows(baselineRows);
+      const baselineRowsByVariantId = new Map();
+      for (const entry of baselineRowsByKey.values()) {
+        if (entry.row.variant_id) {
+          baselineRowsByVariantId.set(entry.row.variant_id, entry);
+        }
+      }
+      const {
+        productsById: currentProductsById,
+        variantsByProductId: currentVariantsByProductId,
+      } = await readLiveVariants(
+        admin,
+        [...baselineProductIds],
+        { assertJobLeaseActive },
+      );
+      const preview = buildVariantPreviewRows({
+        baselineProductIds: new Set(baselineRows.map((entry) => entry.row.product_id).filter(Boolean)),
+        baselineRowsByVariantId,
+        currentProductsById,
+        currentVariantsByProductId,
+        editedRows: [...editedRowsByKey.values()],
+      });
+      rows = preview.rows;
+      summary = preview.summary;
+    } else {
+      const baselineRows = parseProductPreviewCsv(sourceCsvText);
+      const editedRows = parseProductPreviewCsv(editedCsvText);
+      const baselineRowsByProductId = indexRowsByProductId(baselineRows);
+      indexRowsByProductId(editedRows);
+      const currentRowsByProductId = await readLiveProducts(
+        admin,
+        editedRows.map((entry) => entry.row.product_id).filter(Boolean),
+        { assertJobLeaseActive },
+      );
+
+      const preview = buildPreviewRows({
+        baselineRowsByProductId,
+        currentRowsByProductId,
+        editedRows,
+      });
+      rows = preview.rows;
+      summary = preview.summary;
+    }
 
     const baselineDigest = sha256Hex(sourceCsvText);
     const editedDigest = sha256Hex(editedCsvText);
-    const previewDigest = buildPreviewDigest({
-      baselineDigest,
-      editedDigest,
-      exportJobId: payload.exportJobId,
-      profile: payload.profile,
-      rows,
-      summary,
-    });
+    const previewDigest = payload.profile === PRODUCT_VARIANTS_EXPORT_PROFILE
+      ? buildVariantPreviewDigest({
+        baselineDigest,
+        editedDigest,
+        exportJobId: payload.exportJobId,
+        profile: payload.profile,
+        rows,
+        summary,
+      })
+      : buildPreviewDigest({
+        baselineDigest,
+        editedDigest,
+        exportJobId: payload.exportJobId,
+        profile: payload.profile,
+        rows,
+        summary,
+      });
 
     const resultPayload = {
       baselineDigest,

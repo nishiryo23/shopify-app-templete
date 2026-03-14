@@ -9,9 +9,12 @@ import {
   PRODUCT_EXPORT_FORMAT,
   PRODUCT_EXPORT_MANIFEST_ARTIFACT_KIND,
   PRODUCT_EXPORT_SOURCE_ARTIFACT_KIND,
+  PRODUCT_VARIANTS_EXPORT_PROFILE,
 } from "../domain/products/export-profile.mjs";
 import { requireProvenanceSigningKey } from "../domain/provenance/signing.mjs";
 import { readProductPagesForExport } from "../platform/shopify/product-export.server.mjs";
+import { readProductVariantPagesForExport } from "../platform/shopify/product-variants.server.mjs";
+import { createVariantExportCsvBuilder } from "../domain/variants/export-csv.mjs";
 import { MissingOfflineSessionError, loadOfflineAdminContext } from "./offline-admin.mjs";
 
 async function deleteIfPresent(storage, descriptor) {
@@ -38,6 +41,7 @@ export async function runProductExportJob({
   now = new Date(),
   prisma,
   readProductPages = readProductPagesForExport,
+  readVariantPages = readProductVariantPagesForExport,
   resolveAdminContext = loadOfflineAdminContext,
   signingKey = requireProvenanceSigningKey(),
 } = {}) {
@@ -57,13 +61,20 @@ export async function runProductExportJob({
     });
     tempDirPath = await mkdtemp(path.join(os.tmpdir(), "product-export-"));
     const tempCsvPath = path.join(tempDirPath, "source.csv");
-    const csvBuilder = createProductExportCsvBuilder({ signingKey });
+    const csvBuilder = profile === PRODUCT_VARIANTS_EXPORT_PROFILE
+      ? createVariantExportCsvBuilder({ signingKey })
+      : createProductExportCsvBuilder({ signingKey });
     const tempCsvFile = await open(tempCsvPath, "w");
 
     try {
-      for await (const products of readProductPages(admin, { assertJobLeaseActive })) {
+      const pageIterator = profile === PRODUCT_VARIANTS_EXPORT_PROFILE
+        ? readVariantPages(admin, { assertJobLeaseActive })
+        : readProductPages(admin, { assertJobLeaseActive });
+      for await (const rows of pageIterator) {
         assertJobLeaseActive();
-        const csvChunk = csvBuilder.appendProducts(products);
+        const csvChunk = profile === PRODUCT_VARIANTS_EXPORT_PROFILE
+          ? csvBuilder.appendVariants(rows)
+          : csvBuilder.appendProducts(rows);
         if (csvChunk.length > 0) {
           await tempCsvFile.writeFile(csvChunk);
         }

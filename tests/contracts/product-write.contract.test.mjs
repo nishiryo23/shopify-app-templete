@@ -11,6 +11,7 @@ import {
   buildProductUpdateInputFromPreviewRow,
   getWritablePreviewRows,
 } from "../../domain/products/write-rows.mjs";
+import { buildVariantMutationFromPreviewRow } from "../../domain/variants/write-rows.mjs";
 
 const rootDir = path.resolve(import.meta.dirname, "../..");
 
@@ -20,6 +21,10 @@ function readProjectFile(relativePath) {
 
 async function importProductWriteWorker() {
   return import("../../workers/product-write.mjs");
+}
+
+async function importVariantProductWriteWorker() {
+  return import("../../workers/product-write-variants.mjs");
 }
 
 async function importProductUndoWorker() {
@@ -104,6 +109,21 @@ test("invalid status is a row business failure instead of route reject", () => {
 
   assert.equal(result.ok, false);
   assert.match(result.errors[0], /invalid status value/);
+});
+
+test("variant write input preserves blank SKU clears", () => {
+  const result = buildVariantMutationFromPreviewRow({
+    changedFields: ["sku"],
+    editedRow: {
+      variant_id: "gid://shopify/ProductVariant/1",
+      sku: "",
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.input.inventoryItem, {
+    sku: "",
+  });
 });
 
 test("latest rollbackable write lookup includes partial_failure with snapshot metadata", async () => {
@@ -273,6 +293,48 @@ test("latest successful write lookup excludes writes already undone successfully
   });
 
   assert.equal(artifact?.id, "write-artifact-1");
+});
+
+test("latest successful write lookup ignores variant profile writes without rollbackable metadata", async () => {
+  const artifact = await findLatestSuccessfulProductWriteArtifact({
+    prisma: {
+      artifact: {
+        async findMany(args) {
+          if (args.where.kind === "product.undo.result") {
+            return [];
+          }
+
+          if (args.skip > 0) {
+            return [];
+          }
+
+          return [
+            {
+              id: "variant-write-artifact",
+              jobId: "variant-write-job",
+              metadata: {
+                outcome: "verified_success",
+                profile: "product-variants-v1",
+              },
+            },
+            {
+              id: "core-write-artifact",
+              jobId: "core-write-job",
+              metadata: {
+                outcome: "verified_success",
+                profile: "product-core-seo-v1",
+                snapshotArtifactId: "snapshot-1",
+              },
+            },
+          ];
+        },
+      },
+    },
+    profile: "product-core-seo-v1",
+    shopDomain: "example.myshopify.com",
+  });
+
+  assert.equal(artifact?.id, "core-write-artifact");
 });
 
 test("product write worker persists rollbackable result before rethrowing infrastructure failure", async () => {
@@ -552,6 +614,115 @@ test("product write worker stores revalidation_failed result without snapshot or
   assert.match(String(puts[0].key), /result\.json$/);
 });
 
+test("variant write worker stores revalidation_failed result when create rows no longer match live option schema", async () => {
+  const { runVariantProductWriteJob } = await importVariantProductWriteWorker();
+  const puts = [];
+  let createCalls = 0;
+
+  const result = await runVariantProductWriteJob({
+    artifactCatalog: {
+      async record(args) {
+        return { id: `${args.kind}-record`, ...args };
+      },
+    },
+    artifactStorage: {
+      async get() {
+        return {
+          body: Buffer.from(JSON.stringify({
+            previewDigest: "preview-digest",
+            previewJobId: "preview-job-variant-1",
+            profile: "product-variants-v1",
+            rows: [{
+              changedFields: ["option1_value", "sku", "taxable", "requires_shipping", "inventory_policy"],
+              classification: "changed",
+              currentRow: null,
+              editedRow: {
+                barcode: "",
+                command: "CREATE",
+                inventory_policy: "DENY",
+                option1_name: "Color",
+                option1_value: "Red",
+                option2_name: "",
+                option2_value: "",
+                option3_name: "",
+                option3_value: "",
+                product_handle: "shirt",
+                product_id: "gid://shopify/Product/1",
+                requires_shipping: "true",
+                sku: "SKU-1",
+                taxable: "true",
+                updated_at: "",
+                variant_id: "",
+              },
+              editedRowNumber: 2,
+              messages: [],
+              operation: "create",
+              productId: "gid://shopify/Product/1",
+              sourceRowNumber: null,
+              variantId: null,
+            }],
+            summary: { changed: 1, error: 0, total: 1, unchanged: 0, warning: 0 },
+          })),
+        };
+      },
+      async put(args) {
+        puts.push(args);
+        return {
+          bucket: "bucket",
+          checksumSha256: "checksum",
+          contentType: args.contentType,
+          metadata: args.metadata,
+          objectKey: args.key,
+        };
+      },
+    },
+    job: {
+      id: "variant-write-job-1",
+      payload: {
+        previewArtifactId: "preview-artifact-1",
+        previewDigest: "preview-digest",
+        previewJobId: "preview-job-variant-1",
+        profile: "product-variants-v1",
+      },
+      shopDomain: "example.myshopify.com",
+    },
+    prisma: {
+      artifact: {
+        async findFirst() {
+          return {
+            id: "preview-artifact-1",
+            kind: "product.preview.result",
+            objectKey: "preview/result.json",
+            shopDomain: "example.myshopify.com",
+          };
+        },
+      },
+    },
+    createVariants: async () => {
+      createCalls += 1;
+      return { productVariants: [], userErrors: [] };
+    },
+    readLiveVariants: async () => ({
+      productsById: new Map([
+        ["gid://shopify/Product/1", {
+          handle: "shirt",
+          id: "gid://shopify/Product/1",
+          options: [{ name: "Shade", position: 1 }],
+        }],
+      ]),
+      variantsByProductId: new Map([
+        ["gid://shopify/Product/1", []],
+      ]),
+    }),
+    resolveAdminContext: async () => ({ admin: {} }),
+  });
+
+  assert.equal(result.outcome, "revalidation_failed");
+  assert.equal(createCalls, 0);
+  assert.equal(puts.length, 1);
+  assert.match(String(puts[0].key), /result\.json$/);
+});
+
 test("product write worker preserves missing-offline-session code when deps are injected", async () => {
   const { runProductWriteJob } = await importProductWriteWorker();
   const { MissingOfflineSessionError } = await importMissingOfflineSessionError();
@@ -827,6 +998,8 @@ test("product undo worker preserves missing-offline-session code when deps are i
 
 test("preview page exposes write and undo controls", () => {
   const route = readProjectFile("app/routes/app.preview.tsx");
+  assert.match(route, /product-variants-v1/);
+  assert.match(route, /Create export/);
   assert.match(route, /Confirm and write/);
   assert.match(route, /Undo latest rollbackable write/);
   assert.match(route, /previewJobId/);

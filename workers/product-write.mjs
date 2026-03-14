@@ -1,4 +1,7 @@
 import {
+  PRODUCT_VARIANTS_EXPORT_PROFILE,
+} from "../domain/products/export-profile.mjs";
+import {
   buildProductWriteArtifactKey,
   PRODUCT_WRITE_ERROR_ARTIFACT_KIND,
   PRODUCT_WRITE_RESULT_ARTIFACT_KIND,
@@ -9,6 +12,7 @@ import {
   changedFieldsMatch,
   getWritablePreviewRows,
 } from "../domain/products/write-rows.mjs";
+import { runVariantProductWriteJob } from "./product-write-variants.mjs";
 
 function extractArtifactBody(record) {
   if (Buffer.isBuffer(record)) {
@@ -152,6 +156,20 @@ export async function runProductWriteJob({
   resolveAdminContext,
   updateProduct,
 } = {}) {
+  if (job?.payload?.profile === PRODUCT_VARIANTS_EXPORT_PROFILE) {
+    return runVariantProductWriteJob({
+      artifactCatalog,
+      artifactKeyPrefix,
+      artifactStorage,
+      assertJobLeaseActive,
+      job,
+      prisma,
+      readLiveVariants: readLiveProducts,
+      resolveAdminContext,
+      updateVariants: updateProduct,
+    });
+  }
+
   const defaultDependencies = artifactCatalog && readLiveProducts && resolveAdminContext && updateProduct
     ? null
     : await loadDefaultDependencies();
