@@ -6,8 +6,14 @@ import { createArtifactStorageFromEnv } from "../domain/artifacts/factory.mjs";
 import { createPrismaJobQueue } from "../domain/jobs/prisma-job-queue.mjs";
 import { PRODUCT_EXPORT_KIND } from "../domain/products/export-profile.mjs";
 import { PRODUCT_PREVIEW_KIND } from "../domain/products/preview-profile.mjs";
+import {
+  PRODUCT_UNDO_KIND,
+  PRODUCT_WRITE_KIND,
+} from "../domain/products/write-profile.mjs";
 import { runProductExportJob } from "./product-export.mjs";
+import { runProductUndoJob } from "./product-undo.mjs";
 import { runProductPreviewJob } from "./product-preview.mjs";
+import { runProductWriteJob } from "./product-write.mjs";
 
 const ALWAYS_REQUIRED_WORKER_SECRETS = Object.freeze([
   "DATABASE_URL",
@@ -320,7 +326,7 @@ export async function runBootstrapWorker({
   try {
     while (!stopping) {
       const job = await jobQueue.leaseNext({
-        kinds: [PRODUCT_EXPORT_KIND, PRODUCT_PREVIEW_KIND],
+        kinds: [PRODUCT_EXPORT_KIND, PRODUCT_PREVIEW_KIND, PRODUCT_WRITE_KIND, PRODUCT_UNDO_KIND],
         leaseMs: config.queueLeaseMs,
         workerId,
       });
@@ -435,6 +441,14 @@ export async function runBootstrapWorker({
 }
 
 export async function runWorkerJob(args = {}) {
+  if (args.job?.kind === PRODUCT_UNDO_KIND) {
+    return runProductUndoJob(args);
+  }
+
+  if (args.job?.kind === PRODUCT_WRITE_KIND) {
+    return runProductWriteJob(args);
+  }
+
   if (args.job?.kind === PRODUCT_PREVIEW_KIND) {
     return runProductPreviewJob(args);
   }

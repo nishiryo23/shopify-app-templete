@@ -4,6 +4,7 @@ import type { Job } from "@prisma/client";
 
 import prisma from "../db.server";
 import { authenticateAndBootstrapShop } from "./auth-bootstrap.server";
+import { queryCurrentAppInstallationEntitlement } from "./billing.server";
 import { createArtifactStorageFromEnv } from "~/domain/artifacts/factory.mjs";
 import { createPrismaArtifactCatalog } from "~/domain/artifacts/prisma-artifact-catalog.mjs";
 import { createPrismaJobQueue } from "~/domain/jobs/prisma-job-queue.mjs";
@@ -16,12 +17,28 @@ import {
   PRODUCT_PREVIEW_KIND,
   PRODUCT_PREVIEW_RESULT_ARTIFACT_KIND,
 } from "~/domain/products/preview-profile.mjs";
+import {
+  findLatestSuccessfulProductWriteArtifact,
+} from "~/domain/products/write-jobs.mjs";
+import {
+  PRODUCT_UNDO_ERROR_ARTIFACT_KIND,
+  PRODUCT_UNDO_KIND,
+  PRODUCT_UNDO_RESULT_ARTIFACT_KIND,
+  PRODUCT_WRITE_ERROR_ARTIFACT_KIND,
+  PRODUCT_WRITE_KIND,
+  PRODUCT_WRITE_RESULT_ARTIFACT_KIND,
+} from "~/domain/products/write-profile.mjs";
 import { verifyCsvManifest } from "~/domain/provenance/csv-manifest.mjs";
 import { requireProvenanceSigningKey, sha256Hex } from "~/domain/provenance/signing.mjs";
 
 const artifactStorage: any = createArtifactStorageFromEnv();
 const artifactCatalog: any = createPrismaArtifactCatalog(prisma);
 const jobQueue = createPrismaJobQueue(prisma);
+
+type AdminSession = {
+  accountOwner?: boolean;
+  shop: string;
+};
 
 type CompletedExportBaselineArgs = {
   exportJobId: string;
@@ -334,18 +351,166 @@ async function loadPreviewJobDetail({ jobId, shopDomain }: { jobId: string; shop
   };
 }
 
+async function loadTerminalJobArtifacts({
+  errorKind,
+  jobId,
+  resultKind,
+  shopDomain,
+}: {
+  errorKind: string;
+  jobId: string;
+  resultKind: string;
+  shopDomain: string;
+}) {
+  const [resultArtifact, errorArtifact] = await Promise.all([
+    prisma.artifact.findFirst({
+      where: {
+        deletedAt: null,
+        jobId,
+        kind: resultKind,
+        shopDomain,
+      },
+    }),
+    prisma.artifact.findFirst({
+      where: {
+        deletedAt: null,
+        jobId,
+        kind: errorKind,
+        shopDomain,
+      },
+    }),
+  ]);
+
+  return {
+    errorArtifact,
+    resultArtifact,
+  };
+}
+
+async function loadJsonArtifactPayload(artifact: { objectKey: string } | null) {
+  if (!artifact) {
+    return null;
+  }
+
+  const record = await artifactStorage.get(artifact.objectKey);
+  const body = extractArtifactBody(record);
+
+  if (!body) {
+    throw new Error("artifact body could not be read");
+  }
+
+  return JSON.parse(body.toString("utf8"));
+}
+
+async function loadWriteJobDetail({ jobId, shopDomain }: { jobId: string; shopDomain: string }) {
+  const job = await prisma.job.findFirst({
+    where: {
+      id: jobId,
+      kind: PRODUCT_WRITE_KIND,
+      shopDomain,
+    },
+  });
+
+  if (!job) {
+    return null;
+  }
+
+  const { errorArtifact, resultArtifact } = await loadTerminalJobArtifacts({
+    errorKind: PRODUCT_WRITE_ERROR_ARTIFACT_KIND,
+    jobId,
+    resultKind: PRODUCT_WRITE_RESULT_ARTIFACT_KIND,
+    shopDomain,
+  });
+
+  const [resultPayload, errorPayload] = await Promise.all([
+    loadJsonArtifactPayload(resultArtifact),
+    loadJsonArtifactPayload(errorArtifact),
+  ]);
+
+  return {
+    jobState: job.state,
+    lastError: errorPayload?.message ?? job.lastError,
+    outcome: resultPayload?.outcome ?? null,
+    summary: resultPayload?.summary ?? null,
+    writeJobId: job.id,
+  };
+}
+
+async function loadUndoJobDetail({ jobId, shopDomain }: { jobId: string; shopDomain: string }) {
+  const job = await prisma.job.findFirst({
+    where: {
+      id: jobId,
+      kind: PRODUCT_UNDO_KIND,
+      shopDomain,
+    },
+  });
+
+  if (!job) {
+    return null;
+  }
+
+  const { errorArtifact, resultArtifact } = await loadTerminalJobArtifacts({
+    errorKind: PRODUCT_UNDO_ERROR_ARTIFACT_KIND,
+    jobId,
+    resultKind: PRODUCT_UNDO_RESULT_ARTIFACT_KIND,
+    shopDomain,
+  });
+  const [resultPayload, errorPayload] = await Promise.all([
+    loadJsonArtifactPayload(resultArtifact),
+    loadJsonArtifactPayload(errorArtifact),
+  ]);
+
+  return {
+    jobState: job.state,
+    lastError: errorPayload?.message ?? job.lastError,
+    outcome: resultPayload?.outcome ?? null,
+    summary: resultPayload?.summary ?? null,
+    undoJobId: job.id,
+  };
+}
+
+async function loadLatestSuccessfulWrite(shopDomain: string) {
+  const artifact = await findLatestSuccessfulProductWriteArtifact({
+    prisma,
+    profile: PRODUCT_CORE_SEO_EXPORT_PROFILE,
+    shopDomain,
+  });
+
+  if (!artifact) {
+    return null;
+  }
+
+  return {
+    outcome: (artifact.metadata as { outcome?: string } | null)?.outcome ?? null,
+    previewJobId: (artifact.metadata as { previewJobId?: string } | null)?.previewJobId ?? null,
+    total: (artifact.metadata as { total?: number } | null)?.total ?? null,
+    writeJobId: artifact.jobId,
+  };
+}
+
 export async function loadProductPreviewPage({ request }: LoaderFunctionArgs) {
   const authContext = await authenticateAndBootstrapShop(request);
+  const session = authContext.session as unknown as AdminSession;
   const url = new URL(request.url);
-  const jobId = url.searchParams.get("jobId");
-  const shopDomain = authContext.session.shop;
+  const previewJobId = url.searchParams.get("previewJobId") ?? url.searchParams.get("jobId");
+  const writeJobId = url.searchParams.get("writeJobId");
+  const undoJobId = url.searchParams.get("undoJobId");
+  const shopDomain = session.shop;
+  const entitlement = await queryCurrentAppInstallationEntitlement(authContext.admin, {
+    shopDomain,
+  });
 
   return json({
+    entitlementState: entitlement.state,
     exports: (await loadLatestCompletedExports(shopDomain)).map((job: Job) => ({
       createdAt: job.createdAt.toISOString(),
       id: job.id,
       profile: (job.payload as { profile?: string } | null)?.profile ?? PRODUCT_CORE_SEO_EXPORT_PROFILE,
     })),
-    preview: jobId ? await loadPreviewJobDetail({ jobId, shopDomain }) : null,
+    isAccountOwner: session.accountOwner === true,
+    latestWrite: await loadLatestSuccessfulWrite(shopDomain),
+    preview: previewJobId ? await loadPreviewJobDetail({ jobId: previewJobId, shopDomain }) : null,
+    undo: undoJobId ? await loadUndoJobDetail({ jobId: undoJobId, shopDomain }) : null,
+    write: writeJobId ? await loadWriteJobDetail({ jobId: writeJobId, shopDomain }) : null,
   });
 }

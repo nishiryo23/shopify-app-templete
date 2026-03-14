@@ -7,11 +7,19 @@ import { loadProductPreviewPage } from "~/app/services/product-previews.server";
 export const loader = (args: LoaderFunctionArgs) => loadProductPreviewPage(args);
 
 type PreviewLoaderData = {
+  entitlementState: string;
   exports: Array<{
     createdAt: string;
     id: string;
     profile: string;
   }>;
+  isAccountOwner: boolean;
+  latestWrite: null | {
+    outcome: string | null;
+    previewJobId: string | null;
+    total: number | null;
+    writeJobId: string | null;
+  };
   preview: null | {
     jobState: string;
     lastError: string | null;
@@ -25,6 +33,20 @@ type PreviewLoaderData = {
     }> | null;
     summary: Record<string, number> | null;
   };
+  undo: null | {
+    jobState: string;
+    lastError: string | null;
+    outcome: string | null;
+    summary: Record<string, number> | null;
+    undoJobId: string;
+  };
+  write: null | {
+    jobState: string;
+    lastError: string | null;
+    outcome: string | null;
+    summary: Record<string, number> | null;
+    writeJobId: string;
+  };
 };
 
 export default function PreviewRoute() {
@@ -35,11 +57,42 @@ export default function PreviewRoute() {
     jobId: string;
     state: string;
   }>();
+  const writeFetcher = useFetcher<{
+    error?: string;
+    jobId: string;
+    previewJobId: string;
+    state: string;
+  }>();
+  const undoFetcher = useFetcher<{
+    error?: string;
+    jobId: string;
+    state: string;
+    writeJobId: string;
+  }>();
   const detailFetcher = useFetcher<PreviewLoaderData>();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedExportJobId, setSelectedExportJobId] = useState(data.exports[0]?.id ?? "");
+  const latestWrite = detailFetcher.data?.latestWrite ?? data.latestWrite;
   const activePreview = detailFetcher.data?.preview ?? data.preview;
-  const activeJobId = createFetcher.data?.jobId ?? searchParams.get("jobId");
+  const activeWrite = detailFetcher.data?.write ?? data.write;
+  const activeUndo = detailFetcher.data?.undo ?? data.undo;
+  const activePreviewJobId = createFetcher.data?.jobId ?? searchParams.get("previewJobId") ?? searchParams.get("jobId");
+  const activeWriteJobId = writeFetcher.data?.jobId ?? searchParams.get("writeJobId");
+  const activeUndoJobId = undoFetcher.data?.jobId ?? searchParams.get("undoJobId");
+  const previewHasWritableRows = Boolean(activePreview?.rows?.some((row) => row.changedFields.length > 0));
+  const latestWriteMatchesPreview = Boolean(
+    latestWrite?.outcome === "verified_success"
+      && latestWrite.previewJobId
+      && latestWrite.previewJobId === activePreviewJobId,
+  );
+  const canConfirm = data.isAccountOwner
+    && data.entitlementState === "ACTIVE_PAID"
+    && activePreview?.jobState === "completed"
+    && previewHasWritableRows
+    && !latestWriteMatchesPreview;
+  const canUndo = data.isAccountOwner
+    && data.entitlementState === "ACTIVE_PAID"
+    && Boolean(latestWrite?.writeJobId);
 
   useEffect(() => {
     if (!createFetcher.data?.jobId) {
@@ -47,26 +100,69 @@ export default function PreviewRoute() {
     }
 
     const nextParams = new URLSearchParams(searchParams);
-    nextParams.set("jobId", createFetcher.data.jobId);
+    nextParams.set("previewJobId", createFetcher.data.jobId);
+    nextParams.delete("jobId");
     setSearchParams(nextParams, { replace: true });
   }, [createFetcher.data?.jobId, searchParams, setSearchParams]);
 
   useEffect(() => {
-    if (!activeJobId) {
+    if (!writeFetcher.data?.jobId) {
       return;
     }
 
-    detailFetcher.load(`/app/preview?jobId=${encodeURIComponent(activeJobId)}`);
-    if (activePreview?.jobState === "completed" || activePreview?.jobState === "dead_letter") {
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("writeJobId", writeFetcher.data.jobId);
+    setSearchParams(nextParams, { replace: true });
+  }, [searchParams, setSearchParams, writeFetcher.data?.jobId]);
+
+  useEffect(() => {
+    if (!undoFetcher.data?.jobId) {
       return;
     }
 
-    const timer = setInterval(() => {
-      detailFetcher.load(`/app/preview?jobId=${encodeURIComponent(activeJobId)}`);
-    }, 1000);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("undoJobId", undoFetcher.data.jobId);
+    setSearchParams(nextParams, { replace: true });
+  }, [searchParams, setSearchParams, undoFetcher.data?.jobId]);
+
+  useEffect(() => {
+    if (!activePreviewJobId && !activeWriteJobId && !activeUndoJobId) {
+      return;
+    }
+
+    const params = new URLSearchParams();
+    if (activePreviewJobId) {
+      params.set("previewJobId", activePreviewJobId);
+    }
+    if (activeWriteJobId) {
+      params.set("writeJobId", activeWriteJobId);
+    }
+    if (activeUndoJobId) {
+      params.set("undoJobId", activeUndoJobId);
+    }
+
+    const load = () => detailFetcher.load(`/app/preview?${params.toString()}`);
+    load();
+
+    const isPreviewTerminal = !activePreview || activePreview.jobState === "completed" || activePreview.jobState === "dead_letter";
+    const isWriteTerminal = !activeWrite || activeWrite.jobState === "completed" || activeWrite.jobState === "dead_letter";
+    const isUndoTerminal = !activeUndo || activeUndo.jobState === "completed" || activeUndo.jobState === "dead_letter";
+
+    if (isPreviewTerminal && isWriteTerminal && isUndoTerminal) {
+      return;
+    }
+
+    const timer = setInterval(load, 1000);
 
     return () => clearInterval(timer);
-  }, [activeJobId, activePreview?.jobState]);
+  }, [
+    activePreview?.jobState,
+    activePreviewJobId,
+    activeUndo?.jobState,
+    activeUndoJobId,
+    activeWrite?.jobState,
+    activeWriteJobId,
+  ]);
 
   return (
     <div data-testid="preview-shell">
@@ -129,6 +225,63 @@ export default function PreviewRoute() {
           ) : (
             <s-paragraph>Submit source and edited CSV to generate a preview.</s-paragraph>
           )}
+        </s-section>
+        <s-section heading="Write">
+          <s-paragraph>Entitlement: {data.entitlementState}</s-paragraph>
+          <s-paragraph>Owner: {data.isAccountOwner ? "yes" : "no"}</s-paragraph>
+          <writeFetcher.Form action="/app/product-writes" method="post">
+            <input name="previewJobId" type="hidden" value={activePreviewJobId ?? ""} />
+            <button disabled={!canConfirm} type="submit">
+              {writeFetcher.state === "submitting" ? "Confirming..." : "Confirm and write"}
+            </button>
+          </writeFetcher.Form>
+          {!previewHasWritableRows && activePreview?.jobState === "completed" ? (
+            <s-paragraph>No writable rows in this preview.</s-paragraph>
+          ) : null}
+          {!data.isAccountOwner ? (
+            <s-paragraph>Only the shop owner can confirm writes.</s-paragraph>
+          ) : null}
+          {data.entitlementState !== "ACTIVE_PAID" ? (
+            <s-paragraph>ACTIVE_PAID entitlement is required for write and undo.</s-paragraph>
+          ) : null}
+          {latestWriteMatchesPreview ? (
+            <s-paragraph>This preview already has a verified successful write.</s-paragraph>
+          ) : null}
+          {writeFetcher.data?.error ? (
+            <s-paragraph>Write error: {writeFetcher.data.error}</s-paragraph>
+          ) : null}
+          <s-paragraph>State: {activeWrite?.jobState ?? writeFetcher.data?.state ?? "idle"}</s-paragraph>
+          {activeWrite?.outcome ? (
+            <s-paragraph>Outcome: {activeWrite.outcome}</s-paragraph>
+          ) : null}
+          {activeWrite?.lastError ? (
+            <s-paragraph>Last error: {activeWrite.lastError}</s-paragraph>
+          ) : null}
+        </s-section>
+        <s-section heading="Undo">
+          {latestWrite?.writeJobId ? (
+            <s-paragraph>
+              Latest rollbackable write: {latestWrite.writeJobId} ({latestWrite.outcome})
+            </s-paragraph>
+          ) : (
+            <s-paragraph>No rollbackable write yet.</s-paragraph>
+          )}
+          <undoFetcher.Form action="/app/product-undos" method="post">
+            <input name="writeJobId" type="hidden" value={latestWrite?.writeJobId ?? ""} />
+            <button disabled={!canUndo} type="submit">
+              {undoFetcher.state === "submitting" ? "Undoing..." : "Undo latest rollbackable write"}
+            </button>
+          </undoFetcher.Form>
+          {undoFetcher.data?.error ? (
+            <s-paragraph>Undo error: {undoFetcher.data.error}</s-paragraph>
+          ) : null}
+          <s-paragraph>State: {activeUndo?.jobState ?? undoFetcher.data?.state ?? "idle"}</s-paragraph>
+          {activeUndo?.outcome ? (
+            <s-paragraph>Outcome: {activeUndo.outcome}</s-paragraph>
+          ) : null}
+          {activeUndo?.lastError ? (
+            <s-paragraph>Last error: {activeUndo.lastError}</s-paragraph>
+          ) : null}
         </s-section>
         <s-section heading="Rows">
           {activePreview?.rows?.length ? (
