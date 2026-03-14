@@ -11,13 +11,23 @@ import {
   buildProductUpdateInputFromPreviewRow,
   getWritablePreviewRows,
 } from "../../domain/products/write-rows.mjs";
-import { runProductUndoJob } from "../../workers/product-undo.mjs";
-import { runProductWriteJob } from "../../workers/product-write.mjs";
 
 const rootDir = path.resolve(import.meta.dirname, "../..");
 
 function readProjectFile(relativePath) {
   return readFileSync(path.join(rootDir, relativePath), "utf8");
+}
+
+async function importProductWriteWorker() {
+  return import("../../workers/product-write.mjs");
+}
+
+async function importProductUndoWorker() {
+  return import("../../workers/product-undo.mjs");
+}
+
+async function importMissingOfflineSessionError() {
+  return import("../../workers/offline-admin.mjs");
 }
 
 test("writable preview rows are determined by changedFields", () => {
@@ -266,6 +276,7 @@ test("latest successful write lookup excludes writes already undone successfully
 });
 
 test("product write worker persists rollbackable result before rethrowing infrastructure failure", async () => {
+  const { runProductWriteJob } = await importProductWriteWorker();
   const puts = [];
   let readCount = 0;
   await assert.rejects(
@@ -431,6 +442,7 @@ test("product write worker persists rollbackable result before rethrowing infras
 });
 
 test("product write worker stores revalidation_failed result without snapshot or mutation", async () => {
+  const { runProductWriteJob } = await importProductWriteWorker();
   const puts = [];
   let updateCalls = 0;
   const result = await runProductWriteJob({
@@ -540,7 +552,79 @@ test("product write worker stores revalidation_failed result without snapshot or
   assert.match(String(puts[0].key), /result\.json$/);
 });
 
+test("product write worker preserves missing-offline-session code when deps are injected", async () => {
+  const { runProductWriteJob } = await importProductWriteWorker();
+  const { MissingOfflineSessionError } = await importMissingOfflineSessionError();
+  const puts = [];
+
+  await assert.rejects(
+    runProductWriteJob({
+      artifactCatalog: {
+        async record(args) {
+          return { id: `${args.kind}-record`, ...args };
+        },
+      },
+      artifactStorage: {
+        async get() {
+          return {
+            body: Buffer.from(JSON.stringify({
+              previewDigest: "preview-digest",
+              profile: "product-core-seo-v1",
+              rows: [],
+              summary: { error: 0, total: 0 },
+            })),
+          };
+        },
+        async put(args) {
+          puts.push(args);
+          return {
+            bucket: "bucket",
+            checksumSha256: "checksum",
+            contentType: args.contentType,
+            metadata: args.metadata,
+            objectKey: args.key,
+          };
+        },
+      },
+      job: {
+        id: "write-job-missing-session",
+        payload: {
+          previewArtifactId: "preview-artifact-1",
+          previewDigest: "preview-digest",
+          previewJobId: "preview-job-1",
+          profile: "product-core-seo-v1",
+        },
+        shopDomain: "example.myshopify.com",
+      },
+      prisma: {
+        artifact: {
+          async findFirst() {
+            return {
+              id: "preview-artifact-1",
+              kind: "product.preview.result",
+              objectKey: "preview/result.json",
+              shopDomain: "example.myshopify.com",
+            };
+          },
+        },
+      },
+      readLiveProducts: async () => new Map(),
+      resolveAdminContext: async () => {
+        throw new MissingOfflineSessionError("example.myshopify.com");
+      },
+      updateProduct: async () => ({ userErrors: [] }),
+    }),
+    (error) => error?.code === "missing-offline-session",
+  );
+
+  assert.equal(puts.length, 1);
+  assert.match(String(puts[0].key), /error\.json$/);
+  assert.equal(JSON.parse(String(puts[0].body)).code, "missing-offline-session");
+  assert.equal(puts[0].metadata.code, "missing-offline-session");
+});
+
 test("product undo worker stores conflict result without rollback mutation", async () => {
+  const { runProductUndoJob } = await importProductUndoWorker();
   const puts = [];
   let updateCalls = 0;
 
@@ -664,6 +748,81 @@ test("product undo worker stores conflict result without rollback mutation", asy
   assert.equal(updateCalls, 0);
   assert.equal(puts.length, 1);
   assert.match(String(puts[0].key), /undo-result\.json$/);
+});
+
+test("product undo worker preserves missing-offline-session code when deps are injected", async () => {
+  const { runProductUndoJob } = await importProductUndoWorker();
+  const { MissingOfflineSessionError } = await importMissingOfflineSessionError();
+  const puts = [];
+
+  await assert.rejects(
+    runProductUndoJob({
+      artifactCatalog: {
+        async record(args) {
+          return { id: `${args.kind}-record`, ...args };
+        },
+      },
+      artifactStorage: {
+        async get() {
+          return {
+            body: Buffer.from(JSON.stringify({
+              rows: [],
+            })),
+          };
+        },
+        async put(args) {
+          puts.push(args);
+          return {
+            bucket: "bucket",
+            checksumSha256: "checksum",
+            contentType: args.contentType,
+            metadata: args.metadata,
+            objectKey: args.key,
+          };
+        },
+      },
+      job: {
+        id: "undo-job-missing-session",
+        payload: {
+          profile: "product-core-seo-v1",
+          snapshotArtifactId: "snapshot-artifact-1",
+          writeArtifactId: "write-artifact-1",
+          writeJobId: "write-job-1",
+        },
+        shopDomain: "example.myshopify.com",
+      },
+      prisma: {
+        artifact: {
+          async findFirst(args) {
+            return args.where.kind === "product.write.result"
+              ? {
+                id: "write-artifact-1",
+                kind: "product.write.result",
+                objectKey: "write-result.json",
+                shopDomain: "example.myshopify.com",
+              }
+              : {
+                id: "snapshot-artifact-1",
+                kind: "product.write.snapshot",
+                objectKey: "snapshot.json",
+                shopDomain: "example.myshopify.com",
+              };
+          },
+        },
+      },
+      readLiveProducts: async () => new Map(),
+      resolveAdminContext: async () => {
+        throw new MissingOfflineSessionError("example.myshopify.com");
+      },
+      updateProduct: async () => ({ userErrors: [] }),
+    }),
+    (error) => error?.code === "missing-offline-session",
+  );
+
+  assert.equal(puts.length, 1);
+  assert.match(String(puts[0].key), /undo-error\.json$/);
+  assert.equal(JSON.parse(String(puts[0].body)).code, "missing-offline-session");
+  assert.equal(puts[0].metadata.code, "missing-offline-session");
 });
 
 test("preview page exposes write and undo controls", () => {

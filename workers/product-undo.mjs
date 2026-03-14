@@ -1,7 +1,3 @@
-import { createPrismaArtifactCatalog } from "../domain/artifacts/prisma-artifact-catalog.mjs";
-import { readProductsForPreview } from "../platform/shopify/product-preview.server.mjs";
-import { updateProductCoreFields } from "../platform/shopify/product-write.server.mjs";
-import { MissingOfflineSessionError, loadOfflineAdminContext } from "./offline-admin.mjs";
 import {
   buildProductWriteArtifactKey,
   PRODUCT_UNDO_ERROR_ARTIFACT_KIND,
@@ -99,6 +95,35 @@ async function persistJsonArtifact({
   }
 }
 
+function isMissingOfflineSessionError(error, MissingOfflineSessionError) {
+  return (MissingOfflineSessionError && error instanceof MissingOfflineSessionError)
+    || error?.name === "MissingOfflineSessionError"
+    || error?.code === "missing-offline-session"
+    || error?.message === "missing-offline-session";
+}
+
+async function loadDefaultDependencies() {
+  const [
+    { createPrismaArtifactCatalog },
+    { readProductsForPreview },
+    { updateProductCoreFields },
+    offlineAdminModule,
+  ] = await Promise.all([
+    import("../domain/artifacts/prisma-artifact-catalog.mjs"),
+    import("../platform/shopify/product-preview.server.mjs"),
+    import("../platform/shopify/product-write.server.mjs"),
+    import("./offline-admin.mjs"),
+  ]);
+
+  return {
+    createPrismaArtifactCatalog,
+    loadOfflineAdminContext: offlineAdminModule.loadOfflineAdminContext,
+    MissingOfflineSessionError: offlineAdminModule.MissingOfflineSessionError,
+    readProductsForPreview,
+    updateProductCoreFields,
+  };
+}
+
 export async function runProductUndoJob({
   artifactCatalog,
   artifactKeyPrefix = process.env.S3_ARTIFACT_PREFIX,
@@ -106,11 +131,17 @@ export async function runProductUndoJob({
   assertJobLeaseActive = () => {},
   job,
   prisma,
-  readLiveProducts = readProductsForPreview,
-  resolveAdminContext = loadOfflineAdminContext,
-  updateProduct = updateProductCoreFields,
+  readLiveProducts,
+  resolveAdminContext,
+  updateProduct,
 } = {}) {
-  const catalog = artifactCatalog ?? createPrismaArtifactCatalog(prisma);
+  const defaultDependencies = artifactCatalog && readLiveProducts && resolveAdminContext && updateProduct
+    ? null
+    : await loadDefaultDependencies();
+  const catalog = artifactCatalog ?? defaultDependencies.createPrismaArtifactCatalog(prisma);
+  const readProducts = readLiveProducts ?? defaultDependencies.readProductsForPreview;
+  const resolveAdmin = resolveAdminContext ?? defaultDependencies.loadOfflineAdminContext;
+  const updateProductCore = updateProduct ?? defaultDependencies.updateProductCoreFields;
   let errorArtifactDescriptor = null;
   let errorArtifactRecord = null;
 
@@ -145,12 +176,12 @@ export async function runProductUndoJob({
     const snapshotRows = snapshotPayload.rows ?? [];
     const productIds = snapshotRows.map((row) => row.productId);
 
-    const { admin } = await resolveAdminContext({
+    const { admin } = await resolveAdmin({
       prisma,
       shopDomain: job.shopDomain,
     });
     assertJobLeaseActive();
-    const currentRowsByProductId = await readLiveProducts(admin, productIds, {
+    const currentRowsByProductId = await readProducts(admin, productIds, {
       assertJobLeaseActive,
     });
 
@@ -224,7 +255,7 @@ export async function runProductUndoJob({
         continue;
       }
 
-      const response = await updateProduct(admin, mutation.input);
+      const response = await updateProductCore(admin, mutation.input);
       const rollbackFailed = Array.isArray(response.userErrors) && response.userErrors.length > 0;
       rollbackRows.push({
         changedFields: snapshotRow.changedFields,
@@ -240,7 +271,7 @@ export async function runProductUndoJob({
     }
 
     assertJobLeaseActive();
-    const finalRowsByProductId = await readLiveProducts(admin, productIds, {
+    const finalRowsByProductId = await readProducts(admin, productIds, {
       assertJobLeaseActive,
     });
     const verifiedRows = rollbackRows.map((row) => {
@@ -299,7 +330,7 @@ export async function runProductUndoJob({
     });
     return resultPayload;
   } catch (error) {
-    if (error instanceof MissingOfflineSessionError) {
+    if (isMissingOfflineSessionError(error, defaultDependencies?.MissingOfflineSessionError)) {
       error.code = "missing-offline-session";
     }
 
@@ -335,4 +366,3 @@ export async function runProductUndoJob({
     throw error;
   }
 }
-
