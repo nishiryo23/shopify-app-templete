@@ -1,5 +1,6 @@
 import {
   PRODUCT_INVENTORY_EXPORT_PROFILE,
+  PRODUCT_MEDIA_EXPORT_PROFILE,
   PRODUCT_VARIANT_PRICES_EXPORT_PROFILE,
   PRODUCT_VARIANTS_EXPORT_PROFILE,
 } from "../domain/products/export-profile.mjs";
@@ -15,6 +16,7 @@ import {
   getWritablePreviewRows,
 } from "../domain/products/write-rows.mjs";
 import { runInventoryProductWriteJob } from "./product-write-inventory.mjs";
+import { runMediaProductWriteJob } from "./product-write-media.mjs";
 import { runVariantPriceProductWriteJob } from "./product-write-variant-prices.mjs";
 import { runVariantProductWriteJob } from "./product-write-variants.mjs";
 
@@ -160,6 +162,18 @@ export async function runProductWriteJob({
   resolveAdminContext,
   updateProduct,
 } = {}) {
+  if (job?.payload?.profile === PRODUCT_MEDIA_EXPORT_PROFILE) {
+    return runMediaProductWriteJob({
+      artifactCatalog,
+      artifactKeyPrefix,
+      artifactStorage,
+      assertJobLeaseActive,
+      job,
+      prisma,
+      resolveAdminContext,
+    });
+  }
+
   if (job?.payload?.profile === PRODUCT_INVENTORY_EXPORT_PROFILE) {
     return runInventoryProductWriteJob({
       artifactCatalog,

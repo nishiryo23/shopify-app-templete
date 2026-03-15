@@ -2,6 +2,7 @@ import { createPrismaArtifactCatalog } from "../domain/artifacts/prisma-artifact
 import { buildPreviewDigest, buildPreviewRows, indexRowsByProductId, parseProductPreviewCsv } from "../domain/products/preview-csv.mjs";
 import {
   PRODUCT_INVENTORY_EXPORT_PROFILE,
+  PRODUCT_MEDIA_EXPORT_PROFILE,
   PRODUCT_VARIANT_PRICES_EXPORT_PROFILE,
   PRODUCT_VARIANTS_EXPORT_PROFILE,
 } from "../domain/products/export-profile.mjs";
@@ -23,10 +24,17 @@ import {
   indexVariantPriceRows,
   parseVariantPricePreviewCsv,
 } from "../domain/variant-prices/preview-csv.mjs";
+import {
+  buildMediaPreviewDigest,
+  buildMediaPreviewRows,
+  indexMediaRows,
+  parseMediaPreviewCsv,
+} from "../domain/media/preview-csv.mjs";
 import { readProductsForPreview } from "../platform/shopify/product-preview.server.mjs";
 import { buildVariantPreviewDigest, buildVariantPreviewRows, indexVariantRows, parseVariantPreviewCsv } from "../domain/variants/preview-csv.mjs";
 import { readVariantsForProducts } from "../platform/shopify/product-variants.server.mjs";
 import { readInventoryLevelsForProducts } from "../platform/shopify/product-inventory.server.mjs";
+import { readMediaForProducts } from "../platform/shopify/product-media.server.mjs";
 import { MissingOfflineSessionError, loadOfflineAdminContext } from "./offline-admin.mjs";
 
 async function deleteIfPresent(storage, descriptor) {
@@ -71,6 +79,7 @@ export async function runProductPreviewJob({
   readLiveProducts = readProductsForPreview,
   readLiveVariants = readVariantsForProducts,
   readLiveInventory = readInventoryLevelsForProducts,
+  readLiveMedia = readMediaForProducts,
   resolveAdminContext = loadOfflineAdminContext,
   signingKey = requireProvenanceSigningKey(),
 } = {}) {
@@ -129,6 +138,7 @@ export async function runProductPreviewJob({
     });
     let rows;
     let summary;
+    let mediaSetByProduct = null;
 
     assertJobLeaseActive();
     if (payload.profile === PRODUCT_INVENTORY_EXPORT_PROFILE) {
@@ -175,6 +185,35 @@ export async function runProductPreviewJob({
       });
       rows = preview.rows;
       summary = preview.summary;
+    } else if (payload.profile === PRODUCT_MEDIA_EXPORT_PROFILE) {
+      const baselineRows = parseMediaPreviewCsv(sourceCsvText);
+      const editedRows = parseMediaPreviewCsv(editedCsvText);
+      const { productIds } = indexMediaRows(editedRows);
+      const {
+        placeholderRowsByProductId: baselinePlaceholderRowsByProductId,
+        productIds: baselineProductIds,
+        rowsByKey: baselineRowsByKey,
+      } = indexMediaRows(baselineRows);
+      const {
+        mediaSetByProduct: currentMediaSetByProduct,
+        rowsByKey: currentRowsByKey,
+      } = await readLiveMedia(
+        admin,
+        [...new Set([...productIds, ...baselineProductIds])],
+        { assertJobLeaseActive },
+      );
+      const preview = buildMediaPreviewRows({
+        baselinePlaceholderRowsByProductId,
+        baselineProductIds,
+        baselineRowsByKey,
+        currentRowsByKey,
+        editedRows,
+      });
+      rows = preview.rows;
+      summary = preview.summary;
+      mediaSetByProduct = Object.fromEntries(
+        [...(currentMediaSetByProduct ?? new Map()).entries()].map(([productId, mediaSet]) => [productId, mediaSet]),
+      );
     } else if (payload.profile === PRODUCT_VARIANTS_EXPORT_PROFILE) {
       const baselineRows = parseVariantPreviewCsv(sourceCsvText);
       const editedRows = parseVariantPreviewCsv(editedCsvText);
@@ -234,6 +273,16 @@ export async function runProductPreviewJob({
         rows,
         summary,
       })
+      : payload.profile === PRODUCT_MEDIA_EXPORT_PROFILE
+      ? buildMediaPreviewDigest({
+        baselineDigest,
+        editedDigest,
+        exportJobId: payload.exportJobId,
+        mediaSetByProduct,
+        profile: payload.profile,
+        rows,
+        summary,
+      })
       : payload.profile === PRODUCT_VARIANT_PRICES_EXPORT_PROFILE
       ? buildVariantPricePreviewDigest({
         baselineDigest,
@@ -267,6 +316,7 @@ export async function runProductPreviewJob({
       editedUploadArtifactId: payload.editedUploadArtifactId,
       exportJobId: payload.exportJobId,
       manifestArtifactId: payload.manifestArtifactId,
+      ...(mediaSetByProduct ? { mediaSetByProduct } : {}),
       previewDigest,
       profile: payload.profile,
       rows,
