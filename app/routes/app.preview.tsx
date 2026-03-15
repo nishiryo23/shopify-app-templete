@@ -224,6 +224,7 @@ export default function PreviewRoute() {
                 <option value="product-inventory-v1">product-inventory-v1</option>
                 <option value="product-media-v1">product-media-v1</option>
                 <option value="product-metafields-v1">product-metafields-v1</option>
+                <option value="product-manual-collections-v1">product-manual-collections-v1</option>
               </select>
             </label>
             <exportFetcher.Form action="/app/product-exports" method="post">

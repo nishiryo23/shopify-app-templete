@@ -2,6 +2,7 @@ import { createPrismaArtifactCatalog } from "../domain/artifacts/prisma-artifact
 import { buildPreviewDigest, buildPreviewRows, indexRowsByProductId, parseProductPreviewCsv } from "../domain/products/preview-csv.mjs";
 import {
   PRODUCT_INVENTORY_EXPORT_PROFILE,
+  PRODUCT_MANUAL_COLLECTIONS_EXPORT_PROFILE,
   PRODUCT_METAFIELDS_EXPORT_PROFILE,
   PRODUCT_MEDIA_EXPORT_PROFILE,
   PRODUCT_VARIANT_PRICES_EXPORT_PROFILE,
@@ -37,12 +38,23 @@ import {
   indexMetafieldRows,
   parseMetafieldPreviewCsv,
 } from "../domain/metafields/preview-csv.mjs";
+import {
+  buildCollectionPreviewDigest,
+  buildCollectionPreviewRows,
+  indexCollectionRows,
+  parseCollectionPreviewCsv,
+} from "../domain/collections/preview-csv.mjs";
 import { readProductsForPreview } from "../platform/shopify/product-preview.server.mjs";
 import { buildVariantPreviewDigest, buildVariantPreviewRows, indexVariantRows, parseVariantPreviewCsv } from "../domain/variants/preview-csv.mjs";
 import { readVariantsForProducts } from "../platform/shopify/product-variants.server.mjs";
 import { readInventoryLevelsForProducts } from "../platform/shopify/product-inventory.server.mjs";
 import { readMediaForProducts } from "../platform/shopify/product-media.server.mjs";
 import { readMetafieldsForProducts } from "../platform/shopify/product-metafields.server.mjs";
+import {
+  readCollectionsForProducts,
+  resolveCollectionsByHandle,
+  resolveCollectionsById,
+} from "../platform/shopify/product-collections.server.mjs";
 import { MissingOfflineSessionError, loadOfflineAdminContext } from "./offline-admin.mjs";
 
 async function deleteIfPresent(storage, descriptor) {
@@ -89,6 +101,9 @@ export async function runProductPreviewJob({
   readLiveInventory = readInventoryLevelsForProducts,
   readLiveMedia = readMediaForProducts,
   readLiveMetafields = readMetafieldsForProducts,
+  readLiveCollections = readCollectionsForProducts,
+  resolveCollectionHandles = resolveCollectionsByHandle,
+  resolveCollectionIds = resolveCollectionsById,
   resolveAdminContext = loadOfflineAdminContext,
   signingKey = requireProvenanceSigningKey(),
 } = {}) {
@@ -148,6 +163,7 @@ export async function runProductPreviewJob({
     let rows;
     let summary;
     let mediaSetByProduct = null;
+    let resolvedCollectionIdsByHandle = null;
 
     assertJobLeaseActive();
     if (payload.profile === PRODUCT_INVENTORY_EXPORT_PROFILE) {
@@ -220,6 +236,41 @@ export async function runProductPreviewJob({
       });
       rows = preview.rows;
       summary = preview.summary;
+    } else if (payload.profile === PRODUCT_MANUAL_COLLECTIONS_EXPORT_PROFILE) {
+      const baselineRows = parseCollectionPreviewCsv(sourceCsvText);
+      const editedRows = parseCollectionPreviewCsv(editedCsvText);
+      const baselineIndex = indexCollectionRows(baselineRows);
+      const editedIndex = indexCollectionRows(editedRows);
+      const productIds = [...new Set([...baselineIndex.productIds, ...editedIndex.productIds])];
+      const collectionIds = [...new Set([...baselineIndex.collectionIds, ...editedIndex.collectionIds])];
+      const collectionHandles = [...new Set([...baselineIndex.collectionHandles, ...editedIndex.collectionHandles])];
+      const [
+        {
+          currentRowsByKey,
+          existingProductIds,
+          productRowsById,
+        },
+        resolvedCollectionsByHandle,
+        resolvedCollectionsById,
+      ] = await Promise.all([
+        readLiveCollections(admin, productIds, { assertJobLeaseActive }),
+        resolveCollectionHandles(admin, collectionHandles, { assertJobLeaseActive }),
+        resolveCollectionIds(admin, collectionIds, { assertJobLeaseActive }),
+      ]);
+      const preview = buildCollectionPreviewRows({
+        baselineRows,
+        currentRowsByKey,
+        editedRows,
+        existingProductIds,
+        productRowsById,
+        resolvedCollectionsByHandle,
+        resolvedCollectionsById,
+      });
+      rows = preview.rows;
+      summary = preview.summary;
+      resolvedCollectionIdsByHandle = Object.fromEntries(
+        [...resolvedCollectionsByHandle.entries()].map(([handle, collection]) => [handle, collection.id]),
+      );
     } else if (payload.profile === PRODUCT_MEDIA_EXPORT_PROFILE) {
       const baselineRows = parseMediaPreviewCsv(sourceCsvText);
       const editedRows = parseMediaPreviewCsv(editedCsvText);
@@ -317,6 +368,16 @@ export async function runProductPreviewJob({
         rows,
         summary,
       })
+      : payload.profile === PRODUCT_MANUAL_COLLECTIONS_EXPORT_PROFILE
+      ? buildCollectionPreviewDigest({
+        baselineDigest,
+        editedDigest,
+        exportJobId: payload.exportJobId,
+        profile: payload.profile,
+        resolvedCollectionIdsByHandle,
+        rows,
+        summary,
+      })
       : payload.profile === PRODUCT_MEDIA_EXPORT_PROFILE
       ? buildMediaPreviewDigest({
         baselineDigest,
@@ -361,6 +422,7 @@ export async function runProductPreviewJob({
       exportJobId: payload.exportJobId,
       manifestArtifactId: payload.manifestArtifactId,
       ...(mediaSetByProduct ? { mediaSetByProduct } : {}),
+      ...(resolvedCollectionIdsByHandle ? { resolvedCollectionIdsByHandle } : {}),
       previewDigest,
       profile: payload.profile,
       rows,

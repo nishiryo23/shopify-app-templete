@@ -180,12 +180,15 @@ Shopify は embedded apps に session tokens を必須とし、managed install +
 
 ### Write strategy
 - membership add: `collectionAddProductsV2`
+- membership remove: `collectionRemoveProducts`
 - manual collection create/update: `collectionCreate` / collection update系 mutation
 - published state は collection create 後に別 publish operation が必要
 
 ### Notes
 - `collectionAddProductsV2` は async Job を返す
+- `collectionRemoveProducts` も async Job を返す
 - membership result は post-verification read で判定する
+- export/read は product ごとの collections connection を cursor pagination で最後まで取得し、manual collections のみ row 化する
 - app 自身は collection workflow も single-writer に乗せる
 
 ## 4.7 Redirects

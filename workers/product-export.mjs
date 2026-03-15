@@ -9,6 +9,7 @@ import {
   PRODUCT_EXPORT_FORMAT,
   PRODUCT_EXPORT_MANIFEST_ARTIFACT_KIND,
   PRODUCT_INVENTORY_EXPORT_PROFILE,
+  PRODUCT_MANUAL_COLLECTIONS_EXPORT_PROFILE,
   PRODUCT_METAFIELDS_EXPORT_PROFILE,
   PRODUCT_MEDIA_EXPORT_PROFILE,
   PRODUCT_EXPORT_SOURCE_ARTIFACT_KIND,
@@ -25,7 +26,9 @@ import { createVariantPriceExportCsvBuilder } from "../domain/variant-prices/exp
 import { createInventoryExportCsvBuilder } from "../domain/inventory/export-csv.mjs";
 import { createMediaExportCsvBuilder } from "../domain/media/export-csv.mjs";
 import { createMetafieldExportCsvBuilder } from "../domain/metafields/export-csv.mjs";
+import { createCollectionExportCsvBuilder } from "../domain/collections/export-csv.mjs";
 import { readProductMetafieldPagesForExport } from "../platform/shopify/product-metafields.server.mjs";
+import { readProductCollectionPagesForExport } from "../platform/shopify/product-collections.server.mjs";
 import { MissingOfflineSessionError, loadOfflineAdminContext } from "./offline-admin.mjs";
 
 async function deleteIfPresent(storage, descriptor) {
@@ -56,6 +59,7 @@ export async function runProductExportJob({
   readInventoryPages = readProductInventoryPagesForExport,
   readMediaPages = readProductMediaPagesForExport,
   readMetafieldPages = readProductMetafieldPagesForExport,
+  readCollectionPages = readProductCollectionPagesForExport,
   resolveAdminContext = loadOfflineAdminContext,
   signingKey = requireProvenanceSigningKey(),
 } = {}) {
@@ -83,8 +87,10 @@ export async function runProductExportJob({
           ? createInventoryExportCsvBuilder({ signingKey })
           : profile === PRODUCT_METAFIELDS_EXPORT_PROFILE
             ? createMetafieldExportCsvBuilder({ signingKey })
-          : profile === PRODUCT_MEDIA_EXPORT_PROFILE
-            ? createMediaExportCsvBuilder({ signingKey })
+            : profile === PRODUCT_MANUAL_COLLECTIONS_EXPORT_PROFILE
+              ? createCollectionExportCsvBuilder({ signingKey })
+            : profile === PRODUCT_MEDIA_EXPORT_PROFILE
+              ? createMediaExportCsvBuilder({ signingKey })
           : createProductExportCsvBuilder({ signingKey });
     const tempCsvFile = await open(tempCsvPath, "w");
 
@@ -95,8 +101,10 @@ export async function runProductExportJob({
           ? readInventoryPages(admin, { assertJobLeaseActive })
           : profile === PRODUCT_METAFIELDS_EXPORT_PROFILE
             ? readMetafieldPages(admin, { assertJobLeaseActive })
-          : profile === PRODUCT_MEDIA_EXPORT_PROFILE
-            ? readMediaPages(admin, { assertJobLeaseActive })
+            : profile === PRODUCT_MANUAL_COLLECTIONS_EXPORT_PROFILE
+              ? readCollectionPages(admin, { assertJobLeaseActive })
+            : profile === PRODUCT_MEDIA_EXPORT_PROFILE
+              ? readMediaPages(admin, { assertJobLeaseActive })
           : readProductPages(admin, { assertJobLeaseActive });
       for await (const rows of pageIterator) {
         assertJobLeaseActive();
@@ -107,6 +115,8 @@ export async function runProductExportJob({
             : profile === PRODUCT_INVENTORY_EXPORT_PROFILE
               ? csvBuilder.appendVariants(rows)
               : profile === PRODUCT_METAFIELDS_EXPORT_PROFILE
+                ? csvBuilder.appendProducts(rows)
+              : profile === PRODUCT_MANUAL_COLLECTIONS_EXPORT_PROFILE
                 ? csvBuilder.appendProducts(rows)
               : profile === PRODUCT_MEDIA_EXPORT_PROFILE
                 ? csvBuilder.appendProducts(rows)

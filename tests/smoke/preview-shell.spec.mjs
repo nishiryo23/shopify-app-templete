@@ -17,5 +17,6 @@ test.describe("preview shell smoke", () => {
       expectedPathname: "/app/preview",
       shellTestId: "preview-shell",
     });
+    await page.getByRole("option", { name: "product-manual-collections-v1" }).waitFor();
   });
 });
