@@ -110,7 +110,7 @@ Connector parity は v1.1 以降で段階追加する。
 
 ### Included but intentionally constrained
 - Redirects は **product handle change に付随する redirect 生成**を launch 対象に含める
-- Inventory は **absolute set** を第一実装とし、adjust / scheduled inventory は v1.1 以降
+- Inventory は **active inventory level に対する available quantity の absolute set** を第一実装とし、tracked/untracked 切り替え・location activation・adjust / scheduled inventory は v1.1 以降
 - Media は **URL import と staged upload を前提**とし、Shopify Files 全体の DAM にはしない
 - Collections は **product merchandising に必要な範囲**を優先し、Smart Collection rule の full editor は v1.1 以降評価
 

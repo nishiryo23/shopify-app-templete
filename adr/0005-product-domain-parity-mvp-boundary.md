@@ -11,7 +11,7 @@ launch GA は Product Domain Parity MVP とする。
 - Products
 - Variants
 - Prices / compare-at
-- Inventory
+- Inventory（launch v1 は active inventory level に対する available quantity absolute set のみ）
 - Media
 - Product Metafields
 - SEO

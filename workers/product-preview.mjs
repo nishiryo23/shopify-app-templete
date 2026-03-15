@@ -1,6 +1,7 @@
 import { createPrismaArtifactCatalog } from "../domain/artifacts/prisma-artifact-catalog.mjs";
 import { buildPreviewDigest, buildPreviewRows, indexRowsByProductId, parseProductPreviewCsv } from "../domain/products/preview-csv.mjs";
 import {
+  PRODUCT_INVENTORY_EXPORT_PROFILE,
   PRODUCT_VARIANT_PRICES_EXPORT_PROFILE,
   PRODUCT_VARIANTS_EXPORT_PROFILE,
 } from "../domain/products/export-profile.mjs";
@@ -11,6 +12,12 @@ import {
 import { verifyCsvManifest } from "../domain/provenance/csv-manifest.mjs";
 import { requireProvenanceSigningKey, sha256Hex } from "../domain/provenance/signing.mjs";
 import {
+  buildInventoryPreviewDigest,
+  buildInventoryPreviewRows,
+  indexInventoryRows,
+  parseInventoryPreviewCsv,
+} from "../domain/inventory/preview-csv.mjs";
+import {
   buildVariantPricePreviewDigest,
   buildVariantPricePreviewRows,
   indexVariantPriceRows,
@@ -19,6 +26,7 @@ import {
 import { readProductsForPreview } from "../platform/shopify/product-preview.server.mjs";
 import { buildVariantPreviewDigest, buildVariantPreviewRows, indexVariantRows, parseVariantPreviewCsv } from "../domain/variants/preview-csv.mjs";
 import { readVariantsForProducts } from "../platform/shopify/product-variants.server.mjs";
+import { readInventoryLevelsForProducts } from "../platform/shopify/product-inventory.server.mjs";
 import { MissingOfflineSessionError, loadOfflineAdminContext } from "./offline-admin.mjs";
 
 async function deleteIfPresent(storage, descriptor) {
@@ -62,6 +70,7 @@ export async function runProductPreviewJob({
   prisma,
   readLiveProducts = readProductsForPreview,
   readLiveVariants = readVariantsForProducts,
+  readLiveInventory = readInventoryLevelsForProducts,
   resolveAdminContext = loadOfflineAdminContext,
   signingKey = requireProvenanceSigningKey(),
 } = {}) {
@@ -122,7 +131,29 @@ export async function runProductPreviewJob({
     let summary;
 
     assertJobLeaseActive();
-    if (payload.profile === PRODUCT_VARIANT_PRICES_EXPORT_PROFILE) {
+    if (payload.profile === PRODUCT_INVENTORY_EXPORT_PROFILE) {
+      const baselineRows = parseInventoryPreviewCsv(sourceCsvText);
+      const editedRows = parseInventoryPreviewCsv(editedCsvText);
+      const { productIds } = indexInventoryRows(editedRows);
+      const {
+        productIds: baselineProductIds,
+        rowsByKey: baselineRowsByKey,
+      } = indexInventoryRows(baselineRows);
+      const {
+        rowsByKey: currentRowsByKey,
+      } = await readLiveInventory(
+        admin,
+        [...new Set([...productIds, ...baselineProductIds])],
+        { assertJobLeaseActive },
+      );
+      const preview = buildInventoryPreviewRows({
+        baselineRowsByKey,
+        currentRowsByKey,
+        editedRows,
+      });
+      rows = preview.rows;
+      summary = preview.summary;
+    } else if (payload.profile === PRODUCT_VARIANT_PRICES_EXPORT_PROFILE) {
       const baselineRows = parseVariantPricePreviewCsv(sourceCsvText);
       const editedRows = parseVariantPricePreviewCsv(editedCsvText);
       const { productIds } = indexVariantPriceRows(editedRows);
@@ -194,7 +225,16 @@ export async function runProductPreviewJob({
 
     const baselineDigest = sha256Hex(sourceCsvText);
     const editedDigest = sha256Hex(editedCsvText);
-    const previewDigest = payload.profile === PRODUCT_VARIANT_PRICES_EXPORT_PROFILE
+    const previewDigest = payload.profile === PRODUCT_INVENTORY_EXPORT_PROFILE
+      ? buildInventoryPreviewDigest({
+        baselineDigest,
+        editedDigest,
+        exportJobId: payload.exportJobId,
+        profile: payload.profile,
+        rows,
+        summary,
+      })
+      : payload.profile === PRODUCT_VARIANT_PRICES_EXPORT_PROFILE
       ? buildVariantPricePreviewDigest({
         baselineDigest,
         editedDigest,

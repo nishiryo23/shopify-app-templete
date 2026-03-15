@@ -486,10 +486,6 @@ async function loadUndoJobDetail({ jobId, shopDomain }: { jobId: string; shopDom
 }
 
 async function loadLatestSuccessfulWrite(shopDomain: string, profile: string) {
-  if (profile !== PRODUCT_CORE_SEO_EXPORT_PROFILE) {
-    return null;
-  }
-
   const artifact = await findLatestSuccessfulProductWriteArtifact({
     prisma,
     profile,

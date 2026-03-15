@@ -120,8 +120,7 @@ Shopify は embedded apps に session tokens を必須とし、managed install +
 ## 4.3 Inventory
 ### Scope
 - export current inventory by location
-- absolute set
-- inventory tracked / not tracked の管理
+- active inventory level に対する `available` quantity の absolute set
 - compare-and-set aware UI（launch では backend 強制、UI は簡易でも可）
 
 ### Write strategy
@@ -129,10 +128,13 @@ Shopify は embedded apps に session tokens を必須とし、managed install +
 - `read_inventory` / `write_inventory` を要求
 - `changeFromQuantity` を使った compare-and-set を標準動作とする
 - stale quantity の row は conflict 扱い
+- mutation は `@idempotent` を付け、`reason` は `correction`、`referenceDocumentUri` は preview job を指す app 固有 URI に固定する
 
 ### Notes
 - inventory は product core / variants と別 mutation 系統
+- launch v1 は baseline export に存在する active inventory level のみ更新対象とし、新規 location activation と tracked/untracked 切り替えは later
 - inventory adjustments より absolute set を先に実装
+- inventory rows は `variant_id + location_id` を identity とし、write は 250 rows 以下の chunk 単位で送る
 - scheduled inventory は later
 
 ## 4.4 Media

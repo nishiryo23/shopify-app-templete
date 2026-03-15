@@ -8,6 +8,7 @@ import {
   PRODUCT_CORE_SEO_EXPORT_PROFILE,
   PRODUCT_EXPORT_FORMAT,
   PRODUCT_EXPORT_MANIFEST_ARTIFACT_KIND,
+  PRODUCT_INVENTORY_EXPORT_PROFILE,
   PRODUCT_EXPORT_SOURCE_ARTIFACT_KIND,
   PRODUCT_VARIANT_PRICES_EXPORT_PROFILE,
   PRODUCT_VARIANTS_EXPORT_PROFILE,
@@ -15,8 +16,10 @@ import {
 import { requireProvenanceSigningKey } from "../domain/provenance/signing.mjs";
 import { readProductPagesForExport } from "../platform/shopify/product-export.server.mjs";
 import { readProductVariantPagesForExport } from "../platform/shopify/product-variants.server.mjs";
+import { readProductInventoryPagesForExport } from "../platform/shopify/product-inventory.server.mjs";
 import { createVariantExportCsvBuilder } from "../domain/variants/export-csv.mjs";
 import { createVariantPriceExportCsvBuilder } from "../domain/variant-prices/export-csv.mjs";
+import { createInventoryExportCsvBuilder } from "../domain/inventory/export-csv.mjs";
 import { MissingOfflineSessionError, loadOfflineAdminContext } from "./offline-admin.mjs";
 
 async function deleteIfPresent(storage, descriptor) {
@@ -44,6 +47,7 @@ export async function runProductExportJob({
   prisma,
   readProductPages = readProductPagesForExport,
   readVariantPages = readProductVariantPagesForExport,
+  readInventoryPages = readProductInventoryPagesForExport,
   resolveAdminContext = loadOfflineAdminContext,
   signingKey = requireProvenanceSigningKey(),
 } = {}) {
@@ -67,12 +71,16 @@ export async function runProductExportJob({
       ? createVariantExportCsvBuilder({ signingKey })
       : profile === PRODUCT_VARIANT_PRICES_EXPORT_PROFILE
         ? createVariantPriceExportCsvBuilder({ signingKey })
+        : profile === PRODUCT_INVENTORY_EXPORT_PROFILE
+          ? createInventoryExportCsvBuilder({ signingKey })
         : createProductExportCsvBuilder({ signingKey });
     const tempCsvFile = await open(tempCsvPath, "w");
 
     try {
       const pageIterator = profile === PRODUCT_VARIANTS_EXPORT_PROFILE || profile === PRODUCT_VARIANT_PRICES_EXPORT_PROFILE
         ? readVariantPages(admin, { assertJobLeaseActive })
+        : profile === PRODUCT_INVENTORY_EXPORT_PROFILE
+          ? readInventoryPages(admin, { assertJobLeaseActive })
         : readProductPages(admin, { assertJobLeaseActive });
       for await (const rows of pageIterator) {
         assertJobLeaseActive();
@@ -80,6 +88,8 @@ export async function runProductExportJob({
           ? csvBuilder.appendVariants(rows)
           : profile === PRODUCT_VARIANT_PRICES_EXPORT_PROFILE
             ? csvBuilder.appendVariants(rows)
+            : profile === PRODUCT_INVENTORY_EXPORT_PROFILE
+              ? csvBuilder.appendVariants(rows)
           : csvBuilder.appendProducts(rows);
         if (csvChunk.length > 0) {
           await tempCsvFile.writeFile(csvChunk);

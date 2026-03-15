@@ -28,6 +28,10 @@ async function importVariantProductWriteWorker() {
   return import("../../workers/product-write-variants.mjs");
 }
 
+async function importInventoryProductWriteWorker() {
+  return import("../../workers/product-write-inventory.mjs");
+}
+
 async function importProductUndoWorker() {
   return import("../../workers/product-undo.mjs");
 }
@@ -764,6 +768,201 @@ test("variant write worker stores revalidation_failed result when create rows no
   assert.equal(createCalls, 0);
   assert.equal(puts.length, 1);
   assert.match(String(puts[0].key), /result\.json$/);
+});
+
+test("inventory write worker stores revalidation_failed result when preview has no writable rows", async () => {
+  const { runInventoryProductWriteJob } = await importInventoryProductWriteWorker();
+  const puts = [];
+  let readLiveCalls = 0;
+  let updateCalls = 0;
+
+  const result = await runInventoryProductWriteJob({
+    artifactCatalog: {
+      async record(args) {
+        return { id: `${args.kind}-record`, ...args };
+      },
+    },
+    artifactStorage: {
+      async get() {
+        return {
+          body: Buffer.from(JSON.stringify({
+            previewDigest: "preview-digest",
+            previewJobId: "preview-job-inventory-1",
+            profile: "product-inventory-v1",
+            rows: [{
+              changedFields: ["available"],
+              classification: "warning",
+              currentRow: {
+                available: "9",
+                inventory_item_id: "gid://shopify/InventoryItem/1",
+                location_id: "gid://shopify/Location/1",
+                product_id: "gid://shopify/Product/1",
+              },
+              editedRow: {
+                available: "12",
+              },
+              editedRowNumber: 2,
+              locationId: "gid://shopify/Location/1",
+              messages: ["Live Shopify inventory level changed after the selected export baseline"],
+              operation: "update",
+              productId: "gid://shopify/Product/1",
+              variantId: "gid://shopify/ProductVariant/1",
+            }],
+            summary: { changed: 0, error: 0, total: 1, unchanged: 0, warning: 1 },
+          })),
+        };
+      },
+      async put(args) {
+        puts.push(args);
+        return {
+          bucket: "bucket",
+          checksumSha256: "checksum",
+          contentType: args.contentType,
+          metadata: args.metadata,
+          objectKey: args.key,
+        };
+      },
+    },
+    job: {
+      id: "inventory-write-job-1",
+      payload: {
+        previewArtifactId: "preview-artifact-1",
+        previewDigest: "preview-digest",
+        previewJobId: "preview-job-inventory-1",
+        profile: "product-inventory-v1",
+      },
+      shopDomain: "example.myshopify.com",
+    },
+    prisma: {
+      artifact: {
+        async findFirst() {
+          return {
+            id: "preview-artifact-1",
+            kind: "product.preview.result",
+            objectKey: "preview/result.json",
+            shopDomain: "example.myshopify.com",
+          };
+        },
+      },
+    },
+    readLiveInventory: async () => {
+      readLiveCalls += 1;
+      return { rowsByKey: new Map() };
+    },
+    resolveAdminContext: async () => ({ admin: {} }),
+    setInventoryQuantities: async () => {
+      updateCalls += 1;
+      return { userErrors: [] };
+    },
+  });
+
+  assert.equal(result.outcome, "revalidation_failed");
+  assert.deepEqual(result.rows, []);
+  assert.equal(result.summary.total, 0);
+  assert.equal(readLiveCalls, 0);
+  assert.equal(updateCalls, 0);
+  assert.equal(puts.length, 1);
+  assert.match(String(puts[0].key), /result\.json$/);
+});
+
+test("inventory write worker stores snapshotArtifactId in result artifact metadata", async () => {
+  const { runInventoryProductWriteJob } = await importInventoryProductWriteWorker();
+  const puts = [];
+  let liveReadCount = 0;
+
+  const result = await runInventoryProductWriteJob({
+    artifactCatalog: {
+      async record(args) {
+        if (args.kind === "product.write.snapshot") {
+          return { id: "snapshot-artifact-1", ...args };
+        }
+        return { id: `${args.kind}-record`, ...args };
+      },
+    },
+    artifactStorage: {
+      async get() {
+        return {
+          body: Buffer.from(JSON.stringify({
+            previewDigest: "preview-digest",
+            previewJobId: "preview-job-inventory-2",
+            profile: "product-inventory-v1",
+            rows: [{
+              changedFields: ["available"],
+              classification: "changed",
+              currentRow: {
+                available: "10",
+                inventory_item_id: "gid://shopify/InventoryItem/1",
+                location_id: "gid://shopify/Location/1",
+                product_id: "gid://shopify/Product/1",
+              },
+              editedRow: {
+                available: "12",
+              },
+              editedRowNumber: 2,
+              locationId: "gid://shopify/Location/1",
+              messages: [],
+              operation: "update",
+              productId: "gid://shopify/Product/1",
+              variantId: "gid://shopify/ProductVariant/1",
+            }],
+            summary: { changed: 1, error: 0, total: 1, unchanged: 0, warning: 0 },
+          })),
+        };
+      },
+      async put(args) {
+        puts.push(args);
+        return {
+          bucket: "bucket",
+          checksumSha256: "checksum",
+          contentType: args.contentType,
+          metadata: args.metadata,
+          objectKey: args.key,
+        };
+      },
+    },
+    job: {
+      id: "inventory-write-job-2",
+      payload: {
+        previewArtifactId: "preview-artifact-2",
+        previewDigest: "preview-digest",
+        previewJobId: "preview-job-inventory-2",
+        profile: "product-inventory-v1",
+      },
+      shopDomain: "example.myshopify.com",
+    },
+    prisma: {
+      artifact: {
+        async findFirst() {
+          return {
+            id: "preview-artifact-2",
+            kind: "product.preview.result",
+            objectKey: "preview/result.json",
+            shopDomain: "example.myshopify.com",
+          };
+        },
+      },
+    },
+    readLiveInventory: async () => {
+      liveReadCount += 1;
+      return {
+        rowsByKey: new Map([
+          ["gid://shopify/ProductVariant/1\u001egid://shopify/Location/1", {
+            available: liveReadCount === 1 ? "10" : "12",
+            inventory_item_id: "gid://shopify/InventoryItem/1",
+            location_id: "gid://shopify/Location/1",
+            product_id: "gid://shopify/Product/1",
+          }],
+        ]),
+      };
+    },
+    resolveAdminContext: async () => ({ admin: {} }),
+    setInventoryQuantities: async () => ({ userErrors: [] }),
+  });
+
+  assert.equal(result.outcome, "verified_success");
+  const resultPut = puts.find((entry) => String(entry.key).endsWith("result.json"));
+  assert.ok(resultPut);
+  assert.equal(resultPut.metadata.snapshotArtifactId, "snapshot-artifact-1");
 });
 
 test("product write worker dispatches variant price profile and verifies compare-at clears", async () => {
