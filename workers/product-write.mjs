@@ -1,5 +1,6 @@
 import {
   PRODUCT_INVENTORY_EXPORT_PROFILE,
+  PRODUCT_METAFIELDS_EXPORT_PROFILE,
   PRODUCT_MEDIA_EXPORT_PROFILE,
   PRODUCT_VARIANT_PRICES_EXPORT_PROFILE,
   PRODUCT_VARIANTS_EXPORT_PROFILE,
@@ -16,6 +17,7 @@ import {
   getWritablePreviewRows,
 } from "../domain/products/write-rows.mjs";
 import { runInventoryProductWriteJob } from "./product-write-inventory.mjs";
+import { runMetafieldProductWriteJob } from "./product-write-metafields.mjs";
 import { runMediaProductWriteJob } from "./product-write-media.mjs";
 import { runVariantPriceProductWriteJob } from "./product-write-variant-prices.mjs";
 import { runVariantProductWriteJob } from "./product-write-variants.mjs";
@@ -158,8 +160,10 @@ export async function runProductWriteJob({
   assertJobLeaseActive = () => {},
   job,
   prisma,
+  readLiveMetafields,
   readLiveProducts,
   resolveAdminContext,
+  setMetafields,
   updateProduct,
 } = {}) {
   if (job?.payload?.profile === PRODUCT_MEDIA_EXPORT_PROFILE) {
@@ -171,6 +175,20 @@ export async function runProductWriteJob({
       job,
       prisma,
       resolveAdminContext,
+    });
+  }
+
+  if (job?.payload?.profile === PRODUCT_METAFIELDS_EXPORT_PROFILE) {
+    return runMetafieldProductWriteJob({
+      artifactCatalog,
+      artifactKeyPrefix,
+      artifactStorage,
+      assertJobLeaseActive,
+      job,
+      prisma,
+      readLiveMetafields,
+      resolveAdminContext,
+      setMetafields,
     });
   }
 

@@ -2,6 +2,7 @@ import { createPrismaArtifactCatalog } from "../domain/artifacts/prisma-artifact
 import { buildPreviewDigest, buildPreviewRows, indexRowsByProductId, parseProductPreviewCsv } from "../domain/products/preview-csv.mjs";
 import {
   PRODUCT_INVENTORY_EXPORT_PROFILE,
+  PRODUCT_METAFIELDS_EXPORT_PROFILE,
   PRODUCT_MEDIA_EXPORT_PROFILE,
   PRODUCT_VARIANT_PRICES_EXPORT_PROFILE,
   PRODUCT_VARIANTS_EXPORT_PROFILE,
@@ -30,11 +31,18 @@ import {
   indexMediaRows,
   parseMediaPreviewCsv,
 } from "../domain/media/preview-csv.mjs";
+import {
+  buildMetafieldPreviewDigest,
+  buildMetafieldPreviewRows,
+  indexMetafieldRows,
+  parseMetafieldPreviewCsv,
+} from "../domain/metafields/preview-csv.mjs";
 import { readProductsForPreview } from "../platform/shopify/product-preview.server.mjs";
 import { buildVariantPreviewDigest, buildVariantPreviewRows, indexVariantRows, parseVariantPreviewCsv } from "../domain/variants/preview-csv.mjs";
 import { readVariantsForProducts } from "../platform/shopify/product-variants.server.mjs";
 import { readInventoryLevelsForProducts } from "../platform/shopify/product-inventory.server.mjs";
 import { readMediaForProducts } from "../platform/shopify/product-media.server.mjs";
+import { readMetafieldsForProducts } from "../platform/shopify/product-metafields.server.mjs";
 import { MissingOfflineSessionError, loadOfflineAdminContext } from "./offline-admin.mjs";
 
 async function deleteIfPresent(storage, descriptor) {
@@ -80,6 +88,7 @@ export async function runProductPreviewJob({
   readLiveVariants = readVariantsForProducts,
   readLiveInventory = readInventoryLevelsForProducts,
   readLiveMedia = readMediaForProducts,
+  readLiveMetafields = readMetafieldsForProducts,
   resolveAdminContext = loadOfflineAdminContext,
   signingKey = requireProvenanceSigningKey(),
 } = {}) {
@@ -185,6 +194,32 @@ export async function runProductPreviewJob({
       });
       rows = preview.rows;
       summary = preview.summary;
+    } else if (payload.profile === PRODUCT_METAFIELDS_EXPORT_PROFILE) {
+      const baselineRows = parseMetafieldPreviewCsv(sourceCsvText);
+      const editedRows = parseMetafieldPreviewCsv(editedCsvText);
+      const { productIds } = indexMetafieldRows(editedRows);
+      const {
+        productIds: baselineProductIds,
+        rowsByKey: baselineRowsByKey,
+      } = indexMetafieldRows(baselineRows);
+      const {
+        existingProductIds,
+        productRowsById,
+        rowsByKey: currentRowsByKey,
+      } = await readLiveMetafields(
+        admin,
+        [...new Set([...productIds, ...baselineProductIds])],
+        { assertJobLeaseActive },
+      );
+      const preview = buildMetafieldPreviewRows({
+        baselineRowsByKey,
+        currentRowsByKey,
+        editedRows,
+        existingProductIds,
+        productRowsById,
+      });
+      rows = preview.rows;
+      summary = preview.summary;
     } else if (payload.profile === PRODUCT_MEDIA_EXPORT_PROFILE) {
       const baselineRows = parseMediaPreviewCsv(sourceCsvText);
       const editedRows = parseMediaPreviewCsv(editedCsvText);
@@ -266,6 +301,15 @@ export async function runProductPreviewJob({
     const editedDigest = sha256Hex(editedCsvText);
     const previewDigest = payload.profile === PRODUCT_INVENTORY_EXPORT_PROFILE
       ? buildInventoryPreviewDigest({
+        baselineDigest,
+        editedDigest,
+        exportJobId: payload.exportJobId,
+        profile: payload.profile,
+        rows,
+        summary,
+      })
+      : payload.profile === PRODUCT_METAFIELDS_EXPORT_PROFILE
+      ? buildMetafieldPreviewDigest({
         baselineDigest,
         editedDigest,
         exportJobId: payload.exportJobId,

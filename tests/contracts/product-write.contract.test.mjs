@@ -3576,6 +3576,293 @@ test("product write worker preserves missing-offline-session code when deps are 
   assert.equal(puts[0].metadata.code, "missing-offline-session");
 });
 
+test("product write worker uses metafield-specific dependencies without reusing product-core DI", async () => {
+  const { runProductWriteJob } = await importProductWriteWorker();
+  const puts = [];
+  let metafieldReadCount = 0;
+  let metafieldWriteCount = 0;
+
+  const result = await runProductWriteJob({
+    artifactCatalog: {
+      async record(args) {
+        return { id: `${args.kind}-record`, ...args };
+      },
+    },
+    artifactStorage: {
+      async get() {
+        return {
+          body: Buffer.from(JSON.stringify({
+            previewDigest: "preview-digest-metafield",
+            profile: "product-metafields-v1",
+            rows: [{
+              changedFields: ["value"],
+              classification: "changed",
+              currentRow: {
+                key: "rank",
+                namespace: "custom",
+                product_handle: "hat",
+                product_id: "gid://shopify/Product/1",
+                type: "number_integer",
+                updated_at: "2026-03-15T00:00:00Z",
+                value: "1",
+              },
+              editedRow: {
+                key: "rank",
+                namespace: "custom",
+                product_handle: "hat",
+                product_id: "gid://shopify/Product/1",
+                type: "number_integer",
+                updated_at: "2026-03-15T00:00:00Z",
+                value: "9007199254740993",
+              },
+              editedRowNumber: 2,
+              key: "rank",
+              namespace: "custom",
+              operation: "update",
+              productId: "gid://shopify/Product/1",
+              type: "number_integer",
+            }],
+            summary: { changed: 1, error: 0, total: 1, unchanged: 0, warning: 0 },
+          })),
+        };
+      },
+      async put(args) {
+        puts.push(args);
+        return {
+          bucket: "bucket",
+          checksumSha256: "checksum",
+          contentType: args.contentType,
+          metadata: args.metadata,
+          objectKey: args.key,
+        };
+      },
+    },
+    job: {
+      id: "write-job-metafield-1",
+      payload: {
+        previewArtifactId: "preview-artifact-metafield-1",
+        previewDigest: "preview-digest-metafield",
+        previewJobId: "preview-job-metafield-1",
+        profile: "product-metafields-v1",
+      },
+      shopDomain: "example.myshopify.com",
+    },
+    prisma: {
+      artifact: {
+        async findFirst() {
+          return {
+            id: "preview-artifact-metafield-1",
+            kind: "product.preview.result",
+            objectKey: "preview/result-metafield.json",
+            shopDomain: "example.myshopify.com",
+          };
+        },
+      },
+    },
+    readLiveMetafields: async () => {
+      metafieldReadCount += 1;
+      const value = metafieldReadCount === 1 ? "1" : "9007199254740993";
+      return {
+        rowsByKey: new Map([
+          ["gid://shopify/Product/1\u001ecustom\u001erank", {
+            key: "rank",
+            namespace: "custom",
+            product_handle: "hat",
+            product_id: "gid://shopify/Product/1",
+            type: "number_integer",
+            updated_at: "2026-03-15T00:00:00Z",
+            value,
+          }],
+        ]),
+      };
+    },
+    readLiveProducts: async () => {
+      throw new Error("product-core readLiveProducts should not be used for metafield writes");
+    },
+    resolveAdminContext: async () => ({ admin: {} }),
+    setMetafields: async (_admin, input) => {
+      metafieldWriteCount += 1;
+      assert.equal(input.metafields[0].value, "9007199254740993");
+      return { userErrors: [] };
+    },
+    updateProduct: async () => {
+      throw new Error("product-core updateProduct should not be used for metafield writes");
+    },
+  });
+
+  assert.equal(result.outcome, "verified_success");
+  assert.equal(result.rows[0].verificationStatus, "verified");
+  assert.equal(metafieldReadCount, 2);
+  assert.equal(metafieldWriteCount, 1);
+  assert.equal(puts.length, 2);
+  const resultPut = puts.find((entry) => String(entry.key).endsWith("result.json"));
+  assert.ok(resultPut);
+  assert.ok(!("snapshotArtifactId" in resultPut.metadata));
+});
+
+test("latest rollbackable write lookup excludes metafield writes without rollback metadata", async () => {
+  const artifact = await findLatestSuccessfulProductWriteArtifact({
+    prisma: {
+      artifact: {
+        async findMany(args) {
+          if (args.skip > 0) {
+            return [];
+          }
+
+          if (args.where.kind === "product.undo.result") {
+            return [];
+          }
+
+          return [{
+            id: "artifact-metafield-success",
+            jobId: "job-metafield-success",
+            metadata: {
+              outcome: "verified_success",
+              profile: "product-metafields-v1",
+            },
+          }];
+        },
+      },
+    },
+    profile: "product-metafields-v1",
+    shopDomain: "example.myshopify.com",
+  });
+
+  assert.equal(artifact, null);
+});
+
+test("metafield write worker persists partial result before rethrowing infrastructure failure", async () => {
+  const { runProductWriteJob } = await importProductWriteWorker();
+  const puts = [];
+  let metafieldCallCount = 0;
+  let liveReadCount = 0;
+
+  await assert.rejects(
+    runProductWriteJob({
+      artifactCatalog: {
+        async record(args) {
+          if (args.kind === "product.write.snapshot") {
+            return { id: "snapshot-artifact-metafield-2", ...args };
+          }
+          return { id: `${args.kind}-record`, ...args };
+        },
+      },
+      artifactStorage: {
+        async get() {
+          return {
+            body: Buffer.from(JSON.stringify({
+              previewDigest: "preview-digest-metafield-2",
+              profile: "product-metafields-v1",
+              rows: Array.from({ length: 26 }, (_value, index) => ({
+                changedFields: ["value"],
+                classification: "changed",
+                currentRow: {
+                  key: `rank-${index + 1}`,
+                  namespace: "custom",
+                  product_handle: "hat",
+                  product_id: "gid://shopify/Product/1",
+                  type: "number_integer",
+                  updated_at: "2026-03-15T00:00:00Z",
+                  value: String(index + 1),
+                },
+                editedRow: {
+                  key: `rank-${index + 1}`,
+                  namespace: "custom",
+                  product_handle: "hat",
+                  product_id: "gid://shopify/Product/1",
+                  type: "number_integer",
+                  updated_at: "2026-03-15T00:00:00Z",
+                  value: String(index + 101),
+                },
+                editedRowNumber: index + 2,
+                key: `rank-${index + 1}`,
+                namespace: "custom",
+                operation: "update",
+                productId: "gid://shopify/Product/1",
+                type: "number_integer",
+              })),
+              summary: { changed: 26, error: 0, total: 26, unchanged: 0, warning: 0 },
+            })),
+          };
+        },
+        async put(args) {
+          puts.push(args);
+          return {
+            bucket: "bucket",
+            checksumSha256: "checksum",
+            contentType: args.contentType,
+            metadata: args.metadata,
+            objectKey: args.key,
+          };
+        },
+      },
+      job: {
+        id: "write-job-metafield-2",
+        payload: {
+          previewArtifactId: "preview-artifact-metafield-2",
+          previewDigest: "preview-digest-metafield-2",
+          previewJobId: "preview-job-metafield-2",
+          profile: "product-metafields-v1",
+        },
+        shopDomain: "example.myshopify.com",
+      },
+      prisma: {
+        artifact: {
+          async findFirst() {
+            return {
+              id: "preview-artifact-metafield-2",
+              kind: "product.preview.result",
+              objectKey: "preview/result-metafield-2.json",
+              shopDomain: "example.myshopify.com",
+            };
+          },
+        },
+      },
+      readLiveMetafields: async () => {
+        liveReadCount += 1;
+        return {
+          rowsByKey: new Map(
+            Array.from({ length: 26 }, (_value, index) => [
+              `gid://shopify/Product/1\u001ecustom\u001erank-${index + 1}`,
+              {
+                key: `rank-${index + 1}`,
+                namespace: "custom",
+                product_handle: "hat",
+                product_id: "gid://shopify/Product/1",
+                type: "number_integer",
+                updated_at: "2026-03-15T00:00:00Z",
+                value: String(liveReadCount === 1
+                  ? index + 1
+                  : (index < 25 ? index + 101 : index + 1)),
+              },
+            ]),
+          ),
+        };
+      },
+      resolveAdminContext: async () => ({ admin: {} }),
+      setMetafields: async () => {
+        metafieldCallCount += 1;
+        if (metafieldCallCount === 2) {
+          throw new Error("metafieldsSet transport failed");
+        }
+        return { userErrors: [] };
+      },
+    }),
+    /metafieldsSet transport failed/,
+  );
+
+  assert.equal(puts.length, 3);
+  const resultPut = puts.find((entry) => String(entry.key).endsWith("result.json"));
+  const errorPut = puts.find((entry) => String(entry.key).endsWith("error.json"));
+  assert.ok(resultPut);
+  assert.ok(errorPut);
+  assert.equal(metafieldCallCount, 2);
+  assert.equal(liveReadCount, 2);
+  assert.equal(JSON.parse(String(resultPut.body)).outcome, "partial_failure");
+  assert.equal(resultPut.metadata.outcome, "partial_failure");
+  assert.equal(JSON.parse(String(errorPut.body)).resultOutcome, "partial_failure");
+});
+
 test("product undo worker stores conflict result without rollback mutation", async () => {
   const { runProductUndoJob } = await importProductUndoWorker();
   const puts = [];

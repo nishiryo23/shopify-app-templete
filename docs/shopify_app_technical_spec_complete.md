@@ -159,6 +159,8 @@ Shopify は embedded apps に session tokens を必須とし、managed install +
 - product metafields export/import
 - namespace/key/type/value 管理
 - supported types の subset から開始
+- launch v1 の supported type は `single_line_text_field`、`multi_line_text_field`、`boolean`、`number_integer`、`number_decimal`
+- delete / clear semantics は launch v1 では扱わない
 
 ### Write strategy
 - `metafieldsSet`
@@ -167,6 +169,8 @@ Shopify は embedded apps に session tokens を必須とし、managed install +
 ### Notes
 - metafield definitions の新規作成 UI は phase 1.1 以降
 - launch v1 は既存 definitions と明示 type 指定を優先
+- export/read は product metafields connection を cursor pagination で最後まで取得する
+- unsupported type は CSV へ出力せず、warning metadata で可視化する
 
 ## 4.6 Collections
 ### Scope

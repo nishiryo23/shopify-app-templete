@@ -5,6 +5,7 @@ export const PRODUCT_VARIANTS_EXPORT_PROFILE = "product-variants-v1";
 export const PRODUCT_VARIANT_PRICES_EXPORT_PROFILE = "product-variants-prices-v1";
 export const PRODUCT_INVENTORY_EXPORT_PROFILE = "product-inventory-v1";
 export const PRODUCT_MEDIA_EXPORT_PROFILE = "product-media-v1";
+export const PRODUCT_METAFIELDS_EXPORT_PROFILE = "product-metafields-v1";
 export const PRODUCT_EXPORT_SOURCE_ARTIFACT_KIND = "product.export.source";
 export const PRODUCT_EXPORT_MANIFEST_ARTIFACT_KIND = "product.export.manifest";
 
@@ -83,15 +84,30 @@ export const PRODUCT_MEDIA_EXPORT_HEADERS = Object.freeze([
   "updated_at",
 ]);
 
+export const PRODUCT_METAFIELDS_EXPORT_HEADERS = Object.freeze([
+  "product_id",
+  "product_handle",
+  "namespace",
+  "key",
+  "type",
+  "value",
+  "updated_at",
+]);
+
 export const PRODUCT_EXPORT_PROFILES = Object.freeze([
   PRODUCT_CORE_SEO_EXPORT_PROFILE,
   PRODUCT_VARIANTS_EXPORT_PROFILE,
   PRODUCT_VARIANT_PRICES_EXPORT_PROFILE,
   PRODUCT_INVENTORY_EXPORT_PROFILE,
   PRODUCT_MEDIA_EXPORT_PROFILE,
+  PRODUCT_METAFIELDS_EXPORT_PROFILE,
 ]);
 
 export function resolveProductExportProfile(value) {
+  if (value === PRODUCT_METAFIELDS_EXPORT_PROFILE) {
+    return PRODUCT_METAFIELDS_EXPORT_PROFILE;
+  }
+
   if (value === PRODUCT_MEDIA_EXPORT_PROFILE) {
     return PRODUCT_MEDIA_EXPORT_PROFILE;
   }

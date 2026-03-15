@@ -9,6 +9,7 @@ import {
   PRODUCT_EXPORT_FORMAT,
   PRODUCT_EXPORT_MANIFEST_ARTIFACT_KIND,
   PRODUCT_INVENTORY_EXPORT_PROFILE,
+  PRODUCT_METAFIELDS_EXPORT_PROFILE,
   PRODUCT_MEDIA_EXPORT_PROFILE,
   PRODUCT_EXPORT_SOURCE_ARTIFACT_KIND,
   PRODUCT_VARIANT_PRICES_EXPORT_PROFILE,
@@ -23,6 +24,8 @@ import { createVariantExportCsvBuilder } from "../domain/variants/export-csv.mjs
 import { createVariantPriceExportCsvBuilder } from "../domain/variant-prices/export-csv.mjs";
 import { createInventoryExportCsvBuilder } from "../domain/inventory/export-csv.mjs";
 import { createMediaExportCsvBuilder } from "../domain/media/export-csv.mjs";
+import { createMetafieldExportCsvBuilder } from "../domain/metafields/export-csv.mjs";
+import { readProductMetafieldPagesForExport } from "../platform/shopify/product-metafields.server.mjs";
 import { MissingOfflineSessionError, loadOfflineAdminContext } from "./offline-admin.mjs";
 
 async function deleteIfPresent(storage, descriptor) {
@@ -52,6 +55,7 @@ export async function runProductExportJob({
   readVariantPages = readProductVariantPagesForExport,
   readInventoryPages = readProductInventoryPagesForExport,
   readMediaPages = readProductMediaPagesForExport,
+  readMetafieldPages = readProductMetafieldPagesForExport,
   resolveAdminContext = loadOfflineAdminContext,
   signingKey = requireProvenanceSigningKey(),
 } = {}) {
@@ -77,6 +81,8 @@ export async function runProductExportJob({
         ? createVariantPriceExportCsvBuilder({ signingKey })
         : profile === PRODUCT_INVENTORY_EXPORT_PROFILE
           ? createInventoryExportCsvBuilder({ signingKey })
+          : profile === PRODUCT_METAFIELDS_EXPORT_PROFILE
+            ? createMetafieldExportCsvBuilder({ signingKey })
           : profile === PRODUCT_MEDIA_EXPORT_PROFILE
             ? createMediaExportCsvBuilder({ signingKey })
           : createProductExportCsvBuilder({ signingKey });
@@ -87,6 +93,8 @@ export async function runProductExportJob({
         ? readVariantPages(admin, { assertJobLeaseActive })
         : profile === PRODUCT_INVENTORY_EXPORT_PROFILE
           ? readInventoryPages(admin, { assertJobLeaseActive })
+          : profile === PRODUCT_METAFIELDS_EXPORT_PROFILE
+            ? readMetafieldPages(admin, { assertJobLeaseActive })
           : profile === PRODUCT_MEDIA_EXPORT_PROFILE
             ? readMediaPages(admin, { assertJobLeaseActive })
           : readProductPages(admin, { assertJobLeaseActive });
@@ -98,6 +106,8 @@ export async function runProductExportJob({
             ? csvBuilder.appendVariants(rows)
             : profile === PRODUCT_INVENTORY_EXPORT_PROFILE
               ? csvBuilder.appendVariants(rows)
+              : profile === PRODUCT_METAFIELDS_EXPORT_PROFILE
+                ? csvBuilder.appendProducts(rows)
               : profile === PRODUCT_MEDIA_EXPORT_PROFILE
                 ? csvBuilder.appendProducts(rows)
             : csvBuilder.appendProducts(rows);
@@ -109,7 +119,8 @@ export async function runProductExportJob({
       await tempCsvFile.close();
     }
 
-    const { manifest, rowCount } = csvBuilder.finalize();
+    const finalized = csvBuilder.finalize();
+    const { manifest, metadata: finalizeMetadata = {}, rowCount } = finalized;
 
     const metadata = {
       fileDigest: manifest.fileDigest,
@@ -117,6 +128,7 @@ export async function runProductExportJob({
       jobId: job.id,
       profile,
       rowCount,
+      ...finalizeMetadata,
     };
 
     assertJobLeaseActive();
