@@ -25,3 +25,4 @@ launch GA は Product Domain Parity MVP とする。
 
 ## Consequences
 Product domain で業務完結性を持たせつつ、protected customer data を避けられる。
+CSV/XLSX は launch scope に含むが、launch v1 の worksheet contract は canonical header/order の単一 worksheet に限定し、Google Sheets や Matrixify full compatibility には広げない。

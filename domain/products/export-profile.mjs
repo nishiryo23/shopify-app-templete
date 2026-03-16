@@ -1,5 +1,10 @@
 export const PRODUCT_EXPORT_KIND = "product.export";
 export const PRODUCT_EXPORT_FORMAT = "csv";
+export const PRODUCT_EXPORT_XLSX_FORMAT = "xlsx";
+export const PRODUCT_EXPORT_FORMATS = Object.freeze([
+  PRODUCT_EXPORT_FORMAT,
+  PRODUCT_EXPORT_XLSX_FORMAT,
+]);
 export const PRODUCT_CORE_SEO_EXPORT_PROFILE = "product-core-seo-v1";
 export const PRODUCT_VARIANTS_EXPORT_PROFILE = "product-variants-v1";
 export const PRODUCT_VARIANT_PRICES_EXPORT_PROFILE = "product-variants-prices-v1";
@@ -141,6 +146,14 @@ export function resolveProductExportProfile(value) {
   }
 
   return PRODUCT_CORE_SEO_EXPORT_PROFILE;
+}
+
+export function resolveProductExportFormat(value) {
+  if (value === PRODUCT_EXPORT_XLSX_FORMAT) {
+    return PRODUCT_EXPORT_XLSX_FORMAT;
+  }
+
+  return PRODUCT_EXPORT_FORMAT;
 }
 
 export function buildProductExportDedupeKey({

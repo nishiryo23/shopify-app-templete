@@ -12,7 +12,7 @@ preview は未課金でも許可される一方、write/undo は Shopify 上の 
 ## Decision
 - write request は `POST /app/product-writes`、undo request は `POST /app/product-undos` で受ける。
 - write/undo route は `authenticateAndBootstrapShop(request)` を通し、`session.accountOwner === true` と current entitlement `ACTIVE_PAID` を必須にする。
-- write の入力正本は same-shop の completed `product.preview` job と non-deleted `product.preview.result` artifact に固定する。
+- write の入力正本は same-shop の completed `product.preview` job と non-deleted `product.preview.result` artifact に固定する。preview result payload に `format` が追加されても、write/undo が参照する正本は `rows`, `summary`, `baselineDigest`, `editedDigest`, `previewDigest` の canonical row semantics のままとする。
 - write route の writable 判定は `row.changedFields.length > 0` を正本にし、warning/unchanged だけの preview は reject する。
 - repeated confirm の deny は `previewJobId` 単位に固定し、same preview job に対する latest `verified_success` write が存在する場合は再 confirm を reject する。`previewDigest` 単位の cross-job dedupe は行わない。
 - write worker は preview artifact の `currentRow` を frozen baseline として再検証し、一致しない row が 1 件でもあれば mutation を行わず `revalidation_failed` result を保存する。
@@ -27,6 +27,7 @@ preview は未課金でも許可される一方、write/undo は Shopify 上の 
 - owner/billing gate を route で fail-fast できる。
 - latest rollbackable write only の undo truth が `Artifact.metadata.outcome` / `snapshotArtifactId` と `createdAt` で一意に決まる。
 - write と undo は merchant が実際に編集した fields だけを mutation/verification/rollback 対象にし、stale unrelated field を上書きしない。
+- CSV/XLSX のどちらから preview が生成されても、write/undo contract は preview artifact の canonical rows にのみ依存するため、format によって mutation semantics は変わらない。
 - same preview job の再 confirm が history と undo 対象を汚さない。
 
 ## Alternatives considered

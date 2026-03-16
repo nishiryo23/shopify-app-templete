@@ -16,6 +16,12 @@ import {
   PRODUCT_VARIANT_PRICES_EXPORT_PROFILE,
   PRODUCT_VARIANTS_EXPORT_PROFILE,
 } from "../domain/products/export-profile.mjs";
+import {
+  buildProductSourceFileFromCanonicalCsvPath,
+  buildProductSourceBufferFromCanonicalCsv,
+  getProductSpreadsheetContentType,
+  getProductSpreadsheetFileName,
+} from "../domain/products/spreadsheet-format.mjs";
 import { requireProvenanceSigningKey } from "../domain/provenance/signing.mjs";
 import { readProductPagesForExport } from "../platform/shopify/product-export.server.mjs";
 import { readProductVariantPagesForExport } from "../platform/shopify/product-variants.server.mjs";
@@ -142,29 +148,50 @@ export async function runProductExportJob({
     };
 
     assertJobLeaseActive();
-    sourceDescriptor = await (artifactStorage.putFile
-      ? artifactStorage.putFile({
-        contentType: "text/csv; charset=utf-8",
+    const sourceKey = buildProductExportArtifactKey({
+      fileName: getProductSpreadsheetFileName({ format, kind: "source" }),
+      jobId: job.id,
+      prefix: artifactKeyPrefix,
+      shopDomain: job.shopDomain,
+    });
+
+    if (format === PRODUCT_EXPORT_FORMAT && artifactStorage.putFile) {
+      sourceDescriptor = await artifactStorage.putFile({
+        contentType: getProductSpreadsheetContentType(format),
         filePath: tempCsvPath,
-        key: buildProductExportArtifactKey({
-          fileName: "source.csv",
-          jobId: job.id,
-          prefix: artifactKeyPrefix,
-          shopDomain: job.shopDomain,
-        }),
+        key: sourceKey,
         metadata,
-      })
-      : artifactStorage.put({
-        body: await readFile(tempCsvPath),
-        contentType: "text/csv; charset=utf-8",
-        key: buildProductExportArtifactKey({
-          fileName: "source.csv",
-          jobId: job.id,
-          prefix: artifactKeyPrefix,
-          shopDomain: job.shopDomain,
-        }),
+      });
+    } else if (format !== PRODUCT_EXPORT_FORMAT && artifactStorage.putFile) {
+      const tempSourcePath = path.join(tempDirPath, getProductSpreadsheetFileName({ format, kind: "source" }));
+      await buildProductSourceFileFromCanonicalCsvPath({
+        csvPath: tempCsvPath,
+        format,
+        outputPath: tempSourcePath,
+        profile,
+      });
+
+      sourceDescriptor = await artifactStorage.putFile({
+        contentType: getProductSpreadsheetContentType(format),
+        filePath: tempSourcePath,
+        key: sourceKey,
         metadata,
-      }));
+      });
+    } else {
+      const canonicalCsvText = await readFile(tempCsvPath, "utf8");
+      const sourceBody = await buildProductSourceBufferFromCanonicalCsv({
+        canonicalCsvText,
+        format,
+        profile,
+      });
+
+      sourceDescriptor = await artifactStorage.put({
+        body: sourceBody,
+        contentType: getProductSpreadsheetContentType(format),
+        key: sourceKey,
+        metadata,
+      });
+    }
 
     assertJobLeaseActive();
     manifestDescriptor = await artifactStorage.put({

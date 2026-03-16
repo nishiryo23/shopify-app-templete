@@ -10,6 +10,7 @@ type PreviewLoaderData = {
   entitlementState: string;
   exports: Array<{
     createdAt: string;
+    format: string;
     id: string;
     profile: string;
   }>;
@@ -21,6 +22,7 @@ type PreviewLoaderData = {
     writeJobId: string | null;
   };
   preview: null | {
+    format?: string;
     jobState: string;
     lastError: string | null;
     rows: Array<{
@@ -54,6 +56,7 @@ export default function PreviewRoute() {
   const data = useLoaderData<typeof loader>() as PreviewLoaderData;
   const exportFetcher = useFetcher<{
     error?: string;
+    format?: string;
     jobId: string;
     profile: string;
     state: string;
@@ -61,6 +64,7 @@ export default function PreviewRoute() {
   const createFetcher = useFetcher<{
     error?: string;
     exportJobId: string;
+    format?: string;
     jobId: string;
     profile: string;
     state: string;
@@ -87,6 +91,7 @@ export default function PreviewRoute() {
       : null;
   const loadedExports = selectedLoaderData?.exports ?? [];
   const [selectedExportJobId, setSelectedExportJobId] = useState(loadedExports[0]?.id ?? "");
+  const [selectedExportFormat, setSelectedExportFormat] = useState("csv");
   const latestWrite = selectedLoaderData?.latestWrite ?? null;
   const activePreview = selectedLoaderData?.preview ?? null;
   const activeWrite = selectedLoaderData?.write ?? null;
@@ -98,6 +103,11 @@ export default function PreviewRoute() {
   const activeWriteJobId = writeFetcher.data?.jobId ?? searchParams.get("writeJobId");
   const activeUndoJobId = undoFetcher.data?.jobId ?? searchParams.get("undoJobId");
   const previewHasWritableRows = Boolean(activePreview?.rows?.some((row) => row.changedFields.length > 0));
+  const selectedExport = loadedExports.find((job) => job.id === selectedExportJobId) ?? null;
+  const selectedBaselineFormat = selectedExport?.format ?? createFetcher.data?.format ?? "csv";
+  const uploadAccept = selectedBaselineFormat === "xlsx"
+    ? ".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    : ".csv,text/csv";
   const latestWriteMatchesPreview = Boolean(
     latestWrite?.outcome === "verified_success"
       && latestWrite.previewJobId
@@ -228,19 +238,27 @@ export default function PreviewRoute() {
               </select>
             </label>
             <exportFetcher.Form action="/app/product-exports" method="post">
+              <label>
+                <span>Format</span>
+                <select onChange={(event) => setSelectedExportFormat(event.currentTarget.value)} value={selectedExportFormat}>
+                  <option value="csv">csv</option>
+                  <option value="xlsx">xlsx</option>
+                </select>
+              </label>
+              <input name="format" type="hidden" value={selectedExportFormat} />
               <input name="profile" type="hidden" value={selectedProfile} />
               <button type="submit">
                 {exportFetcher.state === "submitting" ? "Exporting..." : "Create export"}
               </button>
             </exportFetcher.Form>
             {exportFetcher.data?.jobId ? (
-              <s-paragraph>Export job: {exportFetcher.data.jobId}</s-paragraph>
+              <s-paragraph>Export job: {exportFetcher.data.jobId} ({exportFetcher.data.format ?? selectedExportFormat})</s-paragraph>
             ) : null}
           </div>
         </s-section>
-        <s-section heading="Upload source and edited CSV">
+        <s-section heading="Upload source and edited file">
           <s-paragraph>
-            source CSV は未編集の export 原本のみ有効です。選択した export と完全一致しない場合は provenance verify に失敗します。
+            source file は選択した export と同じ format の原本のみ有効です。baseline は canonical rows で provenance verify されます。
           </s-paragraph>
           <createFetcher.Form action="/app/product-previews" encType="multipart/form-data" method="post">
             <div style={{ display: "grid", gap: "0.75rem", maxWidth: "42rem" }}>
@@ -253,19 +271,19 @@ export default function PreviewRoute() {
                 >
                   {loadedExports.map((job) => (
                     <option key={job.id} value={job.id}>
-                      {job.id} ({job.createdAt})
+                      {job.id} ({job.createdAt}, {job.format})
                     </option>
                   ))}
                 </select>
               </label>
               <input name="profile" type="hidden" value={selectedProfile} />
               <label>
-                <span>Source CSV</span>
-                <input name="sourceFile" required type="file" accept=".csv,text/csv" />
+                <span>Source {selectedBaselineFormat.toUpperCase()}</span>
+                <input name="sourceFile" required type="file" accept={uploadAccept} />
               </label>
               <label>
-                <span>Edited CSV</span>
-                <input name="editedFile" required type="file" accept=".csv,text/csv" />
+                <span>Edited {selectedBaselineFormat.toUpperCase()}</span>
+                <input name="editedFile" required type="file" accept={uploadAccept} />
               </label>
               <button type="submit">
                 {createFetcher.state === "submitting" ? "Uploading..." : "Create preview"}
@@ -295,7 +313,7 @@ export default function PreviewRoute() {
               <s-paragraph>Error: {activePreview.summary.error}</s-paragraph>
             </div>
           ) : (
-            <s-paragraph>Submit source and edited CSV to generate a preview.</s-paragraph>
+            <s-paragraph>Submit source and edited files to generate a preview.</s-paragraph>
           )}
         </s-section>
         <s-section heading="Write">

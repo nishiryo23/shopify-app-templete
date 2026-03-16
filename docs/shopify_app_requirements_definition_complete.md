@@ -221,7 +221,7 @@ Shopify Partner / 制作会社の運用担当
 ### Product Domain Parity フロー
 1. merchant が対象 products を export
 2. CSV / XLSX を編集
-3. upload 後に app が file provenance を確認
+3. upload 後に app が canonical rows ベースで file provenance を確認
 4. preview / diff / validation を生成
 5. merchant が preview を確認
 6. owner が confirm
@@ -234,6 +234,7 @@ Shopify Partner / 制作会社の運用担当
 ### merchant の意思決定に効く点
 - 実行前に go/no-go 判断
 - 実行後に再投入か手修正か判断
+- XLSX でも worksheet contract が固定され、format 差分ではなく row 差分だけを見て判断できる
 - 失敗時に rollback か部分修正か判断
 
 ---

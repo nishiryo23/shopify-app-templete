@@ -10,6 +10,7 @@ import { createPrismaArtifactCatalog } from "~/domain/artifacts/prisma-artifact-
 import { createPrismaJobQueue } from "~/domain/jobs/prisma-job-queue.mjs";
 import {
   PRODUCT_CORE_SEO_EXPORT_PROFILE,
+  PRODUCT_EXPORT_FORMAT,
   resolveProductExportProfile,
 } from "~/domain/products/export-profile.mjs";
 import { enqueueOrFindActiveProductPreviewJob } from "~/domain/products/preview-jobs.mjs";
@@ -20,6 +21,12 @@ import {
   PRODUCT_PREVIEW_KIND,
   PRODUCT_PREVIEW_RESULT_ARTIFACT_KIND,
 } from "~/domain/products/preview-profile.mjs";
+import {
+  assertProductSpreadsheetFileName,
+  canonicalizeProductSpreadsheet,
+  getProductSpreadsheetContentType,
+  getProductSpreadsheetFileName,
+} from "~/domain/products/spreadsheet-format.mjs";
 import {
   findLatestSuccessfulProductWriteArtifact,
 } from "~/domain/products/write-jobs.mjs";
@@ -122,6 +129,7 @@ async function loadCompletedExportBaseline({
   }
 
   return {
+    format: (job.payload as { format?: string } | null)?.format ?? PRODUCT_EXPORT_FORMAT,
     job,
     manifestArtifact,
     profile: (job.payload as { profile?: string } | null)?.profile ?? PRODUCT_CORE_SEO_EXPORT_PROFILE,
@@ -153,7 +161,7 @@ export async function createProductPreview({ request }: ActionFunctionArgs) {
   }
 
   try {
-    const [{ body: sourceBody }, { body: editedBody }] = await Promise.all([
+    const [{ body: sourceBody, name: sourceName }, { body: editedBody, name: editedName }] = await Promise.all([
       readFileText(formData.get("sourceFile") as File | null),
       readFileText(formData.get("editedFile") as File | null),
     ]);
@@ -173,16 +181,30 @@ export async function createProductPreview({ request }: ActionFunctionArgs) {
       throw new Error("selected export baseline body could not be read");
     }
 
-    if (sha256Hex(sourceBody) !== baseline.sourceArtifact.checksumSha256) {
-      throw new Error("source CSV does not match the selected export baseline");
-    }
+    assertProductSpreadsheetFileName({
+      fileName: sourceName,
+      format: baseline.format,
+      role: "source",
+    });
+    assertProductSpreadsheetFileName({
+      fileName: editedName,
+      format: baseline.format,
+      role: "edited",
+    });
 
-    if (!sourceBody.equals(storedSourceBody)) {
-      throw new Error("source CSV must be the original exported file without edits");
-    }
+    const sourceCanonical = await canonicalizeProductSpreadsheet({
+      body: sourceBody,
+      format: baseline.format,
+      profile: baseline.profile,
+    });
+    const editedCanonical = await canonicalizeProductSpreadsheet({
+      body: editedBody,
+      format: baseline.format,
+      profile: baseline.profile,
+    });
 
     const verification = verifyCsvManifest({
-      csvText: sourceBody.toString("utf8"),
+      csvText: sourceCanonical.canonicalCsvText,
       manifest: JSON.parse(manifestBody.toString("utf8")),
       signingKey: requireProvenanceSigningKey(),
     });
@@ -191,7 +213,7 @@ export async function createProductPreview({ request }: ActionFunctionArgs) {
       throw new Error(`source provenance verification failed: ${verification.reason}`);
     }
 
-    const editedDigest = sha256Hex(editedBody);
+    const editedDigest = sha256Hex(editedCanonical.canonicalCsvText);
     let createdArtifact = null;
 
     try {
@@ -208,6 +230,7 @@ export async function createProductPreview({ request }: ActionFunctionArgs) {
       if (existingActiveJob) {
         return json({
           exportJobId,
+          format: baseline.format,
           jobId: existingActiveJob.id,
           kind: PRODUCT_PREVIEW_KIND,
           profile: baseline.profile,
@@ -216,18 +239,19 @@ export async function createProductPreview({ request }: ActionFunctionArgs) {
       }
 
       const artifactKey = buildProductPreviewArtifactKey({
-        fileName: "edited.csv",
+        fileName: getProductSpreadsheetFileName({ format: baseline.format, kind: "edited" }),
         jobId: crypto.randomUUID(),
         prefix: process.env.S3_ARTIFACT_PREFIX,
         shopDomain,
       });
       const descriptor = await artifactStorage.put({
         body: editedBody,
-        contentType: "text/csv; charset=utf-8",
+        contentType: getProductSpreadsheetContentType(baseline.format),
         key: artifactKey,
         metadata: {
           editedDigest,
           exportJobId,
+          format: baseline.format,
           profile: baseline.profile,
         } as never,
       });
@@ -244,6 +268,7 @@ export async function createProductPreview({ request }: ActionFunctionArgs) {
         editedDigest,
         editedUploadArtifactId: createdArtifact.id,
         exportJobId,
+        format: baseline.format,
         jobQueue,
         manifestArtifactId: baseline.manifestArtifact.id,
         prisma,
@@ -262,6 +287,7 @@ export async function createProductPreview({ request }: ActionFunctionArgs) {
 
       return json({
         exportJobId,
+        format: baseline.format,
         jobId: job.id,
         kind: PRODUCT_PREVIEW_KIND,
         profile: baseline.profile,
@@ -360,6 +386,7 @@ async function loadPreviewJobDetail({ jobId, shopDomain }: { jobId: string; shop
 
   const payload = JSON.parse(resultBody.toString("utf8"));
   return {
+    format: payload.format ?? PRODUCT_EXPORT_FORMAT,
     jobState: job.state,
     lastError: job.lastError,
     rows: payload.rows,
@@ -521,6 +548,7 @@ export async function loadProductPreviewPage({ request }: LoaderFunctionArgs) {
     entitlementState: entitlement.state,
     exports: (await loadLatestCompletedExports(shopDomain, profile)).map((job: Job) => ({
       createdAt: job.createdAt.toISOString(),
+      format: (job.payload as { format?: string } | null)?.format ?? PRODUCT_EXPORT_FORMAT,
       id: job.id,
       profile: (job.payload as { profile?: string } | null)?.profile ?? PRODUCT_CORE_SEO_EXPORT_PROFILE,
     })),

@@ -436,6 +436,18 @@ Product Domain Parity MVP では、1 file = 1 atomic transaction は目指さな
 - CSV
 - XLSX
 
+### worksheet contract
+- XLSX は `1 workbook = 1 worksheet`
+- worksheet 名は selected profile と一致必須
+- header row は `A1` から始まる 1 行目固定
+- 列順は profile ごとの canonical header と完全一致必須
+- 2 行目以降を data row とし、trailing empty rows のみ無視
+- extra sheet / extra column / header alias / formula / number/date coercion は fail-closed で reject
+
+### provenance truth
+- CSV/XLSX とも manifest verify の正本は canonical rows
+- raw workbook binary は download artifact / storage integrity 用に保持するが、preview/write truth には使わない
+
 ### rationale
 Matrixify parity を意識するなら、CSV only では不足。  
 実務上、Excel ベース運用が多く、Matrixify 自体も Excel / CSV / Google Sheets を前提にしている。  

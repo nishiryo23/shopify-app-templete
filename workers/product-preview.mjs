@@ -1,6 +1,7 @@
 import { createPrismaArtifactCatalog } from "../domain/artifacts/prisma-artifact-catalog.mjs";
 import { buildPreviewDigest, buildPreviewRows, indexRowsByProductId, parseProductPreviewCsv } from "../domain/products/preview-csv.mjs";
 import {
+  PRODUCT_EXPORT_FORMAT,
   PRODUCT_INVENTORY_EXPORT_PROFILE,
   PRODUCT_MANUAL_COLLECTIONS_EXPORT_PROFILE,
   PRODUCT_METAFIELDS_EXPORT_PROFILE,
@@ -12,6 +13,7 @@ import {
   buildProductPreviewArtifactKey,
   PRODUCT_PREVIEW_RESULT_ARTIFACT_KIND,
 } from "../domain/products/preview-profile.mjs";
+import { canonicalizeProductSpreadsheet } from "../domain/products/spreadsheet-format.mjs";
 import { verifyCsvManifest } from "../domain/provenance/csv-manifest.mjs";
 import { requireProvenanceSigningKey, sha256Hex } from "../domain/provenance/signing.mjs";
 import {
@@ -146,8 +148,22 @@ export async function runProductPreviewJob({
       throw new Error("missing-preview-artifact-body");
     }
 
-    const sourceCsvText = sourceBody.toString("utf8");
-    const editedCsvText = editedBody.toString("utf8");
+    const format = payload.format
+      ?? sourceArtifact.metadata?.format
+      ?? editedUploadArtifact.metadata?.format
+      ?? PRODUCT_EXPORT_FORMAT;
+    const sourceCanonical = await canonicalizeProductSpreadsheet({
+      body: sourceBody,
+      format,
+      profile: payload.profile,
+    });
+    const editedCanonical = await canonicalizeProductSpreadsheet({
+      body: editedBody,
+      format,
+      profile: payload.profile,
+    });
+    const sourceCsvText = sourceCanonical.canonicalCsvText;
+    const editedCsvText = editedCanonical.canonicalCsvText;
     const manifest = JSON.parse(manifestBody.toString("utf8"));
     const sourceVerification = verifyCsvManifest({
       csvText: sourceCsvText,
@@ -436,6 +452,7 @@ export async function runProductPreviewJob({
       editedDigest,
       editedUploadArtifactId: payload.editedUploadArtifactId,
       exportJobId: payload.exportJobId,
+      format,
       manifestArtifactId: payload.manifestArtifactId,
       ...(mediaSetByProduct ? { mediaSetByProduct } : {}),
       ...(resolvedCollectionIdsByHandle ? { resolvedCollectionIdsByHandle } : {}),
@@ -452,6 +469,7 @@ export async function runProductPreviewJob({
       editedDigest,
       error: summary.error,
       exportJobId: payload.exportJobId,
+      format,
       previewDigest,
       profile: payload.profile,
       total: summary.total,

@@ -13,18 +13,19 @@
 - preview request は `POST /app/product-previews` で受ける。
 - route は `authenticateAndBootstrapShop(request)` で shop を確定し、preview は未課金でも許可する。billing gate は `PD-003` の confirm/write で適用する。
 - preview baseline に使える export は、同一 shop の completed `product.export` job であり、対応する `product.export.source` と `product.export.manifest` artifact が両方存在し、`deletedAt IS NULL` の場合のみとする。
-- source provenance verify は `exportJobId + source CSV + manifest artifact` を正本にし、`manifest verify` / `row fingerprint verify` は source CSV に対してのみ行う。
-- edited CSV は provenance 対象ではなく baseline binding 対象とする。closed-loop の意味は、app が生成した source CSV を baseline とし、その baseline 上の rows だけを merchant が編集することに固定する。
+- source provenance verify は `exportJobId + source file + manifest artifact` を正本にし、CSV/XLSX のどちらでも canonical rows に変換したうえで `manifest verify` / `row fingerprint verify` を行う。
+- edited CSV は provenance 対象ではなく baseline binding 対象とする。このルールを XLSX にも同じ canonical rows semantics で拡張する。closed-loop の意味は、app が生成した canonical rows を baseline とし、その baseline 上の rows だけを merchant が編集することに固定する。
 - preview dedupe key は `product-preview:${exportJobId}:${editedDigest}` とし、active states は `queued / retryable / leased` に固定する。terminal job は accepted response に再利用しない。
 - preview worker は offline Admin client で live Shopify state を読む。offline session 不在は retryable にせず terminal failure とし、stable error code は `missing-offline-session`、`product.preview` job の `maxAttempts` は `1` とする。
-- preview route が新たに保存する upload artifact は edited CSV のみで、kind は `product.preview.edited-upload` とする。source CSV は既存 `product.export.source` artifact を正本にし、preview 側で再保存しない。
-- preview result artifact は `product.preview.result` とし、`summary`, `rows`, `baselineDigest`, `editedDigest`, `previewDigest`, `sourceArtifactId`, `manifestArtifactId`, `editedUploadArtifactId`, `exportJobId`, `profile` を payload に持つ。
+- preview route が新たに保存する upload artifact は edited file のみで、kind は `product.preview.edited-upload` とする。source file は既存 `product.export.source` artifact を正本にし、preview 側で再保存しない。
+- worksheet contract は `1 workbook = 1 worksheet`、worksheet 名は selected profile と一致、header row は `A1` 開始で canonical header と完全一致、2 行目以降を data row、trailing empty rows のみ無視に固定する。extra sheet / extra column / header alias / non-text cell は reject する。
+- preview result artifact は `product.preview.result` とし、`format`, `summary`, `rows`, `baselineDigest`, `editedDigest`, `previewDigest`, `sourceArtifactId`, `manifestArtifactId`, `editedUploadArtifactId`, `exportJobId`, `profile` を payload に持つ。
 - `previewDigest` は `profile`, `exportJobId`, `baselineDigest`, `editedDigest`, `summary`, `rows[].productId`, `rows[].classification`, `rows[].changedFields`, `rows[].baselineRow`, `rows[].editedRow`, `rows[].currentRow` を stable key order で canonical JSON 化した値の sha256 とする。UI 表示順や polling metadata は hash 対象に含めない。
 - preview は既存 PostgreSQL-backed queue と `JobLease` の shop 単位 lease をそのまま使い、基盤上は同一 shop の export/write 系 job と直列実行される。この ticket では queue truth を変更しない。
 
 ## Consequences
 - preview は export artifact を baseline にした closed loop を持ちつつ、`PD-003` の confirm 時に preview hash revalidation を行える。
-- source provenance と edited binding の責務を分けることで、`PD-001` の export contract を壊さずに `PD-002` を実装できる。
+- source provenance と edited binding の責務を分けることで、`PD-001` の export contract を壊さずに `PD-002` を実装できる。XLSX は workbook binary ではなく canonical rows を正本にするので、harmless re-save や表示書式差分で preview semantics がぶれにくい。
 - preview は write 系と同じ queue lane に乗るため、同一 shop では safety を優先して直列実行になる。
 - offline session 不在で無意味な preview retry を避けられる。
 

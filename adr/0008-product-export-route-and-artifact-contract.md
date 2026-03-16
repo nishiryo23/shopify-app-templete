@@ -12,19 +12,20 @@
 ## Decision
 - embedded app からの export request は `POST /app/product-exports` で受ける。
 - route は `authenticate.admin(request)` で shop を確定し、business logic は service 層に寄せる。
-- export profile は `product-core-seo-v1` に固定し、列順は `product_id,handle,title,status,vendor,product_type,tags,body_html,seo_title,seo_description,updated_at` とする。
-- active export dedupe は DB の active unique index を正本にし、service 層は duplicate enqueue 後に既存 active job を lookup して返す。terminal へ遷移済みの latest job は accepted response に使わず、active job が見えないまま再 enqueue も取れなければ enqueue failure として扱う。対象は `shopDomain + kind=product.export + dedupeKey=product-export:product-core-seo-v1:csv`。
+- export profile は launch scope の product-domain profiles を受け、列順は各 profile の canonical header を正本にする。
+- export format は `csv | xlsx` を受ける。active export dedupe は DB の active unique index を正本にし、service 層は duplicate enqueue 後に既存 active job を lookup して返す。terminal へ遷移済みの latest job は accepted response に使わず、active job が見えないまま再 enqueue も取れなければ enqueue failure として扱う。対象は `shopDomain + kind=product.export + dedupeKey=product-export:{profile}:{format}`。
 - manifest は新しい DB table ではなく private artifact として保存する。`Artifact.metadata` には lookup に必要な要約だけを入れ、row fingerprint 群の正本は manifest artifact payload に置く。
 - export 成功時に保存する artifact は `product.export.source` と `product.export.manifest` の 2 種類のみとする。
 - artifact 保存は `storage put x2 -> catalog record x2` の順に行い、途中失敗時は delete / `markDeleted` による補償処理で partial state を残さない。
 - worker は `unauthenticated.admin(shop)` を使って offline Admin client を取得する。offline session 不在は retryable error にせず terminal failure とし、`product.export` job は `maxAttempts: 1` にする。
-- worker は leased job 実行中に `heartbeat()` で lease を延長し続ける。Shopify product reader は cursor page ごとに lease を確認し、lease を失ったら追加 page fetch と artifact side effect を続行しないよう fence を掛ける。source CSV は temp file へ逐次書き出し、全 catalog をメモリ保持しない。`SIGINT` / `SIGTERM` では新規 lease を止め、in-flight job の `complete()` / `fail()` が終わってから Prisma を disconnect する。
+- worker は leased job 実行中に `heartbeat()` で lease を延長し続ける。Shopify product reader は cursor page ごとに lease を確認し、lease を失ったら追加 page fetch と artifact side effect を続行しないよう fence を掛ける。canonical source rows は temp CSV として逐次書き出し、manifest はその canonical rows から生成する。`format=xlsx` の場合も canonical rows を正本にし、download artifact としてだけ workbook を生成する。`SIGINT` / `SIGTERM` では新規 lease を止め、in-flight job の `complete()` / `fail()` が終わってから Prisma を disconnect する。
 - artifact key に使う `S3_ARTIFACT_PREFIX` は bootstrap で解決した worker config を job 実行へ注入し、`process.env` を再参照しない。
 - S3 artifact storage も filesystem / memory backend と同じく structured read で descriptor metadata を返す。metadata は object metadata に保存して round-trip させる。
 - export 本体成功後の `complete()` 失敗は export 本体 failure と扱わない。`fail()` へ落として retry/dead-letter に変換せず、worker 異常として surface する。
 
 ## Consequences
 - export manifest の truth は既存 artifact 方針に揃い、別テーブルを増やさずに済む。
+- CSV/XLSX のどちらでも manifest は canonical rows を正本にでき、preview/write contract は file binary ではなく row semantics に依存できる。
 - repeated POST に対しては既存 active job を返せるが、正本は DB active unique index なので route/service contract test と migration truth の両方が重要になる。
 - offline session 不在で無意味な再試行を避けられる。
 - 長時間 export や rolling deploy 中でも stale lease による重複実行と state 未確定を起こしにくくなり、大きい catalog でも worker memory を export サイズに比例して膨らませにくい。
