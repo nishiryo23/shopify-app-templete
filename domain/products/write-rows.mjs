@@ -1,4 +1,10 @@
 import { PRODUCT_CORE_SEO_EXPORT_HEADERS } from "./export-profile.mjs";
+import {
+  canonicalizeProductHandle,
+  isHandleChangedFieldSet,
+  isValidProductHandle,
+  normalizeProductHandle,
+} from "./redirects.mjs";
 
 const EDITABLE_HEADERS = PRODUCT_CORE_SEO_EXPORT_HEADERS.filter((header) => header !== "updated_at");
 const VALID_PRODUCT_STATUSES = new Set(["ACTIVE", "ARCHIVED", "DRAFT"]);
@@ -23,6 +29,10 @@ function normalizeComparableFieldValue(field, value) {
     return String(value ?? "").trim().toUpperCase();
   }
 
+  if (field === "handle") {
+    return normalizeProductHandle(value);
+  }
+
   return value ?? "";
 }
 
@@ -36,7 +46,7 @@ export function isValidProductStatus(value) {
   return VALID_PRODUCT_STATUSES.has(String(value ?? "").trim().toUpperCase());
 }
 
-export function buildProductUpdateInputFromPreviewRow(row) {
+export function buildProductUpdateInputFromPreviewRow(row, { allowRedirect = true } = {}) {
   const changedFields = Array.isArray(row?.changedFields) ? row.changedFields : [];
   const editedRow = row?.editedRow ?? {};
   const input = {
@@ -46,7 +56,15 @@ export function buildProductUpdateInputFromPreviewRow(row) {
 
   for (const field of changedFields) {
     switch (field) {
-      case "handle":
+      case "handle": {
+        const handle = canonicalizeProductHandle(editedRow.handle);
+        if (!isValidProductHandle(handle)) {
+          errors.push(`invalid handle value: ${editedRow.handle}`);
+        } else {
+          input.handle = handle;
+        }
+        break;
+      }
       case "title":
       case "vendor":
         input[field] = editedRow[field] ?? "";
@@ -91,6 +109,10 @@ export function buildProductUpdateInputFromPreviewRow(row) {
     };
   }
 
+  if (allowRedirect && isHandleChangedFieldSet(changedFields)) {
+    input.redirectNewHandle = true;
+  }
+
   return {
     input,
     ok: true,
@@ -103,7 +125,7 @@ export function buildRollbackInputFromSnapshotRow(snapshotRow) {
   return buildProductUpdateInputFromPreviewRow({
     changedFields,
     editedRow: preWriteRow,
-  });
+  }, { allowRedirect: false });
 }
 
 export function changedFieldsMatch({ changedFields, expectedRow, actualRow }) {

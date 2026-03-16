@@ -194,19 +194,27 @@ Shopify は embedded apps に session tokens を必須とし、managed install +
 ## 4.7 Redirects
 ### Scope
 - handle change 時の redirect generation
-- redirect export/import（product-related use case 優先）
-- bulk redirect workflow は v1.1 以降独立させてもよい
+- redirect export/import は launch v1 では行わない
+- bulk redirect workflow は v1.1 以降独立させる
 
 ### Write strategy
-- handle change 起点の redirect create/update
-- bulk redirect import は `urlRedirectImportCreate` / submit flow を採用
-- bulk delete は later
+- handle change write は `productUpdate(product: { id, handle, redirectNewHandle: true })` を正本にする
+- redirect verify / undo cleanup の read は `urlRedirects(query: "path:...")` を使う
+- undo cleanup は `urlRedirectDelete(id)` を正本にする
+- bulk redirect import / delete は later
 
 ### Scope implication
 - `read_online_store_navigation`
 - `write_online_store_navigation`
 
 ### Notes
+- canonical product path は `/products/{handle}` に固定する
+- edited handle validation は Shopify の letters / numbers / hyphen contract を正本にし、app 内で独自 slugify しない
+- preview と write 前再検証では `path=/products/{old-handle}` の live redirect 不在を要求し、same-path redirect があれば fail-fast する
+- write success truth は handle の final-state verificationに加えて、`path=/products/{old-handle}` かつ `target=/products/{new-handle}` の exact redirect 1 件を要求する
+- rollbackable 判定は redirect verify 成否ではなく handle mutation 適用有無で決める
+- undo は snapshot/result を `productId` で join して対象行を確定し、redirect cleanup 後に handle restore を行う
+- undo success truth は handle restore の final-state verificationに加えて、`path=/products/{old-handle}` の live redirect が 0 件であることを要求する
 - Redirect module は scope 増加を伴うため、UI copy で明示する
 
 ---

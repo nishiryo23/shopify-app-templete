@@ -7,6 +7,13 @@ import {
   buildRollbackInputFromSnapshotRow,
   changedFieldsMatch,
 } from "../domain/products/write-rows.mjs";
+import {
+  isHandleChangedFieldSet,
+} from "../domain/products/redirects.mjs";
+import {
+  deleteRedirectById,
+  readRedirectsByPaths,
+} from "../platform/shopify/product-redirects.server.mjs";
 
 function extractArtifactBody(record) {
   if (Buffer.isBuffer(record)) {
@@ -106,11 +113,13 @@ async function loadDefaultDependencies() {
   const [
     { createPrismaArtifactCatalog },
     { readProductsForPreview },
+    redirectModule,
     { updateProductCoreFields },
     offlineAdminModule,
   ] = await Promise.all([
     import("../domain/artifacts/prisma-artifact-catalog.mjs"),
     import("../platform/shopify/product-preview.server.mjs"),
+    import("../platform/shopify/product-redirects.server.mjs"),
     import("../platform/shopify/product-write.server.mjs"),
     import("./offline-admin.mjs"),
   ]);
@@ -119,9 +128,102 @@ async function loadDefaultDependencies() {
     createPrismaArtifactCatalog,
     loadOfflineAdminContext: offlineAdminModule.loadOfflineAdminContext,
     MissingOfflineSessionError: offlineAdminModule.MissingOfflineSessionError,
+    deleteRedirectById: redirectModule.deleteRedirectById,
     readProductsForPreview,
+    readRedirectsByPaths: redirectModule.readRedirectsByPaths,
     updateProductCoreFields,
   };
+}
+
+function buildSnapshotResultJoin({ snapshotRows, writeRows }) {
+  const snapshotByProductId = new Map(snapshotRows.map((row) => [row.productId, row]));
+  const resultByProductId = new Map(writeRows.map((row) => [row.productId, row]));
+
+  for (const snapshotRow of snapshotRows) {
+    if (!resultByProductId.has(snapshotRow.productId)) {
+      throw new Error(`missing-write-result-row:${snapshotRow.productId}`);
+    }
+  }
+
+  for (const writeRow of writeRows) {
+    if (!snapshotByProductId.has(writeRow.productId)) {
+      throw new Error(`missing-write-snapshot-row:${writeRow.productId}`);
+    }
+  }
+
+  return snapshotRows.map((snapshotRow) => ({
+    resultRow: resultByProductId.get(snapshotRow.productId),
+    snapshotRow,
+  }));
+}
+
+function isRollbackTarget(joinedRow) {
+  const changedFields = joinedRow.snapshotRow?.changedFields ?? [];
+  if (isHandleChangedFieldSet(changedFields)) {
+    return joinedRow.resultRow?.rollbackableHandleChange === true;
+  }
+
+  const mutationStatus = joinedRow.resultRow?.mutationStatus ?? null;
+  return mutationStatus === "success" || mutationStatus === "applied";
+}
+
+async function cleanupForwardRedirectForUndo({
+  admin,
+  assertJobLeaseActive,
+  deleteRedirectHelper,
+  readRedirects,
+  resultRow,
+}) {
+  if (resultRow?.redirectCleanupMode === "delete-by-id") {
+    const cleanup = await deleteRedirectHelper(admin, resultRow.redirectId);
+    if (cleanup.notFound) {
+      return {
+        messages: ["Forward redirect was already removed before undo"],
+        ok: true,
+      };
+    }
+
+    if (cleanup.userErrors?.length) {
+      return {
+        messages: cleanup.userErrors.map((entry) => entry.message),
+        ok: false,
+      };
+    }
+
+    return { messages: [], ok: true };
+  }
+
+  if (resultRow?.redirectCleanupMode === "lookup-by-path-target-or-none") {
+    const redirectsByPath = await readRedirects(admin, [resultRow.redirectPath], { assertJobLeaseActive });
+    const redirectsForPath = redirectsByPath.get(resultRow.redirectPath) ?? [];
+    const exactMatches = redirectsForPath.filter((redirect) => redirect.target === resultRow.redirectTarget);
+
+    if (redirectsForPath.length > 0 && exactMatches.length !== 1) {
+      return {
+        messages: ["Redirect cleanup could not determine a single exact redirect to remove"],
+        ok: false,
+      };
+    }
+
+    if (exactMatches.length === 1) {
+      const cleanup = await deleteRedirectHelper(admin, exactMatches[0].id);
+      if (cleanup.notFound) {
+        return {
+          messages: ["Forward redirect was already removed before undo"],
+          ok: true,
+        };
+      }
+
+      if (cleanup.userErrors?.length) {
+        return {
+          messages: cleanup.userErrors.map((entry) => entry.message),
+          ok: false,
+        };
+      }
+    }
+  }
+
+  return { messages: [], ok: true };
 }
 
 export async function runProductUndoJob({
@@ -129,17 +231,26 @@ export async function runProductUndoJob({
   artifactKeyPrefix = process.env.S3_ARTIFACT_PREFIX,
   artifactStorage,
   assertJobLeaseActive = () => {},
+  deleteRedirect,
   job,
   prisma,
   readLiveProducts,
+  readLiveRedirects,
   resolveAdminContext,
   updateProduct,
 } = {}) {
-  const defaultDependencies = artifactCatalog && readLiveProducts && resolveAdminContext && updateProduct
+  const defaultDependencies = artifactCatalog
+    && readLiveProducts
+    && readLiveRedirects
+    && resolveAdminContext
+    && updateProduct
+    && deleteRedirect
     ? null
     : await loadDefaultDependencies();
   const catalog = artifactCatalog ?? defaultDependencies.createPrismaArtifactCatalog(prisma);
+  const deleteRedirectHelper = deleteRedirect ?? defaultDependencies.deleteRedirectById ?? deleteRedirectById;
   const readProducts = readLiveProducts ?? defaultDependencies.readProductsForPreview;
+  const readRedirects = readLiveRedirects ?? defaultDependencies.readRedirectsByPaths ?? readRedirectsByPaths;
   const resolveAdmin = resolveAdminContext ?? defaultDependencies.loadOfflineAdminContext;
   const updateProductCore = updateProduct ?? defaultDependencies.updateProductCoreFields;
   let errorArtifactDescriptor = null;
@@ -174,7 +285,12 @@ export async function runProductUndoJob({
     const writePayload = JSON.parse(writeBody.toString("utf8"));
     const snapshotPayload = JSON.parse(snapshotBody.toString("utf8"));
     const snapshotRows = snapshotPayload.rows ?? [];
-    const productIds = snapshotRows.map((row) => row.productId);
+    const joinedRows = buildSnapshotResultJoin({
+      snapshotRows,
+      writeRows: writePayload.rows ?? [],
+    });
+    const rollbackTargets = joinedRows.filter(isRollbackTarget);
+    const productIds = rollbackTargets.map((entry) => entry.snapshotRow.productId);
 
     const { admin } = await resolveAdmin({
       prisma,
@@ -185,24 +301,29 @@ export async function runProductUndoJob({
       assertJobLeaseActive,
     });
 
-    const conflictingRows = snapshotRows.map((snapshotRow) => {
+    const conflictingRows = rollbackTargets.map(({ resultRow, snapshotRow }) => {
       const currentRow = currentRowsByProductId.get(snapshotRow.productId) ?? null;
-      const writeRow = (writePayload.rows ?? []).find((row) => row.productId === snapshotRow.productId);
       const matches = changedFieldsMatch({
         actualRow: currentRow,
         changedFields: snapshotRow.changedFields,
-        expectedRow: writeRow?.finalRow,
+        expectedRow: resultRow?.finalRow,
       });
 
       return {
         changedFields: snapshotRow.changedFields,
         conflict: !matches,
         currentRow,
-        finalRow: writeRow?.finalRow ?? null,
+        finalRow: resultRow?.finalRow ?? null,
         messages: matches ? [] : ["Live Shopify product drifted after the successful write"],
+        nextHandle: resultRow?.nextHandle ?? null,
         productId: snapshotRow.productId,
+        redirectCleanupMode: resultRow?.redirectCleanupMode ?? null,
+        redirectId: resultRow?.redirectId ?? null,
+        redirectPath: resultRow?.redirectPath ?? null,
+        redirectTarget: resultRow?.redirectTarget ?? null,
         rollbackStatus: "skipped",
         snapshotRow: snapshotRow.preWriteRow,
+        writeResultRow: resultRow ?? null,
         verificationStatus: matches ? "pending" : "conflict",
       };
     });
@@ -213,7 +334,7 @@ export async function runProductUndoJob({
         rows: conflictingRows,
         snapshotArtifactId: payload.snapshotArtifactId,
         summary: {
-          total: conflictingRows.length,
+          total: rollbackTargets.length,
         },
         writeJobId: payload.writeJobId,
       };
@@ -228,7 +349,7 @@ export async function runProductUndoJob({
         metadata: {
           outcome: "conflict",
           profile: payload.profile,
-          total: conflictingRows.length,
+          total: rollbackTargets.length,
           writeJobId: payload.writeJobId,
         },
       });
@@ -236,23 +357,65 @@ export async function runProductUndoJob({
     }
 
     const rollbackRows = [];
-    for (const snapshotRow of snapshotRows) {
+    for (const { resultRow, snapshotRow } of rollbackTargets) {
       assertJobLeaseActive();
+      const currentRow = currentRowsByProductId.get(snapshotRow.productId) ?? null;
+      const messages = [];
+      const isHandleRow = isHandleChangedFieldSet(snapshotRow.changedFields);
+
       const mutation = buildRollbackInputFromSnapshotRow(snapshotRow);
 
       if (!mutation.ok) {
         rollbackRows.push({
           changedFields: snapshotRow.changedFields,
           conflict: false,
-          currentRow: currentRowsByProductId.get(snapshotRow.productId) ?? null,
+          currentRow,
           finalRow: null,
-          messages: mutation.errors,
+          messages: messages.concat(mutation.errors),
+          nextHandle: resultRow?.nextHandle ?? null,
           productId: snapshotRow.productId,
+          redirectCleanupMode: resultRow?.redirectCleanupMode ?? null,
+          redirectId: resultRow?.redirectId ?? null,
+          redirectPath: resultRow?.redirectPath ?? null,
+          redirectTarget: resultRow?.redirectTarget ?? null,
           rollbackStatus: "failed",
           snapshotRow: snapshotRow.preWriteRow,
+          writeResultRow: resultRow ?? null,
           verificationStatus: "failed",
         });
         continue;
+      }
+
+      if (isHandleRow) {
+        const cleanup = await cleanupForwardRedirectForUndo({
+          admin,
+          assertJobLeaseActive,
+          deleteRedirectHelper,
+          readRedirects,
+          resultRow,
+        });
+        messages.push(...cleanup.messages);
+
+        if (!cleanup.ok) {
+          rollbackRows.push({
+            changedFields: snapshotRow.changedFields,
+            conflict: false,
+            currentRow,
+            finalRow: null,
+            messages,
+            nextHandle: resultRow?.nextHandle ?? null,
+            productId: snapshotRow.productId,
+            redirectCleanupMode: resultRow?.redirectCleanupMode ?? null,
+            redirectId: resultRow?.redirectId ?? null,
+            redirectPath: resultRow?.redirectPath ?? null,
+            redirectTarget: resultRow?.redirectTarget ?? null,
+            rollbackStatus: "failed",
+            snapshotRow: snapshotRow.preWriteRow,
+            writeResultRow: resultRow ?? null,
+            verificationStatus: "failed",
+          });
+          continue;
+        }
       }
 
       const response = await updateProductCore(admin, mutation.input);
@@ -260,12 +423,18 @@ export async function runProductUndoJob({
       rollbackRows.push({
         changedFields: snapshotRow.changedFields,
         conflict: false,
-        currentRow: currentRowsByProductId.get(snapshotRow.productId) ?? null,
+        currentRow,
         finalRow: null,
-        messages: rollbackFailed ? response.userErrors.map((entry) => entry.message) : [],
+        messages: rollbackFailed ? messages.concat(response.userErrors.map((entry) => entry.message)) : messages,
+        nextHandle: resultRow?.nextHandle ?? null,
         productId: snapshotRow.productId,
+        redirectCleanupMode: resultRow?.redirectCleanupMode ?? null,
+        redirectId: resultRow?.redirectId ?? null,
+        redirectPath: resultRow?.redirectPath ?? null,
+        redirectTarget: resultRow?.redirectTarget ?? null,
         rollbackStatus: rollbackFailed ? "failed" : "success",
         snapshotRow: snapshotRow.preWriteRow,
+        writeResultRow: resultRow ?? null,
         verificationStatus: rollbackFailed ? "failed" : "pending",
       });
     }
@@ -274,6 +443,11 @@ export async function runProductUndoJob({
     const finalRowsByProductId = await readProducts(admin, productIds, {
       assertJobLeaseActive,
     });
+    const finalRedirectsByPath = await readRedirects(
+      admin,
+      [...new Set(rollbackRows.map((row) => row.redirectPath).filter(Boolean))],
+      { assertJobLeaseActive },
+    );
     const verifiedRows = rollbackRows.map((row) => {
       const finalRow = finalRowsByProductId.get(row.productId) ?? null;
       if (row.rollbackStatus !== "success") {
@@ -288,11 +462,21 @@ export async function runProductUndoJob({
         changedFields: row.changedFields,
         expectedRow: row.snapshotRow,
       });
+      const redirectsForPath = row.redirectPath
+        ? (finalRedirectsByPath.get(row.redirectPath) ?? [])
+        : [];
+      const redirectCleared = !row.redirectPath || redirectsForPath.length === 0;
       return {
         ...row,
         finalRow,
-        messages: verified ? row.messages : row.messages.concat("Undo verification failed"),
-        verificationStatus: verified ? "verified" : "failed",
+        messages: verified && redirectCleared
+          ? row.messages
+          : row.messages.concat(
+            redirectCleared
+              ? "Undo verification failed"
+              : "A live redirect still exists for the previous product handle after undo",
+          ),
+        verificationStatus: verified && redirectCleared ? "verified" : "failed",
       };
     });
 
@@ -309,7 +493,7 @@ export async function runProductUndoJob({
       rows: verifiedRows,
       snapshotArtifactId: payload.snapshotArtifactId,
       summary: {
-        total: snapshotRows.length,
+        total: rollbackTargets.length,
       },
       writeJobId: payload.writeJobId,
     };
@@ -324,7 +508,7 @@ export async function runProductUndoJob({
       metadata: {
         outcome,
         profile: payload.profile,
-        total: snapshotRows.length,
+        total: rollbackTargets.length,
         writeJobId: payload.writeJobId,
       },
     });

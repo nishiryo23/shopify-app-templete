@@ -55,6 +55,8 @@ import {
   resolveCollectionsByHandle,
   resolveCollectionsById,
 } from "../platform/shopify/product-collections.server.mjs";
+import { readRedirectsByPaths } from "../platform/shopify/product-redirects.server.mjs";
+import { buildProductRedirectPath, normalizeProductHandle } from "../domain/products/redirects.mjs";
 import { MissingOfflineSessionError, loadOfflineAdminContext } from "./offline-admin.mjs";
 
 async function deleteIfPresent(storage, descriptor) {
@@ -102,6 +104,7 @@ export async function runProductPreviewJob({
   readLiveMedia = readMediaForProducts,
   readLiveMetafields = readMetafieldsForProducts,
   readLiveCollections = readCollectionsForProducts,
+  readLiveRedirects = readRedirectsByPaths,
   resolveCollectionHandles = resolveCollectionsByHandle,
   resolveCollectionIds = resolveCollectionsById,
   resolveAdminContext = loadOfflineAdminContext,
@@ -338,10 +341,23 @@ export async function runProductPreviewJob({
         editedRows.map((entry) => entry.row.product_id).filter(Boolean),
         { assertJobLeaseActive },
       );
+      const redirectPaths = editedRows.flatMap((entry) => {
+        const currentRow = currentRowsByProductId.get(entry.row.product_id) ?? null;
+        return currentRow?.handle
+          && normalizeProductHandle(currentRow.handle) !== normalizeProductHandle(entry.row.handle)
+          ? [buildProductRedirectPath(currentRow.handle)]
+          : [];
+      });
+      const currentRedirectsByPath = await readLiveRedirects(
+        admin,
+        redirectPaths,
+        { assertJobLeaseActive },
+      );
 
       const preview = buildPreviewRows({
         baselineRowsByProductId,
         currentRowsByProductId,
+        currentRedirectsByPath,
         editedRows,
       });
       rows = preview.rows;

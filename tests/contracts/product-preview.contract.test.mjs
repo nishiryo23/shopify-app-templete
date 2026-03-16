@@ -830,6 +830,132 @@ test("product preview worker stores result artifact on success", async () => {
   assert.equal(records[0].kind, PRODUCT_PREVIEW_RESULT_ARTIFACT_KIND);
 });
 
+test("product preview worker uses the live handle for redirect lookup and preview metadata", async () => {
+  const { csvText, manifest } = buildProductExportArtifacts({
+    products: [{
+      descriptionHtml: "<p>Body</p>",
+      handle: "hat-old",
+      id: "gid://shopify/Product/1",
+      productType: "Hat",
+      seo: { description: "SEO description", title: "SEO title" },
+      status: "ACTIVE",
+      tags: ["sale"],
+      title: "Hat",
+      updatedAt: "2026-03-13T00:00:00Z",
+      vendor: "Matri",
+    }],
+    signingKey: "test-signing-key",
+  });
+  const editedCsv = csvText.replace("hat-old", "hat-new");
+  const puts = [];
+  const redirectReads = [];
+
+  const result = await runProductPreviewJob({
+    artifactCatalog: {
+      async record(args) {
+        return { id: `artifact-${args.kind}`, ...args };
+      },
+    },
+    artifactKeyPrefix: "resolved-prefix",
+    artifactStorage: {
+      async get(key) {
+        if (key.includes("edited.csv")) {
+          return Buffer.from(editedCsv);
+        }
+        if (key.includes("manifest.json")) {
+          return Buffer.from(JSON.stringify(manifest));
+        }
+        return Buffer.from(csvText);
+      },
+      async put(args) {
+        puts.push(args);
+        return {
+          bucket: "artifacts",
+          checksumSha256: "sha-result",
+          contentType: args.contentType,
+          metadata: args.metadata,
+          objectKey: args.key,
+          sizeBytes: Buffer.byteLength(args.body),
+          visibility: "private",
+        };
+      },
+    },
+    job: {
+      id: "job-live-handle-preview",
+      payload: {
+        editedDigest: "edited",
+        editedUploadArtifactId: "edited-artifact",
+        exportJobId: "export-1",
+        manifestArtifactId: "manifest-artifact",
+        profile: "product-core-seo-v1",
+        sourceArtifactId: "source-artifact",
+      },
+      shopDomain: "example.myshopify.com",
+    },
+    prisma: {
+      artifact: {
+        async findFirst({ where }) {
+          if (where.id === "edited-artifact") {
+            return {
+              id: "edited-artifact",
+              kind: "product.preview.edited-upload",
+              objectKey: "product-previews/example.myshopify.com/upload/edited.csv",
+              shopDomain: "example.myshopify.com",
+            };
+          }
+          if (where.id === "manifest-artifact") {
+            return {
+              id: "manifest-artifact",
+              kind: "product.export.manifest",
+              objectKey: "product-exports/example.myshopify.com/export-1/manifest.json",
+              shopDomain: "example.myshopify.com",
+            };
+          }
+          return {
+            id: "source-artifact",
+            kind: "product.export.source",
+            objectKey: "product-exports/example.myshopify.com/export-1/source.csv",
+            shopDomain: "example.myshopify.com",
+          };
+        },
+      },
+    },
+    readLiveProducts: async () => new Map([
+      ["gid://shopify/Product/1", {
+        body_html: "<p>Body</p>",
+        handle: "hat-live",
+        product_id: "gid://shopify/Product/1",
+        product_type: "Hat",
+        seo_description: "SEO description",
+        seo_title: "SEO title",
+        status: "ACTIVE",
+        tags: "sale",
+        title: "Hat",
+        updated_at: "2026-03-13T00:00:00Z",
+        vendor: "Matri",
+      }],
+    ]),
+    readLiveRedirects: async (_admin, paths) => {
+      redirectReads.push(paths);
+      return new Map([["/products/hat-live", [{
+        id: "gid://shopify/UrlRedirect/1",
+        path: "/products/hat-live",
+        target: "/products/hat-new",
+      }]]]);
+    },
+    resolveAdminContext: async () => ({ admin: {} }),
+    signingKey: "test-signing-key",
+  });
+
+  const payload = JSON.parse(String(puts[0].body));
+  assert.deepEqual(redirectReads, [["/products/hat-live"]]);
+  assert.equal(result.summary.error, 1);
+  assert.equal(payload.rows[0].classification, "error");
+  assert.equal(payload.rows[0].previousHandle, "hat-live");
+  assert.equal(payload.rows[0].redirectPath, "/products/hat-live");
+  assert.equal(payload.rows[0].redirectTarget, "/products/hat-new");
+});
+
 test("product preview worker compensates storage when result catalog record fails", async () => {
   const { csvText, manifest } = buildProductExportArtifacts({
     products: [{

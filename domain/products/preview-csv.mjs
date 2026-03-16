@@ -1,4 +1,11 @@
 import { sha256Hex } from "../provenance/signing.mjs";
+import {
+  buildHandleRedirectMetadata,
+  isValidProductHandle,
+  isHandleChangedFieldSet,
+  normalizeProductHandle,
+  removeAlreadyAppliedHandleField,
+} from "./redirects.mjs";
 import { PRODUCT_CORE_SEO_EXPORT_HEADERS } from "./export-profile.mjs";
 
 const EDITABLE_HEADERS = PRODUCT_CORE_SEO_EXPORT_HEADERS.filter((header) => header !== "updated_at");
@@ -95,7 +102,14 @@ function diffChangedFields(baselineRow, editedRow) {
   const changedFields = [];
 
   for (const header of EDITABLE_HEADERS) {
-    if ((baselineRow?.[header] ?? "") !== (editedRow?.[header] ?? "")) {
+    const baselineValue = header === "handle"
+      ? normalizeProductHandle(baselineRow?.[header])
+      : (baselineRow?.[header] ?? "");
+    const editedValue = header === "handle"
+      ? normalizeProductHandle(editedRow?.[header])
+      : (editedRow?.[header] ?? "");
+
+    if (baselineValue !== editedValue) {
       changedFields.push(header);
     }
   }
@@ -167,7 +181,12 @@ export function buildPreviewDigest({
       classification: row.classification,
       currentRow: stableSortObject(row.currentRow),
       editedRow: stableSortObject(row.editedRow),
+      nextHandle: row.nextHandle ?? null,
       productId: row.productId,
+      previousHandle: row.previousHandle ?? null,
+      redirectAction: row.redirectAction ?? null,
+      redirectPath: row.redirectPath ?? null,
+      redirectTarget: row.redirectTarget ?? null,
     })),
     summary: stableSortObject(summary),
   };
@@ -178,6 +197,7 @@ export function buildPreviewDigest({
 export function buildPreviewRows({
   baselineRowsByProductId,
   currentRowsByProductId,
+  currentRedirectsByPath = new Map(),
   editedRows,
 }) {
   const rows = [];
@@ -193,7 +213,20 @@ export function buildPreviewRows({
     const productId = editedEntry.row.product_id;
     const baselineEntry = baselineRowsByProductId.get(productId);
     const currentRow = currentRowsByProductId.get(productId) ?? null;
-    const changedFields = diffChangedFields(baselineEntry?.row ?? null, editedEntry.row);
+    const diffedChangedFields = diffChangedFields(baselineEntry?.row ?? null, editedEntry.row);
+    const changedFields = removeAlreadyAppliedHandleField(
+      diffedChangedFields,
+      {
+        editedRow: editedEntry.row,
+        liveRow: currentRow,
+      },
+    );
+    const isHandleChangeRow = isHandleChangedFieldSet(changedFields);
+    const handleAlreadyApplied = isHandleChangedFieldSet(diffedChangedFields) && !isHandleChangeRow;
+    const handleRedirect = buildHandleRedirectMetadata({
+      baselineRow: currentRow ?? baselineEntry?.row ?? null,
+      editedRow: editedEntry.row,
+    });
     const messages = [];
     let classification = "changed";
 
@@ -213,7 +246,19 @@ export function buildPreviewRows({
       const stale = !rowsEqual(currentRow, baselineEntry.row);
       const unchanged = changedFields.length === 0;
 
-      if (stale) {
+      if (handleAlreadyApplied && stale) {
+        classification = "warning";
+        messages.push("Live Shopify product already matches the edited handle");
+      } else if (isHandleChangeRow && !isValidProductHandle(editedEntry.row.handle)) {
+        classification = "error";
+        messages.push("handle must match Shopify's letters-numbers-hyphens contract");
+      } else if (isHandleChangeRow && (!handleRedirect.previousHandle || !handleRedirect.nextHandle)) {
+        classification = "error";
+        messages.push("handle changes require both baseline and edited handles");
+      } else if (isHandleChangeRow && (currentRedirectsByPath.get(handleRedirect.redirectPath)?.length ?? 0) > 0) {
+        classification = "error";
+        messages.push("A live redirect already exists for the previous product handle");
+      } else if (stale) {
         classification = "warning";
         messages.push("Live Shopify product changed after the selected export baseline");
       } else if (unchanged) {
@@ -231,7 +276,12 @@ export function buildPreviewRows({
       editedRow: editedEntry.row,
       editedRowNumber: editedEntry.rowNumber,
       messages,
+      nextHandle: isHandleChangeRow ? handleRedirect.nextHandle : null,
       productId,
+      previousHandle: isHandleChangeRow ? handleRedirect.previousHandle : null,
+      redirectAction: isHandleChangeRow ? "create" : null,
+      redirectPath: isHandleChangeRow ? handleRedirect.redirectPath : null,
+      redirectTarget: isHandleChangeRow ? handleRedirect.redirectTarget : null,
       sourceRowNumber: baselineEntry?.rowNumber ?? null,
     });
   }
