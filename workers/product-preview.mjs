@@ -13,7 +13,10 @@ import {
   buildProductPreviewArtifactKey,
   PRODUCT_PREVIEW_RESULT_ARTIFACT_KIND,
 } from "../domain/products/preview-profile.mjs";
-import { canonicalizeProductSpreadsheet } from "../domain/products/spreadsheet-format.mjs";
+import {
+  canonicalizeProductSpreadsheet,
+  PRODUCT_SPREADSHEET_LAYOUT_CANONICAL,
+} from "../domain/products/spreadsheet-format.mjs";
 import { verifyCsvManifest } from "../domain/provenance/csv-manifest.mjs";
 import { requireProvenanceSigningKey, sha256Hex } from "../domain/provenance/signing.mjs";
 import {
@@ -60,6 +63,13 @@ import {
 import { readRedirectsByPaths } from "../platform/shopify/product-redirects.server.mjs";
 import { buildProductRedirectPath, normalizeProductHandle } from "../domain/products/redirects.mjs";
 import { MissingOfflineSessionError, loadOfflineAdminContext } from "./offline-admin.mjs";
+
+function applyEditedRowNumbers(entries, editedRowNumbers = []) {
+  return entries.map((entry, index) => ({
+    ...entry,
+    rowNumber: editedRowNumbers[index] ?? entry.rowNumber,
+  }));
+}
 
 async function deleteIfPresent(storage, descriptor) {
   if (descriptor?.objectKey) {
@@ -148,22 +158,35 @@ export async function runProductPreviewJob({
       throw new Error("missing-preview-artifact-body");
     }
 
-    const format = payload.format
+    const sourceFormat = payload.sourceFormat
+      ?? payload.format
+      ?? sourceArtifact.metadata?.sourceFormat
       ?? sourceArtifact.metadata?.format
-      ?? editedUploadArtifact.metadata?.format
       ?? PRODUCT_EXPORT_FORMAT;
+    const editedFormat = payload.editedFormat
+      ?? payload.format
+      ?? editedUploadArtifact.metadata?.editedFormat
+      ?? editedUploadArtifact.metadata?.format
+      ?? sourceFormat;
+    const editedLayout = payload.editedLayout
+      ?? editedUploadArtifact.metadata?.editedLayout
+      ?? PRODUCT_SPREADSHEET_LAYOUT_CANONICAL;
     const sourceCanonical = await canonicalizeProductSpreadsheet({
       body: sourceBody,
-      format,
+      format: sourceFormat,
+      layout: PRODUCT_SPREADSHEET_LAYOUT_CANONICAL,
       profile: payload.profile,
     });
     const editedCanonical = await canonicalizeProductSpreadsheet({
+      baselineCanonicalCsvText: sourceCanonical.canonicalCsvText,
       body: editedBody,
-      format,
+      format: editedFormat,
+      layout: editedLayout,
       profile: payload.profile,
     });
     const sourceCsvText = sourceCanonical.canonicalCsvText;
     const editedCsvText = editedCanonical.canonicalCsvText;
+    const editedRowMapDigest = editedCanonical.editedRowMapDigest;
     const manifest = JSON.parse(manifestBody.toString("utf8"));
     const sourceVerification = verifyCsvManifest({
       csvText: sourceCsvText,
@@ -187,7 +210,10 @@ export async function runProductPreviewJob({
     assertJobLeaseActive();
     if (payload.profile === PRODUCT_INVENTORY_EXPORT_PROFILE) {
       const baselineRows = parseInventoryPreviewCsv(sourceCsvText);
-      const editedRows = parseInventoryPreviewCsv(editedCsvText);
+      const editedRows = applyEditedRowNumbers(
+        parseInventoryPreviewCsv(editedCsvText),
+        editedCanonical.editedRowNumbers,
+      );
       const { productIds } = indexInventoryRows(editedRows);
       const {
         productIds: baselineProductIds,
@@ -209,7 +235,10 @@ export async function runProductPreviewJob({
       summary = preview.summary;
     } else if (payload.profile === PRODUCT_VARIANT_PRICES_EXPORT_PROFILE) {
       const baselineRows = parseVariantPricePreviewCsv(sourceCsvText);
-      const editedRows = parseVariantPricePreviewCsv(editedCsvText);
+      const editedRows = applyEditedRowNumbers(
+        parseVariantPricePreviewCsv(editedCsvText),
+        editedCanonical.editedRowNumbers,
+      );
       const { productIds } = indexVariantPriceRows(editedRows);
       const {
         productIds: baselineProductIds,
@@ -231,7 +260,10 @@ export async function runProductPreviewJob({
       summary = preview.summary;
     } else if (payload.profile === PRODUCT_METAFIELDS_EXPORT_PROFILE) {
       const baselineRows = parseMetafieldPreviewCsv(sourceCsvText);
-      const editedRows = parseMetafieldPreviewCsv(editedCsvText);
+      const editedRows = applyEditedRowNumbers(
+        parseMetafieldPreviewCsv(editedCsvText),
+        editedCanonical.editedRowNumbers,
+      );
       const { productIds } = indexMetafieldRows(editedRows);
       const {
         productIds: baselineProductIds,
@@ -257,7 +289,10 @@ export async function runProductPreviewJob({
       summary = preview.summary;
     } else if (payload.profile === PRODUCT_MANUAL_COLLECTIONS_EXPORT_PROFILE) {
       const baselineRows = parseCollectionPreviewCsv(sourceCsvText);
-      const editedRows = parseCollectionPreviewCsv(editedCsvText);
+      const editedRows = applyEditedRowNumbers(
+        parseCollectionPreviewCsv(editedCsvText),
+        editedCanonical.editedRowNumbers,
+      );
       const baselineIndex = indexCollectionRows(baselineRows);
       const editedIndex = indexCollectionRows(editedRows);
       const productIds = [...new Set([...baselineIndex.productIds, ...editedIndex.productIds])];
@@ -292,7 +327,10 @@ export async function runProductPreviewJob({
       );
     } else if (payload.profile === PRODUCT_MEDIA_EXPORT_PROFILE) {
       const baselineRows = parseMediaPreviewCsv(sourceCsvText);
-      const editedRows = parseMediaPreviewCsv(editedCsvText);
+      const editedRows = applyEditedRowNumbers(
+        parseMediaPreviewCsv(editedCsvText),
+        editedCanonical.editedRowNumbers,
+      );
       const { productIds } = indexMediaRows(editedRows);
       const {
         placeholderRowsByProductId: baselinePlaceholderRowsByProductId,
@@ -321,7 +359,10 @@ export async function runProductPreviewJob({
       );
     } else if (payload.profile === PRODUCT_VARIANTS_EXPORT_PROFILE) {
       const baselineRows = parseVariantPreviewCsv(sourceCsvText);
-      const editedRows = parseVariantPreviewCsv(editedCsvText);
+      const editedRows = applyEditedRowNumbers(
+        parseVariantPreviewCsv(editedCsvText),
+        editedCanonical.editedRowNumbers,
+      );
       const { productIds: baselineProductIds, rowsByKey: editedRowsByKey } = indexVariantRows(editedRows);
       const { rowsByKey: baselineRowsByKey } = indexVariantRows(baselineRows);
       const baselineRowsByVariantId = new Map();
@@ -349,7 +390,10 @@ export async function runProductPreviewJob({
       summary = preview.summary;
     } else {
       const baselineRows = parseProductPreviewCsv(sourceCsvText);
-      const editedRows = parseProductPreviewCsv(editedCsvText);
+      const editedRows = applyEditedRowNumbers(
+        parseProductPreviewCsv(editedCsvText),
+        editedCanonical.editedRowNumbers,
+      );
       const baselineRowsByProductId = indexRowsByProductId(baselineRows);
       indexRowsByProductId(editedRows);
       const currentRowsByProductId = await readLiveProducts(
@@ -386,6 +430,8 @@ export async function runProductPreviewJob({
       ? buildInventoryPreviewDigest({
         baselineDigest,
         editedDigest,
+        editedLayout,
+        editedRowMapDigest,
         exportJobId: payload.exportJobId,
         profile: payload.profile,
         rows,
@@ -395,6 +441,8 @@ export async function runProductPreviewJob({
       ? buildMetafieldPreviewDigest({
         baselineDigest,
         editedDigest,
+        editedLayout,
+        editedRowMapDigest,
         exportJobId: payload.exportJobId,
         profile: payload.profile,
         rows,
@@ -404,6 +452,8 @@ export async function runProductPreviewJob({
       ? buildCollectionPreviewDigest({
         baselineDigest,
         editedDigest,
+        editedLayout,
+        editedRowMapDigest,
         exportJobId: payload.exportJobId,
         profile: payload.profile,
         resolvedCollectionIdsByHandle,
@@ -414,6 +464,8 @@ export async function runProductPreviewJob({
       ? buildMediaPreviewDigest({
         baselineDigest,
         editedDigest,
+        editedLayout,
+        editedRowMapDigest,
         exportJobId: payload.exportJobId,
         mediaSetByProduct,
         profile: payload.profile,
@@ -424,6 +476,8 @@ export async function runProductPreviewJob({
       ? buildVariantPricePreviewDigest({
         baselineDigest,
         editedDigest,
+        editedLayout,
+        editedRowMapDigest,
         exportJobId: payload.exportJobId,
         profile: payload.profile,
         rows,
@@ -433,6 +487,8 @@ export async function runProductPreviewJob({
       ? buildVariantPreviewDigest({
         baselineDigest,
         editedDigest,
+        editedLayout,
+        editedRowMapDigest,
         exportJobId: payload.exportJobId,
         profile: payload.profile,
         rows,
@@ -441,6 +497,8 @@ export async function runProductPreviewJob({
       : buildPreviewDigest({
         baselineDigest,
         editedDigest,
+        editedLayout,
+        editedRowMapDigest,
         exportJobId: payload.exportJobId,
         profile: payload.profile,
         rows,
@@ -450,15 +508,18 @@ export async function runProductPreviewJob({
     const resultPayload = {
       baselineDigest,
       editedDigest,
+      editedFormat,
+      editedLayout,
+      editedRowMapDigest,
       editedUploadArtifactId: payload.editedUploadArtifactId,
       exportJobId: payload.exportJobId,
-      format,
       manifestArtifactId: payload.manifestArtifactId,
       ...(mediaSetByProduct ? { mediaSetByProduct } : {}),
       ...(resolvedCollectionIdsByHandle ? { resolvedCollectionIdsByHandle } : {}),
       previewDigest,
       profile: payload.profile,
       rows,
+      sourceFormat,
       sourceArtifactId: payload.sourceArtifactId,
       summary,
     };
@@ -467,11 +528,14 @@ export async function runProductPreviewJob({
       baselineDigest,
       changed: summary.changed,
       editedDigest,
+      editedFormat,
+      editedLayout,
+      editedRowMapDigest,
       error: summary.error,
       exportJobId: payload.exportJobId,
-      format,
       previewDigest,
       profile: payload.profile,
+      sourceFormat,
       total: summary.total,
       unchanged: summary.unchanged,
       warning: summary.warning,

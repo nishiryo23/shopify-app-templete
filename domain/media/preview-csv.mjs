@@ -189,6 +189,8 @@ export function mediaRowsMatch(leftRow, rightRow) {
 export function buildMediaPreviewDigest({
   baselineDigest,
   editedDigest,
+  editedLayout = "canonical",
+  editedRowMapDigest = "none",
   exportJobId,
   mediaSetByProduct,
   profile,
@@ -198,6 +200,8 @@ export function buildMediaPreviewDigest({
   return sha256Hex(JSON.stringify({
     baselineDigest,
     editedDigest,
+    editedLayout,
+    editedRowMapDigest,
     exportJobId,
     mediaSetByProduct: stableSortObject(mediaSetByProduct ?? {}),
     profile,

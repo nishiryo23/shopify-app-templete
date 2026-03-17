@@ -26,6 +26,9 @@ import {
   canonicalizeProductSpreadsheet,
   getProductSpreadsheetContentType,
   getProductSpreadsheetFileName,
+  PRODUCT_SPREADSHEET_LAYOUT_CANONICAL,
+  PRODUCT_SPREADSHEET_LAYOUT_MATRIXIFY,
+  resolveProductSpreadsheetFormatFromFileName,
 } from "~/domain/products/spreadsheet-format.mjs";
 import {
   findLatestSuccessfulProductWriteArtifact,
@@ -86,6 +89,12 @@ async function readFileText(file: File | null) {
     body: Buffer.from(await file.arrayBuffer()),
     name: file.name,
   };
+}
+
+function resolveEditedLayout(value: unknown) {
+  return String(value ?? "").trim().toLowerCase() === PRODUCT_SPREADSHEET_LAYOUT_MATRIXIFY
+    ? PRODUCT_SPREADSHEET_LAYOUT_MATRIXIFY
+    : PRODUCT_SPREADSHEET_LAYOUT_CANONICAL;
 }
 
 async function loadCompletedExportBaseline({
@@ -155,6 +164,7 @@ export async function createProductPreview({ request }: ActionFunctionArgs) {
   const authContext = await authenticateAndBootstrapShop(request);
   const formData = await request.formData();
   const exportJobId = String(formData.get("exportJobId") ?? "").trim();
+  const editedLayout = resolveEditedLayout(formData.get("editedLayout"));
 
   if (!exportJobId) {
     return json({ error: "exportJobId is required" }, { status: 400 });
@@ -181,25 +191,37 @@ export async function createProductPreview({ request }: ActionFunctionArgs) {
       throw new Error("selected export baseline body could not be read");
     }
 
+    const sourceFormat = baseline.format;
+    const inferredEditedFormat = resolveProductSpreadsheetFormatFromFileName(editedName);
+    let editedFormat = sourceFormat;
     assertProductSpreadsheetFileName({
       fileName: sourceName,
-      format: baseline.format,
+      format: sourceFormat,
       role: "source",
     });
-    assertProductSpreadsheetFileName({
-      fileName: editedName,
-      format: baseline.format,
-      role: "edited",
-    });
+    if (editedLayout === PRODUCT_SPREADSHEET_LAYOUT_CANONICAL) {
+      assertProductSpreadsheetFileName({
+        fileName: editedName,
+        format: sourceFormat,
+        role: "edited",
+      });
+    } else if (!inferredEditedFormat) {
+      throw new Error("edited file must use the .csv or .xlsx extension in matrixify mode");
+    } else {
+      editedFormat = inferredEditedFormat;
+    }
 
     const sourceCanonical = await canonicalizeProductSpreadsheet({
       body: sourceBody,
-      format: baseline.format,
+      format: sourceFormat,
+      layout: PRODUCT_SPREADSHEET_LAYOUT_CANONICAL,
       profile: baseline.profile,
     });
     const editedCanonical = await canonicalizeProductSpreadsheet({
+      baselineCanonicalCsvText: sourceCanonical.canonicalCsvText,
       body: editedBody,
-      format: baseline.format,
+      format: editedFormat,
+      layout: editedLayout,
       profile: baseline.profile,
     });
 
@@ -214,13 +236,14 @@ export async function createProductPreview({ request }: ActionFunctionArgs) {
     }
 
     const editedDigest = sha256Hex(editedCanonical.canonicalCsvText);
+    const editedRowMapDigest = editedCanonical.editedRowMapDigest;
     let createdArtifact = null;
 
     try {
       const existingActiveJob = await prisma.job.findFirst({
         orderBy: [{ createdAt: "desc" }],
         where: {
-          dedupeKey: `product-preview:${exportJobId}:${editedDigest}`,
+          dedupeKey: `product-preview:${exportJobId}:${editedLayout}:${editedDigest}:${editedRowMapDigest}`,
           kind: PRODUCT_PREVIEW_KIND,
           shopDomain,
           state: { in: ["queued", "retryable", "leased"] },
@@ -229,30 +252,36 @@ export async function createProductPreview({ request }: ActionFunctionArgs) {
 
       if (existingActiveJob) {
         return json({
+          editedFormat,
+          editedLayout,
           exportJobId,
-          format: baseline.format,
+          format: sourceFormat,
           jobId: existingActiveJob.id,
           kind: PRODUCT_PREVIEW_KIND,
           profile: baseline.profile,
+          sourceFormat,
           state: existingActiveJob.state,
         }, { status: 202 });
       }
 
       const artifactKey = buildProductPreviewArtifactKey({
-        fileName: getProductSpreadsheetFileName({ format: baseline.format, kind: "edited" }),
+        fileName: getProductSpreadsheetFileName({ format: editedFormat, kind: "edited" }),
         jobId: crypto.randomUUID(),
         prefix: process.env.S3_ARTIFACT_PREFIX,
         shopDomain,
       });
       const descriptor = await artifactStorage.put({
         body: editedBody,
-        contentType: getProductSpreadsheetContentType(baseline.format),
+        contentType: getProductSpreadsheetContentType(editedFormat),
         key: artifactKey,
         metadata: {
           editedDigest,
+          editedFormat,
+          editedLayout,
+          editedRowMapDigest,
           exportJobId,
-          format: baseline.format,
           profile: baseline.profile,
+          sourceFormat,
         } as never,
       });
 
@@ -266,14 +295,17 @@ export async function createProductPreview({ request }: ActionFunctionArgs) {
 
       const job = await enqueueOrFindActiveProductPreviewJob({
         editedDigest,
+        editedFormat,
+        editedLayout,
+        editedRowMapDigest,
         editedUploadArtifactId: createdArtifact.id,
         exportJobId,
-        format: baseline.format,
         jobQueue,
         manifestArtifactId: baseline.manifestArtifact.id,
         prisma,
         profile: baseline.profile,
         shopDomain,
+        sourceFormat,
         sourceArtifactId: baseline.sourceArtifact.id,
       });
 
@@ -286,11 +318,14 @@ export async function createProductPreview({ request }: ActionFunctionArgs) {
       }
 
       return json({
+        editedFormat,
+        editedLayout,
         exportJobId,
-        format: baseline.format,
+        format: sourceFormat,
         jobId: job.id,
         kind: PRODUCT_PREVIEW_KIND,
         profile: baseline.profile,
+        sourceFormat,
         state: job.state,
       }, { status: 202 });
     } catch (error) {
@@ -386,10 +421,12 @@ async function loadPreviewJobDetail({ jobId, shopDomain }: { jobId: string; shop
 
   const payload = JSON.parse(resultBody.toString("utf8"));
   return {
-    format: payload.format ?? PRODUCT_EXPORT_FORMAT,
+    editedFormat: payload.editedFormat ?? PRODUCT_EXPORT_FORMAT,
+    editedLayout: payload.editedLayout ?? PRODUCT_SPREADSHEET_LAYOUT_CANONICAL,
     jobState: job.state,
     lastError: job.lastError,
     rows: payload.rows,
+    sourceFormat: payload.sourceFormat ?? PRODUCT_EXPORT_FORMAT,
     summary: payload.summary,
   };
 }

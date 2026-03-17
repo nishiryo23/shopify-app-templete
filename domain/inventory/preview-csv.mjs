@@ -208,6 +208,8 @@ export function inventoryRowsMatch(leftRow, rightRow) {
 export function buildInventoryPreviewDigest({
   baselineDigest,
   editedDigest,
+  editedLayout = "canonical",
+  editedRowMapDigest = "none",
   exportJobId,
   profile,
   rows,
@@ -216,6 +218,8 @@ export function buildInventoryPreviewDigest({
   return sha256Hex(JSON.stringify({
     baselineDigest,
     editedDigest,
+    editedLayout,
+    editedRowMapDigest,
     exportJobId,
     profile,
     rows: rows.map((row) => ({

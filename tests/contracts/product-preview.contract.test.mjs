@@ -665,6 +665,39 @@ test("preview digest remains stable for canonical payload", () => {
   assert.equal(digestA, digestB);
 });
 
+test("preview digest changes when edited row-map identity changes", () => {
+  const baseArgs = {
+    baselineDigest: "baseline",
+    editedDigest: "edited",
+    exportJobId: "export-1",
+    profile: "product-core-seo-v1",
+    rows: [{
+      baselineRow: null,
+      changedFields: ["title"],
+      classification: "changed",
+      currentRow: null,
+      editedRow: { product_id: "1", title: "Hat Edited" },
+      editedRowNumber: 7,
+      messages: [],
+      productId: "1",
+      sourceRowNumber: null,
+    }],
+    summary: { total: 1, changed: 1, unchanged: 0, warning: 0, error: 0 },
+  };
+  const digestA = buildPreviewDigest({
+    ...baseArgs,
+    editedLayout: "matrixify",
+    editedRowMapDigest: "row-map-a",
+  });
+  const digestB = buildPreviewDigest({
+    ...baseArgs,
+    editedLayout: "matrixify",
+    editedRowMapDigest: "row-map-b",
+  });
+
+  assert.notEqual(digestA, digestB);
+});
+
 test("preview job lookup uses active states only", async () => {
   const calls = [];
   const prisma = {
@@ -709,9 +742,11 @@ test("preview profile builds stable artifact keys and dedupe keys", () => {
   assert.equal(
     buildProductPreviewDedupeKey({
       editedDigest: "edited",
+      editedLayout: "canonical",
+      editedRowMapDigest: "none",
       exportJobId: "export-1",
     }),
-    "product-preview:export-1:edited",
+    "product-preview:export-1:canonical:edited:none",
   );
 });
 
@@ -1153,12 +1188,13 @@ test("product preview worker marks missing offline session with stable error cod
 });
 
 test("preview plan and ADR capture route truth and edited upload semantics", () => {
-  const plan = readProjectFile("plans/PD-002-upload-provenance-preview-engine.md");
+  const plan = readProjectFile("plans/PD-012-matrixify-compatibility-subset.md");
   const adr = readProjectFile("adr/0009-product-preview-route-and-provenance-contract.md");
 
-  assert.match(plan, /edited CSV/);
-  assert.match(plan, /preview は既存 PostgreSQL queue/);
-  assert.match(adr, /edited CSV は provenance 対象ではなく baseline binding 対象/);
+  assert.match(plan, /Matrixify subset/);
+  assert.match(plan, /editedRowMapDigest/);
+  assert.match(adr, /editedLayout=matrixify/);
+  assert.match(adr, /editedRowMapDigest/);
   assert.match(adr, /missing-offline-session/);
 });
 
@@ -1172,6 +1208,8 @@ test("preview route and page delegate to the shared services", () => {
   assert.match(pageFile, /preview-shell/);
   assert.match(pageFile, /product-variants-prices-v1/);
   assert.match(pageFile, /useSearchParams/);
+  assert.match(pageFile, /Edited layout/);
+  assert.match(pageFile, /matrixify mode/);
   assert.match(pageFile, /Request error:/);
   assert.match(workerBootstrap, /PRODUCT_PREVIEW_KIND/);
 });

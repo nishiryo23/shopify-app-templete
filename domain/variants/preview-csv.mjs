@@ -203,6 +203,8 @@ function normalizeBooleanString(value) {
 export function buildVariantPreviewDigest({
   baselineDigest,
   editedDigest,
+  editedLayout = "canonical",
+  editedRowMapDigest = "none",
   exportJobId,
   profile,
   rows,
@@ -211,6 +213,8 @@ export function buildVariantPreviewDigest({
   return sha256Hex(JSON.stringify({
     baselineDigest,
     editedDigest,
+    editedLayout,
+    editedRowMapDigest,
     exportJobId,
     profile,
     rows: rows.map((row) => ({

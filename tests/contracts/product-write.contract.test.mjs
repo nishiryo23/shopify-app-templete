@@ -5224,6 +5224,152 @@ test("collection write worker emits skipped rows for groups not processed after 
   assert.match(result.rows[1].messages[0], /Write stopped after an earlier infrastructure failure/);
 });
 
+test("collection write worker keeps sibling expanded rows even when they share the same edited row number", async () => {
+  const { runCollectionProductWriteJob } = await importCollectionProductWriteWorker();
+  const puts = [];
+
+  await assert.rejects(
+    runCollectionProductWriteJob({
+      artifactCatalog: {
+        async record(args) {
+          return { id: `${args.kind}-record`, ...args };
+        },
+      },
+      artifactStorage: {
+        async get() {
+          return {
+            body: Buffer.from(JSON.stringify({
+              previewDigest: "preview-digest-collections-4",
+              previewJobId: "preview-job-collections-4",
+              profile: "product-manual-collections-v1",
+              rows: [
+                {
+                  changedFields: ["membership"],
+                  classification: "changed",
+                  currentRow: null,
+                  editedRow: {
+                    collection_handle: "summer",
+                    collection_id: "gid://shopify/Collection/1",
+                    collection_title: "Summer",
+                    membership: "member",
+                    product_handle: "hat",
+                    product_id: "gid://shopify/Product/1",
+                    updated_at: "2026-03-15T00:00:00Z",
+                  },
+                  editedRowNumber: 2,
+                  operation: "add",
+                  productId: "gid://shopify/Product/1",
+                  resolvedCollectionId: "gid://shopify/Collection/1",
+                },
+                {
+                  changedFields: ["membership"],
+                  classification: "changed",
+                  currentRow: null,
+                  editedRow: {
+                    collection_handle: "winter",
+                    collection_id: "gid://shopify/Collection/2",
+                    collection_title: "Winter",
+                    membership: "member",
+                    product_handle: "hat",
+                    product_id: "gid://shopify/Product/1",
+                    updated_at: "2026-03-15T00:00:00Z",
+                  },
+                  editedRowNumber: 2,
+                  operation: "add",
+                  productId: "gid://shopify/Product/1",
+                  resolvedCollectionId: "gid://shopify/Collection/2",
+                },
+              ],
+              summary: { changed: 2, error: 0, total: 2, unchanged: 0, warning: 0 },
+            })),
+          };
+        },
+        async put(args) {
+          puts.push(args);
+          return {
+            bucket: "bucket",
+            checksumSha256: "checksum",
+            contentType: args.contentType,
+            metadata: args.metadata,
+            objectKey: args.key,
+          };
+        },
+        async delete() {},
+      },
+      job: {
+        id: "write-job-collections-4",
+        payload: {
+          previewArtifactId: "preview-artifact-collections-4",
+          previewDigest: "preview-digest-collections-4",
+          previewJobId: "preview-job-collections-4",
+          profile: "product-manual-collections-v1",
+        },
+        shopDomain: "example.myshopify.com",
+      },
+      prisma: {
+        artifact: {
+          async findFirst() {
+            return {
+              id: "preview-artifact-collections-4",
+              kind: "product.preview.result",
+              objectKey: "preview/result-collections-4.json",
+              shopDomain: "example.myshopify.com",
+            };
+          },
+        },
+      },
+      readLiveCollections: async () => ({
+        currentRowsByKey: new Map(),
+      }),
+      resolveAdminContext: async () => ({ admin: {} }),
+      resolveHandles: async () => new Map([
+        ["summer", {
+          handle: "summer",
+          id: "gid://shopify/Collection/1",
+          title: "Summer",
+        }],
+        ["winter", {
+          handle: "winter",
+          id: "gid://shopify/Collection/2",
+          title: "Winter",
+        }],
+      ]),
+      resolveIds: async () => new Map([
+        ["gid://shopify/Collection/1", {
+          handle: "summer",
+          id: "gid://shopify/Collection/1",
+          title: "Summer",
+        }],
+        ["gid://shopify/Collection/2", {
+          handle: "winter",
+          id: "gid://shopify/Collection/2",
+          title: "Winter",
+        }],
+      ]),
+      addMemberships: async (_admin, { collectionId }) => {
+        if (collectionId === "gid://shopify/Collection/1") {
+          throw new Error("first collection transport failed");
+        }
+        throw new Error("unexpected addMemberships call");
+      },
+      removeMemberships: async () => {
+        throw new Error("unexpected removeMemberships call");
+      },
+    }),
+    /first collection transport failed/,
+  );
+
+  const resultPut = puts.find((entry) => String(entry.key).endsWith("result.json"));
+  assert.ok(resultPut);
+  const result = JSON.parse(String(resultPut.body));
+  assert.equal(result.summary.total, 2);
+  assert.equal(result.rows.length, 2);
+  assert.equal(result.rows[0].verificationStatus, "verification_failed");
+  assert.equal(result.rows[1].verificationStatus, "skipped");
+  assert.equal(result.rows[1].mutationStatus, "skipped");
+  assert.equal(result.rows[1].resolvedCollectionId, "gid://shopify/Collection/2");
+});
+
 test("collection write worker fails revalidation when the confirmed handle no longer resolves to the previewed collection", async () => {
   const { runCollectionProductWriteJob } = await importCollectionProductWriteWorker();
   let addMembershipCalls = 0;

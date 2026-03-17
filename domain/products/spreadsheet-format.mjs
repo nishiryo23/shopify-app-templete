@@ -4,6 +4,10 @@ import { createReadStream } from "node:fs";
 import { canonicalizeCsvSpreadsheet, parseCsvRows } from "../spreadsheets/csv.mjs";
 import { buildXlsxBufferFromRows, buildXlsxFileFromCsvStream, canonicalizeXlsxWorksheet } from "../spreadsheets/xlsx.mjs";
 import {
+  buildEditedRowMapDigest,
+  buildIdentityEditedRowNumbers,
+} from "./edited-row-map.mjs";
+import {
   PRODUCT_CORE_SEO_EXPORT_HEADERS,
   PRODUCT_CORE_SEO_EXPORT_PROFILE,
   PRODUCT_EXPORT_FORMAT,
@@ -21,6 +25,10 @@ import {
   PRODUCT_VARIANTS_EXPORT_HEADERS,
   PRODUCT_VARIANTS_EXPORT_PROFILE,
 } from "./export-profile.mjs";
+import { canonicalizeMatrixifyProductSpreadsheet } from "./matrixify-preview.mjs";
+
+export const PRODUCT_SPREADSHEET_LAYOUT_CANONICAL = "canonical";
+export const PRODUCT_SPREADSHEET_LAYOUT_MATRIXIFY = "matrixify";
 
 const PRODUCT_EXPORT_FORMAT_CONTENT_TYPES = Object.freeze({
   [PRODUCT_EXPORT_FORMAT]: "text/csv; charset=utf-8",
@@ -90,27 +98,56 @@ export function assertProductSpreadsheetFileName({ fileName, format = PRODUCT_EX
   }
 }
 
+export function resolveProductSpreadsheetFormatFromFileName(fileName = "") {
+  const extension = path.extname(String(fileName ?? "")).toLowerCase();
+  if (extension === ".xlsx") {
+    return PRODUCT_EXPORT_XLSX_FORMAT;
+  }
+  if (extension === ".csv") {
+    return PRODUCT_EXPORT_FORMAT;
+  }
+  return null;
+}
+
 export async function canonicalizeProductSpreadsheet({
+  baselineCanonicalCsvText = "",
   body,
   format = PRODUCT_EXPORT_FORMAT,
+  layout = PRODUCT_SPREADSHEET_LAYOUT_CANONICAL,
   profile = PRODUCT_CORE_SEO_EXPORT_PROFILE,
 }) {
-  const headers = getProductExportHeaders(profile);
+  let result;
 
-  if (format === PRODUCT_EXPORT_XLSX_FORMAT) {
-    return canonicalizeXlsxWorksheet({
+  if (layout === PRODUCT_SPREADSHEET_LAYOUT_MATRIXIFY) {
+    result = await canonicalizeMatrixifyProductSpreadsheet({
+      baselineCanonicalCsvText,
       body,
-      headerError: buildHeaderError(profile, format),
-      headers,
-      worksheetName: profile,
+      format,
+      profile,
     });
+  } else {
+    const headers = getProductExportHeaders(profile);
+
+    result = format === PRODUCT_EXPORT_XLSX_FORMAT
+      ? await canonicalizeXlsxWorksheet({
+        body,
+        headerError: buildHeaderError(profile, format),
+        headers,
+        worksheetName: profile,
+      })
+      : canonicalizeCsvSpreadsheet({
+        csvText: Buffer.isBuffer(body) ? body.toString("utf8") : String(body ?? ""),
+        headerError: buildHeaderError(profile, format),
+        headers,
+      });
   }
 
-  return canonicalizeCsvSpreadsheet({
-    csvText: Buffer.isBuffer(body) ? body.toString("utf8") : String(body ?? ""),
-    headerError: buildHeaderError(profile, format),
-    headers,
-  });
+  const editedRowNumbers = result.editedRowNumbers ?? buildIdentityEditedRowNumbers(result.rowCount);
+  return {
+    ...result,
+    editedRowMapDigest: result.editedRowMapDigest ?? buildEditedRowMapDigest(editedRowNumbers),
+    editedRowNumbers,
+  };
 }
 
 export async function buildProductSourceBufferFromCanonicalCsv({

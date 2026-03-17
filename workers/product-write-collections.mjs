@@ -430,9 +430,9 @@ export async function runCollectionProductWriteJob({
     }
 
     if (infrastructureError) {
-      const processedRowNumbers = new Set(mutationRows.map((row) => row.editedRowNumber));
+      const processedRowKeys = new Set(mutationRows.map((row) => buildRowKey(row)));
       for (const row of revalidationRows) {
-        if (processedRowNumbers.has(row.editedRowNumber)) {
+        if (processedRowKeys.has(buildRowKey(row))) {
           continue;
         }
 

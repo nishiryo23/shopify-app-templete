@@ -1,5 +1,6 @@
 import { sha256Hex } from "../provenance/signing.mjs";
 import { PRODUCT_MANUAL_COLLECTIONS_EXPORT_HEADERS } from "../products/export-profile.mjs";
+import { MATRIXIFY_NOOP_COLLECTION_UPDATED_AT } from "../products/matrixify-preview.mjs";
 
 function normalizeCsv(csvText) {
   return csvText.replace(/\r\n/g, "\n");
@@ -217,6 +218,8 @@ function buildSummary(rows) {
 export function buildCollectionPreviewDigest({
   baselineDigest,
   editedDigest,
+  editedLayout = "canonical",
+  editedRowMapDigest = "none",
   exportJobId,
   profile,
   resolvedCollectionIdsByHandle,
@@ -226,6 +229,8 @@ export function buildCollectionPreviewDigest({
   return sha256Hex(JSON.stringify({
     baselineDigest,
     editedDigest,
+    editedLayout,
+    editedRowMapDigest,
     exportJobId,
     profile,
     resolvedCollectionIdsByHandle: stableSortObject(resolvedCollectionIdsByHandle ?? {}),
@@ -278,6 +283,11 @@ export function buildCollectionPreviewRows({
     const productId = String(entry.row.product_id ?? "").trim();
     const productRow = productRowsById.get(productId) ?? null;
     const membership = normalizeMembership(entry.row.membership);
+    const isMatrixifyNoopRow = !membership
+      && !String(entry.row.collection_id ?? "").trim()
+      && !String(entry.row.collection_handle ?? "").trim()
+      && !String(entry.row.collection_title ?? "").trim()
+      && String(entry.row.updated_at ?? "") === MATRIXIFY_NOOP_COLLECTION_UPDATED_AT;
 
     if (!productId) {
       messages.push("product_id is required");
@@ -285,7 +295,7 @@ export function buildCollectionPreviewRows({
       messages.push("product_id must reference an existing Shopify product");
     }
 
-    if (!membership) {
+    if (!membership && !isMatrixifyNoopRow) {
       messages.push("membership must be member or remove");
     }
 
@@ -295,13 +305,13 @@ export function buildCollectionPreviewRows({
       row: entry.row,
     });
 
-    if (collectionResolveError) {
+    if (collectionResolveError && !isMatrixifyNoopRow) {
       messages.push(collectionResolveError);
     }
 
-    if (!resolvedCollection) {
+    if (!resolvedCollection && !isMatrixifyNoopRow) {
       messages.push("collection_id or collection_handle must reference an existing manual collection");
-    } else if (resolvedCollection.ruleSet != null) {
+    } else if (resolvedCollection?.ruleSet != null) {
       messages.push("smart collections are not supported in product-manual-collections-v1");
     }
 
@@ -360,6 +370,25 @@ export function buildCollectionPreviewRows({
           messages.push("updated_at is read-only and must match Shopify");
         }
       }
+    }
+
+    if (isMatrixifyNoopRow && messages.length === 0) {
+      return {
+        baselineRow: null,
+        changedFields: [],
+        classification: "unchanged",
+        currentRow: null,
+        editedRow: {
+          ...entry.row,
+          updated_at: "",
+        },
+        editedRowNumber: entry.rowNumber,
+        messages,
+        operation: "add",
+        productId,
+        resolvedCollectionId: null,
+        sourceRowNumber: null,
+      };
     }
 
     if (messages.length > 0) {

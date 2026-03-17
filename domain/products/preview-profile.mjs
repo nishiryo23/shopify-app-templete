@@ -21,27 +21,35 @@ export function buildProductPreviewArtifactKey({
 
 export function buildProductPreviewDedupeKey({
   editedDigest,
+  editedLayout = "canonical",
+  editedRowMapDigest = "none",
   exportJobId,
 }) {
-  return `product-preview:${exportJobId}:${editedDigest}`;
+  return `product-preview:${exportJobId}:${editedLayout}:${editedDigest}:${editedRowMapDigest}`;
 }
 
 export function buildProductPreviewPayload({
   editedDigest,
+  editedFormat,
+  editedLayout = "canonical",
+  editedRowMapDigest = "none",
   editedUploadArtifactId,
   exportJobId,
-  format,
   manifestArtifactId,
   profile,
+  sourceFormat,
   sourceArtifactId,
 }) {
   return {
     editedDigest,
+    editedFormat,
+    editedLayout,
+    editedRowMapDigest,
     editedUploadArtifactId,
     exportJobId,
-    format,
     manifestArtifactId,
     profile,
+    sourceFormat,
     sourceArtifactId,
   };
 }

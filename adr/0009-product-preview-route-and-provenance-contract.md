@@ -15,12 +15,15 @@
 - preview baseline に使える export は、同一 shop の completed `product.export` job であり、対応する `product.export.source` と `product.export.manifest` artifact が両方存在し、`deletedAt IS NULL` の場合のみとする。
 - source provenance verify は `exportJobId + source file + manifest artifact` を正本にし、CSV/XLSX のどちらでも canonical rows に変換したうえで `manifest verify` / `row fingerprint verify` を行う。
 - edited CSV は provenance 対象ではなく baseline binding 対象とする。このルールを XLSX にも同じ canonical rows semantics で拡張する。closed-loop の意味は、app が生成した canonical rows を baseline とし、その baseline 上の rows だけを merchant が編集することに固定する。
-- preview dedupe key は `product-preview:${exportJobId}:${editedDigest}` とし、active states は `queued / retryable / leased` に固定する。terminal job は accepted response に再利用しない。
+- preview request は `sourceFile` と `editedFile` の両方を必須とする。Matrixify compatibility を使う場合も source upload requirement は緩めず、edited file にだけ `editedLayout=matrixify` を許可する。
+- preview route payload / result / artifact metadata は `sourceFormat`, `editedFormat`, `editedLayout`, `editedRowMapDigest` を持つ。source と edited は別 format で canonicalize できるが、preview/write truth は常に canonical CSV rows に収束させる。
+- preview dedupe key は `product-preview:${exportJobId}:${editedLayout}:${editedDigest}:${editedRowMapDigest}` とし、active states は `queued / retryable / leased` に固定する。terminal job は accepted response に再利用しない。
 - preview worker は offline Admin client で live Shopify state を読む。offline session 不在は retryable にせず terminal failure とし、stable error code は `missing-offline-session`、`product.preview` job の `maxAttempts` は `1` とする。
 - preview route が新たに保存する upload artifact は edited file のみで、kind は `product.preview.edited-upload` とする。source file は既存 `product.export.source` artifact を正本にし、preview 側で再保存しない。
 - worksheet contract は `1 workbook = 1 worksheet`、worksheet 名は selected profile と一致、header row は `A1` 開始で canonical header と完全一致、2 行目以降を data row、trailing empty rows のみ無視に固定する。extra sheet / extra column / header alias / non-text cell は reject する。
-- preview result artifact は `product.preview.result` とし、`format`, `summary`, `rows`, `baselineDigest`, `editedDigest`, `previewDigest`, `sourceArtifactId`, `manifestArtifactId`, `editedUploadArtifactId`, `exportJobId`, `profile` を payload に持つ。
-- `previewDigest` は `profile`, `exportJobId`, `baselineDigest`, `editedDigest`, `summary`, `rows[].productId`, `rows[].classification`, `rows[].changedFields`, `rows[].baselineRow`, `rows[].editedRow`, `rows[].currentRow` を stable key order で canonical JSON 化した値の sha256 とする。UI 表示順や polling metadata は hash 対象に含めない。
+- Matrixify compatibility は import-only subset に限定する。allowed headers は profile ごとの subset match で検証し、unknown header, missing required header, unsupported destructive semantics, unsupported type/command は explicit error に落とす。
+- preview result artifact は `product.preview.result` とし、`sourceFormat`, `editedFormat`, `editedLayout`, `editedRowMapDigest`, `summary`, `rows`, `baselineDigest`, `editedDigest`, `previewDigest`, `sourceArtifactId`, `manifestArtifactId`, `editedUploadArtifactId`, `exportJobId`, `profile` を payload に持つ。
+- `previewDigest` は `profile`, `exportJobId`, `baselineDigest`, `editedDigest`, `editedLayout`, `editedRowMapDigest`, `summary`, `rows[].productId`, `rows[].classification`, `rows[].changedFields`, `rows[].baselineRow`, `rows[].editedRow`, `rows[].currentRow` を stable key order で canonical JSON 化した値の sha256 とする。UI 表示順そのものではなく row-map digest を hash 対象に含める。
 - preview は既存 PostgreSQL-backed queue と `JobLease` の shop 単位 lease をそのまま使い、基盤上は同一 shop の export/write 系 job と直列実行される。この ticket では queue truth を変更しない。
 
 ## Consequences

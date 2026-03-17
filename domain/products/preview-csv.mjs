@@ -165,6 +165,8 @@ export function indexRowsByProductId(parsedRows) {
 export function buildPreviewDigest({
   baselineDigest,
   editedDigest,
+  editedLayout = "canonical",
+  editedRowMapDigest = "none",
   exportJobId,
   profile,
   rows,
@@ -173,6 +175,8 @@ export function buildPreviewDigest({
   const canonicalPreviewPayload = {
     baselineDigest,
     editedDigest,
+    editedLayout,
+    editedRowMapDigest,
     exportJobId,
     profile,
     rows: rows.map((row) => ({

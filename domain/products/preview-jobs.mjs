@@ -6,11 +6,18 @@ import {
 
 export function buildActiveProductPreviewWhere({
   editedDigest,
+  editedLayout = "canonical",
+  editedRowMapDigest = "none",
   exportJobId,
   shopDomain,
 }) {
   return {
-    dedupeKey: buildProductPreviewDedupeKey({ editedDigest, exportJobId }),
+    dedupeKey: buildProductPreviewDedupeKey({
+      editedDigest,
+      editedLayout,
+      editedRowMapDigest,
+      exportJobId,
+    }),
     kind: PRODUCT_PREVIEW_KIND,
     shopDomain,
     state: {
@@ -21,6 +28,8 @@ export function buildActiveProductPreviewWhere({
 
 export async function findActiveProductPreviewJob({
   editedDigest,
+  editedLayout = "canonical",
+  editedRowMapDigest = "none",
   exportJobId,
   prisma,
   shopDomain,
@@ -29,6 +38,8 @@ export async function findActiveProductPreviewJob({
     orderBy: [{ createdAt: "desc" }],
     where: buildActiveProductPreviewWhere({
       editedDigest,
+      editedLayout,
+      editedRowMapDigest,
       exportJobId,
       shopDomain,
     }),
@@ -37,26 +48,37 @@ export async function findActiveProductPreviewJob({
 
 export async function enqueueProductPreviewJob({
   editedDigest,
+  editedFormat,
+  editedLayout = "canonical",
+  editedRowMapDigest = "none",
   editedUploadArtifactId,
   exportJobId,
-  format,
   jobQueue,
   manifestArtifactId,
   profile,
   shopDomain,
+  sourceFormat,
   sourceArtifactId,
 }) {
   return jobQueue.enqueue({
-    dedupeKey: buildProductPreviewDedupeKey({ editedDigest, exportJobId }),
+    dedupeKey: buildProductPreviewDedupeKey({
+      editedDigest,
+      editedLayout,
+      editedRowMapDigest,
+      exportJobId,
+    }),
     kind: PRODUCT_PREVIEW_KIND,
     maxAttempts: 1,
     payload: buildProductPreviewPayload({
       editedDigest,
+      editedFormat,
+      editedLayout,
+      editedRowMapDigest,
       editedUploadArtifactId,
       exportJobId,
-      format,
       manifestArtifactId,
       profile,
+      sourceFormat,
       sourceArtifactId,
     }),
     shopDomain,
@@ -65,25 +87,31 @@ export async function enqueueProductPreviewJob({
 
 export async function enqueueOrFindActiveProductPreviewJob({
   editedDigest,
+  editedFormat,
+  editedLayout = "canonical",
+  editedRowMapDigest = "none",
   editedUploadArtifactId,
   exportJobId,
-  format,
   jobQueue,
   manifestArtifactId,
   prisma,
   profile,
   shopDomain,
+  sourceFormat,
   sourceArtifactId,
 }) {
   let job = await enqueueProductPreviewJob({
     editedDigest,
+    editedFormat,
+    editedLayout,
+    editedRowMapDigest,
     editedUploadArtifactId,
     exportJobId,
-    format,
     jobQueue,
     manifestArtifactId,
     profile,
     shopDomain,
+    sourceFormat,
     sourceArtifactId,
   });
 
@@ -93,6 +121,8 @@ export async function enqueueOrFindActiveProductPreviewJob({
 
   job = await findActiveProductPreviewJob({
     editedDigest,
+    editedLayout,
+    editedRowMapDigest,
     exportJobId,
     prisma,
     shopDomain,
@@ -104,13 +134,16 @@ export async function enqueueOrFindActiveProductPreviewJob({
 
   job = await enqueueProductPreviewJob({
     editedDigest,
+    editedFormat,
+    editedLayout,
+    editedRowMapDigest,
     editedUploadArtifactId,
     exportJobId,
-    format,
     jobQueue,
     manifestArtifactId,
     profile,
     shopDomain,
+    sourceFormat,
     sourceArtifactId,
   });
 
@@ -120,6 +153,8 @@ export async function enqueueOrFindActiveProductPreviewJob({
 
   return findActiveProductPreviewJob({
     editedDigest,
+    editedLayout,
+    editedRowMapDigest,
     exportJobId,
     prisma,
     shopDomain,

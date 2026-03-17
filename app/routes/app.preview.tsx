@@ -22,7 +22,8 @@ type PreviewLoaderData = {
     writeJobId: string | null;
   };
   preview: null | {
-    format?: string;
+    editedFormat?: string;
+    editedLayout?: string;
     jobState: string;
     lastError: string | null;
     rows: Array<{
@@ -33,6 +34,7 @@ type PreviewLoaderData = {
       changedFields: string[];
       messages: string[];
     }> | null;
+    sourceFormat?: string;
     summary: Record<string, number> | null;
   };
   selectedProfile: string;
@@ -62,11 +64,14 @@ export default function PreviewRoute() {
     state: string;
   }>();
   const createFetcher = useFetcher<{
+    editedFormat?: string;
+    editedLayout?: string;
     error?: string;
     exportJobId: string;
     format?: string;
     jobId: string;
     profile: string;
+    sourceFormat?: string;
     state: string;
   }>();
   const writeFetcher = useFetcher<{
@@ -92,6 +97,7 @@ export default function PreviewRoute() {
   const loadedExports = selectedLoaderData?.exports ?? [];
   const [selectedExportJobId, setSelectedExportJobId] = useState(loadedExports[0]?.id ?? "");
   const [selectedExportFormat, setSelectedExportFormat] = useState("csv");
+  const [editedLayout, setEditedLayout] = useState("canonical");
   const latestWrite = selectedLoaderData?.latestWrite ?? null;
   const activePreview = selectedLoaderData?.preview ?? null;
   const activeWrite = selectedLoaderData?.write ?? null;
@@ -105,9 +111,12 @@ export default function PreviewRoute() {
   const previewHasWritableRows = Boolean(activePreview?.rows?.some((row) => row.changedFields.length > 0));
   const selectedExport = loadedExports.find((job) => job.id === selectedExportJobId) ?? null;
   const selectedBaselineFormat = selectedExport?.format ?? createFetcher.data?.format ?? "csv";
-  const uploadAccept = selectedBaselineFormat === "xlsx"
+  const sourceUploadAccept = selectedBaselineFormat === "xlsx"
     ? ".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     : ".csv,text/csv";
+  const editedUploadAccept = editedLayout === "matrixify"
+    ? ".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    : sourceUploadAccept;
   const latestWriteMatchesPreview = Boolean(
     latestWrite?.outcome === "verified_success"
       && latestWrite.previewJobId
@@ -258,7 +267,7 @@ export default function PreviewRoute() {
         </s-section>
         <s-section heading="Upload source and edited file">
           <s-paragraph>
-            source file は選択した export と同じ format の原本のみ有効です。baseline は canonical rows で provenance verify されます。
+            source file は選択した export と同じ format の原本のみ有効です。baseline は canonical rows で provenance verify され、matrixify mode でも source upload は必須です。
           </s-paragraph>
           <createFetcher.Form action="/app/product-previews" encType="multipart/form-data" method="post">
             <div style={{ display: "grid", gap: "0.75rem", maxWidth: "42rem" }}>
@@ -278,13 +287,31 @@ export default function PreviewRoute() {
               </label>
               <input name="profile" type="hidden" value={selectedProfile} />
               <label>
-                <span>Source {selectedBaselineFormat.toUpperCase()}</span>
-                <input name="sourceFile" required type="file" accept={uploadAccept} />
+                <span>Edited layout</span>
+                <select
+                  name="editedLayout"
+                  onChange={(event) => setEditedLayout(event.currentTarget.value)}
+                  value={editedLayout}
+                >
+                  <option value="canonical">canonical</option>
+                  <option value="matrixify">matrixify</option>
+                </select>
               </label>
               <label>
-                <span>Edited {selectedBaselineFormat.toUpperCase()}</span>
-                <input name="editedFile" required type="file" accept={uploadAccept} />
+                <span>Source {selectedBaselineFormat.toUpperCase()}</span>
+                <input name="sourceFile" required type="file" accept={sourceUploadAccept} />
               </label>
+              <label>
+                <span>
+                  Edited {editedLayout === "matrixify" ? "CSV/XLSX (Matrixify subset)" : selectedBaselineFormat.toUpperCase()}
+                </span>
+                <input name="editedFile" required type="file" accept={editedUploadAccept} />
+              </label>
+              <s-paragraph>
+                {editedLayout === "matrixify"
+                  ? "matrixify mode では edited file だけが Matrixify subset です。source は app export 原本、edited は csv/xlsx を受理します。"
+                  : "canonical mode では source / edited の両方が選択 export と同じ format である必要があります。"}
+              </s-paragraph>
               <button type="submit">
                 {createFetcher.state === "submitting" ? "Uploading..." : "Create preview"}
               </button>

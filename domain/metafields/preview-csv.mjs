@@ -380,20 +380,28 @@ export function buildMetafieldPreviewRows({
   const rows = [];
 
   for (const entry of editedRows) {
-    const editedRow = {
+    const normalizedRow = {
       ...entry.row,
       key: String(entry.row.key ?? "").trim(),
       namespace: String(entry.row.namespace ?? "").trim(),
       type: String(entry.row.type ?? "").trim(),
       value: canonicalizeMetafieldCsvValue(entry.row.type ?? "", entry.row.value ?? ""),
     };
-    const key = buildMetafieldRowKey(editedRow);
+    const key = buildMetafieldRowKey(normalizedRow);
     const baselineEntry = baselineRowsByKey.get(key) ?? null;
     const baselineRow = baselineEntry?.row
       ? normalizeComparableRow(baselineEntry.row)
       : null;
     const currentRow = normalizeComparableRow(currentRowsByKey.get(key) ?? null);
-    const productRow = productRowsById.get(editedRow.product_id) ?? null;
+    const productRow = productRowsById.get(normalizedRow.product_id) ?? null;
+    const editedRow = {
+      ...normalizedRow,
+      product_handle: String(normalizedRow.product_handle ?? "").trim()
+        || baselineRow?.product_handle
+        || currentRow?.product_handle
+        || productRow?.product_handle
+        || "",
+    };
     const messages = [];
 
     validateRequiredFields(editedRow, messages);
@@ -456,6 +464,8 @@ export function buildMetafieldPreviewRows({
 export function buildMetafieldPreviewDigest({
   baselineDigest,
   editedDigest,
+  editedLayout = "canonical",
+  editedRowMapDigest = "none",
   exportJobId,
   profile,
   rows,
@@ -464,6 +474,8 @@ export function buildMetafieldPreviewDigest({
   return sha256Hex(JSON.stringify({
     baselineDigest,
     editedDigest,
+    editedLayout,
+    editedRowMapDigest,
     exportJobId,
     profile,
     rows: rows.map((row) => ({
