@@ -20,6 +20,10 @@ launch scope は web + worker + object storage + DB queue + secrets + observabil
 - Prisma migration は GitHub runner 直実行ではなく、Secrets Manager を参照する ECS one-off task で実行する
 - ALB health check は unauthenticated な `/health` endpoint を正本にする
 - `P-006` の deploy skeleton は既存 ECS service を更新する前提とし、service 作成や DNS cutover は含めない
+- observability backend は CloudWatch Logs / EMF Metrics / Alarms を正本にし、`TELEMETRY_PSEUDONYM_KEY` は `web` / `worker` にのみ注入する
+- scheduler resource 自体の IaC は後続だが、cadence / timezone / dedupeKey format は `infra/aws/observability-contract.json` で先に固定する
+- EventBridge Scheduler resource をまだ provision していない間は、`worker` が `infra/aws/observability-contract.json` の cadence に従って system sweep job を自己 enqueue する
+- self-enqueued system sweep job は ordinary shop backlog より優先して lease し、dead-letter 後も bounded cooldown で同一 scheduler window を再試行する
 
 ## Consequences
 serverless 単機能構成より job orchestration と artifact retention を扱いやすい。

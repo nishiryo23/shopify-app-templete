@@ -42,10 +42,10 @@ async function markDeletedIfPresent(catalog, descriptor) {
   }
 }
 
-async function loadArtifactRecordOrThrow(prisma, { artifactId, kind, shopDomain }) {
+async function loadArtifactRecordOrThrow(prisma, { artifactId, includeDeleted = false, kind, shopDomain }) {
   const artifact = await prisma.artifact.findFirst({
     where: {
-      deletedAt: null,
+      deletedAt: includeDeleted ? undefined : null,
       id: artifactId,
       kind,
       shopDomain,
@@ -57,6 +57,17 @@ async function loadArtifactRecordOrThrow(prisma, { artifactId, kind, shopDomain 
   }
 
   return artifact;
+}
+
+function isArtifactRetentionExpired({ artifact, now = new Date() }) {
+  return artifact?.deletedAt != null
+    || (artifact?.retentionUntil != null && artifact.retentionUntil <= now);
+}
+
+function buildRetentionExpiredError(kind) {
+  const error = new Error(`retention-expired:${kind}`);
+  error.code = "retention-expired";
+  return error;
 }
 
 async function persistJsonArtifact({
@@ -233,6 +244,7 @@ export async function runProductUndoJob({
   assertJobLeaseActive = () => {},
   deleteRedirect,
   job,
+  now = new Date(),
   prisma,
   readLiveProducts,
   readLiveRedirects,
@@ -261,15 +273,25 @@ export async function runProductUndoJob({
     const [writeArtifact, snapshotArtifact] = await Promise.all([
       loadArtifactRecordOrThrow(prisma, {
         artifactId: payload.writeArtifactId,
+        includeDeleted: true,
         kind: "product.write.result",
         shopDomain: job.shopDomain,
       }),
       loadArtifactRecordOrThrow(prisma, {
         artifactId: payload.snapshotArtifactId,
+        includeDeleted: true,
         kind: "product.write.snapshot",
         shopDomain: job.shopDomain,
       }),
     ]);
+
+    if (isArtifactRetentionExpired({ artifact: writeArtifact, now })) {
+      throw buildRetentionExpiredError("product.write.result");
+    }
+
+    if (isArtifactRetentionExpired({ artifact: snapshotArtifact, now })) {
+      throw buildRetentionExpiredError("product.write.snapshot");
+    }
 
     const [writeRecord, snapshotRecord] = await Promise.all([
       artifactStorage.get(writeArtifact.objectKey),

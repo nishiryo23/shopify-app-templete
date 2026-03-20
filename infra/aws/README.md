@@ -23,11 +23,14 @@
 - Secrets Manager
 - ALB
 - CloudWatch Logs
+- CloudWatch Metrics / Alarms
+
+`infra/aws/observability-contract.json` を observability / retention / scheduler cadence の repo 正本とする。
 
 ## Out of scope
 - Full IaC
 - Route 53 cutover
-- EventBridge Scheduler wiring
+- EventBridge Scheduler resource provisioning
 - Service creation
 - Production cutover
 
@@ -50,6 +53,7 @@
 - `SHOPIFY_API_SECRET`
 - `SHOP_TOKEN_ENCRYPTION_KEY`
 - `PROVENANCE_SIGNING_KEY`
+- `TELEMETRY_PSEUDONYM_KEY` (`web` / `worker` のみ)
 
 secret は ECS task definition の `secrets.valueFrom` で注入する。GitHub Actions は secret 値を扱わず、ARN または名前だけを input として渡す。
 
@@ -63,6 +67,16 @@ secret は ECS task definition の `secrets.valueFrom` で注入する。GitHub 
 - artifact truth は `private S3 + SSE-KMS`
 - public bucket と public URL は前提にしない
 - `SHOP_TOKEN_ENCRYPTION_KEY` と `PROVENANCE_SIGNING_KEY` は別 secret にする
+- `TELEMETRY_PSEUDONYM_KEY` は `web` / `worker` のみ必須とし、`migrate` task には注入しない
+
+## Observability contract
+- CloudWatch Logs retention は 7 日
+- EMF namespace は `ShopifyMatri/Operations`
+- alarm / scheduler cadence / retention policy は `infra/aws/observability-contract.json` に固定する
+- webhook raw payload / HMAC は ingress から最大 7 日で redact し、未処理 residue には metadata だけを残す
+- retention sweep は `Asia/Tokyo` 03:00 に日次実行、stuck-job sweep は 5 分ごとに実行する
+- EventBridge Scheduler resource をまだ provision していない環境では、起動中の `worker` が同 cadence で system sweep job を自己 enqueue する
+- self-enqueued system sweep job は shop backlog より先に lease し、dead-letter しても cooldown 後に同一 window を再試行する
 
 ## Deploy order
 1. Docker image build
@@ -90,11 +104,13 @@ secret は ECS task definition の `secrets.valueFrom` で注入する。GitHub 
 - `shopify_api_secret_arn`
 - `shop_token_encryption_key_secret_arn`
 - `provenance_signing_key_secret_arn`
+- `telemetry_pseudonym_key_secret_arn`
 
 `private_subnet_ids` と `task_security_group_ids` は comma-separated string として workflow に渡す。
 
 ## Future work
 - EventBridge Scheduler resource と target wiring
+- CloudWatch Alarm resource provisioning
 - Service provisioning IaC
 - Route 53 / DNS cutover
 - S3 adapter の本格実装

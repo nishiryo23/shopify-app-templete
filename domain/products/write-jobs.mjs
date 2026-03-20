@@ -6,12 +6,18 @@ import {
   PRODUCT_UNDO_KIND,
   PRODUCT_WRITE_KIND,
   PRODUCT_WRITE_RESULT_ARTIFACT_KIND,
+  PRODUCT_WRITE_SNAPSHOT_ARTIFACT_KIND,
 } from "./write-profile.mjs";
 
 const ACTIVE_STATES = Object.freeze(["queued", "retryable", "leased"]);
 const SUCCESS_OUTCOME = "verified_success";
 const ROLLBACKABLE_WRITE_OUTCOMES = new Set(["verified_success", "partial_failure"]);
 const SUCCESSFUL_UNDO_KIND = "product.undo.result";
+
+function isArtifactRetentionExpired({ artifact, now = new Date() }) {
+  return artifact?.deletedAt != null
+    || (artifact?.retentionUntil != null && artifact.retentionUntil <= now);
+}
 
 function isMatchingSuccessArtifact({ artifact, profile }) {
   const metadata = artifact.metadata ?? {};
@@ -26,6 +32,7 @@ function isRollbackableWriteArtifact({ artifact, profile }) {
 }
 
 async function findVerifiedSuccessArtifacts({
+  includeDeleted = false,
   kind,
   prisma,
   profile,
@@ -41,7 +48,7 @@ async function findVerifiedSuccessArtifacts({
       skip,
       take,
       where: {
-        deletedAt: null,
+        deletedAt: includeDeleted ? undefined : null,
         kind,
         shopDomain,
       },
@@ -57,6 +64,7 @@ async function findVerifiedSuccessArtifacts({
 }
 
 async function findRollbackableWriteArtifacts({
+  includeDeleted = false,
   prisma,
   profile,
   shopDomain,
@@ -71,7 +79,7 @@ async function findRollbackableWriteArtifacts({
       skip,
       take,
       where: {
-        deletedAt: null,
+        deletedAt: includeDeleted ? undefined : null,
         kind: PRODUCT_WRITE_RESULT_ARTIFACT_KIND,
         shopDomain,
       },
@@ -228,20 +236,44 @@ export async function enqueueOrFindActiveProductUndoJob(args) {
   });
 }
 
+async function findUndoneWriteJobIds({ includeDeleted = false, prisma, profile, shopDomain }) {
+  const successfulUndoArtifacts = await findVerifiedSuccessArtifacts({
+    includeDeleted,
+    kind: SUCCESSFUL_UNDO_KIND,
+    prisma,
+    profile,
+    shopDomain,
+  });
+
+  return new Set(
+    successfulUndoArtifacts.map((artifact) => artifact.metadata?.writeJobId).filter(Boolean),
+  );
+}
+
 export async function findVerifiedSuccessfulProductWriteArtifactByPreviewJobId({
   previewJobId,
   prisma,
   profile,
   shopDomain,
 }) {
-  const artifacts = await findVerifiedSuccessArtifacts({
-    kind: PRODUCT_WRITE_RESULT_ARTIFACT_KIND,
-    prisma,
-    profile,
-    shopDomain,
-  });
+  const [artifacts, undoneWriteJobIds] = await Promise.all([
+    findVerifiedSuccessArtifacts({
+      kind: PRODUCT_WRITE_RESULT_ARTIFACT_KIND,
+      prisma,
+      profile,
+      shopDomain,
+    }),
+    findUndoneWriteJobIds({
+      prisma,
+      profile,
+      shopDomain,
+    }),
+  ]);
 
-  return artifacts.find((artifact) => artifact.metadata?.previewJobId === previewJobId) ?? null;
+  return artifacts.find((artifact) =>
+    artifact.metadata?.previewJobId === previewJobId
+    && !undoneWriteJobIds.has(artifact.jobId)
+  ) ?? null;
 }
 
 export async function findLatestSuccessfulProductWriteArtifact({
@@ -249,9 +281,8 @@ export async function findLatestSuccessfulProductWriteArtifact({
   profile,
   shopDomain,
 }) {
-  const [successfulUndoArtifacts, successfulWriteArtifacts] = await Promise.all([
-    findVerifiedSuccessArtifacts({
-      kind: SUCCESSFUL_UNDO_KIND,
+  const [undoneWriteJobIds, successfulWriteArtifacts] = await Promise.all([
+    findUndoneWriteJobIds({
       prisma,
       profile,
       shopDomain,
@@ -262,11 +293,53 @@ export async function findLatestSuccessfulProductWriteArtifact({
       shopDomain,
     }),
   ]);
-  const undoneWriteJobIds = new Set(
-    successfulUndoArtifacts.map((artifact) => artifact.metadata?.writeJobId).filter(Boolean),
-  );
 
   return successfulWriteArtifacts.find((artifact) => !undoneWriteJobIds.has(artifact.jobId)) ?? null;
+}
+
+export async function findLatestRollbackableWriteState({
+  now = new Date(),
+  prisma,
+  profile,
+  shopDomain,
+}) {
+  const [undoneWriteJobIds, rollbackableWriteArtifacts] = await Promise.all([
+    findUndoneWriteJobIds({
+      includeDeleted: true,
+      prisma,
+      profile,
+      shopDomain,
+    }),
+    findRollbackableWriteArtifacts({
+      includeDeleted: true,
+      prisma,
+      profile,
+      shopDomain,
+    }),
+  ]);
+  const latestArtifact = rollbackableWriteArtifacts.find((artifact) => !undoneWriteJobIds.has(artifact.jobId));
+
+  if (!latestArtifact?.jobId) {
+    return null;
+  }
+
+  const snapshotArtifact = await prisma.artifact.findFirst({
+    where: {
+      jobId: latestArtifact.jobId,
+      kind: PRODUCT_WRITE_SNAPSHOT_ARTIFACT_KIND,
+      shopDomain,
+    },
+  });
+
+  const retentionExpired = [latestArtifact, snapshotArtifact]
+    .filter(Boolean)
+    .some((artifact) => isArtifactRetentionExpired({ artifact, now }));
+
+  return {
+    artifact: latestArtifact,
+    retentionExpired,
+    snapshotArtifact,
+  };
 }
 
 export function isVerifiedSuccessOutcome(artifact) {

@@ -44,3 +44,4 @@ embedded / pricing / invalid-session document のいずれかで admin reviewer 
 - Playwright の browser state は `playwright/.auth/` など repo で ignore される場所に保存し、admin cookie を commit しない。
 - beta-only 機能を reviewer store に見せる場合は明記する。
 - install / reinstall / pricing path を未確認のまま提出しない。
+- reviewer に共有する packet は `docs/reviewer-packet.md` を正本にし、この checklist の順序と一致させる。

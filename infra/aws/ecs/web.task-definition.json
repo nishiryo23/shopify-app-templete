@@ -42,6 +42,10 @@
         {
           "name": "PROVENANCE_SIGNING_KEY",
           "valueFrom": "__PROVENANCE_SIGNING_KEY_SECRET_ARN__"
+        },
+        {
+          "name": "TELEMETRY_PSEUDONYM_KEY",
+          "valueFrom": "__TELEMETRY_PSEUDONYM_KEY_SECRET_ARN__"
         }
       ],
       "logConfiguration": {

@@ -496,6 +496,7 @@ launch v1 は **partial Matrixify-compatible spreadsheet mode** を持つ。
 - submission contact email
 - privacy policy URL
 - reviewer packet
+- canonical repo truth: `docs/app-review-metadata.md`, `docs/reviewer-packet.md`, `docs/release-gate-matrix.md`
 
 ---
 

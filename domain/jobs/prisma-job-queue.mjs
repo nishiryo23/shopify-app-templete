@@ -1,5 +1,4 @@
 import crypto from "node:crypto";
-
 function isUniqueConstraintError(error) {
   return Boolean(error && typeof error === "object" && "code" in error && error.code === "P2002");
 }
@@ -88,6 +87,61 @@ export function createPrismaJobQueue(prisma) {
 
         throw error;
       }
+    },
+
+    async findLatestByDedupeKey({ dedupeKey, kind, shopDomain }) {
+      if (typeof prisma.job?.findFirst !== "function") {
+        return null;
+      }
+
+      return prisma.job.findFirst({
+        orderBy: [{ createdAt: "desc" }],
+        where: {
+          dedupeKey,
+          kind,
+          shopDomain,
+        },
+      });
+    },
+
+    async findLatestByKind({ kind, shopDomain }) {
+      if (typeof prisma.job?.findFirst !== "function") {
+        return null;
+      }
+
+      return prisma.job.findFirst({
+        orderBy: [{ createdAt: "desc" }],
+        where: {
+          kind,
+          shopDomain,
+        },
+      });
+    },
+
+    async findByKind({ kind, shopDomain }) {
+      if (typeof prisma.job?.findMany !== "function") {
+        if (typeof prisma.job?.findFirst !== "function") {
+          return [];
+        }
+
+        const latest = await prisma.job.findFirst({
+          orderBy: [{ createdAt: "desc" }],
+          where: {
+            kind,
+            shopDomain,
+          },
+        });
+
+        return latest ? [latest] : [];
+      }
+
+      return prisma.job.findMany({
+        orderBy: [{ createdAt: "desc" }],
+        where: {
+          kind,
+          shopDomain,
+        },
+      });
     },
 
     async leaseNext({
@@ -510,6 +564,89 @@ export function createPrismaJobQueue(prisma) {
         });
 
         return tx.job.findUnique({ where: { id: jobId } });
+      });
+    },
+
+    async recoverStaleLease({
+      errorMessage = "stale-lease-detected",
+      jobId,
+      now = new Date(),
+      scanCutoff,
+    }) {
+      const job = await prisma.job.findUnique({ where: { id: jobId } });
+
+      if (
+        !job
+        || job.state !== "leased"
+        || !job.leaseToken
+        || !job.leasedBy
+        || !job.leaseExpiresAt
+        || job.leaseExpiresAt > scanCutoff
+      ) {
+        return { recovered: false, reason: "not-stale" };
+      }
+
+      const shouldDeadLetter = job.attempts >= job.maxAttempts;
+      const nextState = shouldDeadLetter ? "dead_letter" : "retryable";
+
+      return prisma.$transaction(async (tx) => {
+        const updated = await tx.job.updateMany({
+          data: {
+            availableAt: shouldDeadLetter ? job.availableAt : now,
+            deadLetteredAt: shouldDeadLetter ? now : null,
+            lastError: errorMessage,
+            leaseExpiresAt: null,
+            leaseToken: null,
+            leasedAt: null,
+            leasedBy: null,
+            state: nextState,
+          },
+          where: {
+            id: jobId,
+            leaseExpiresAt: { lte: scanCutoff },
+            leaseToken: job.leaseToken,
+            leasedBy: job.leasedBy,
+            state: "leased",
+          },
+        });
+
+        if (updated.count === 0) {
+          return { recovered: false, reason: "job-changed" };
+        }
+
+        await tx.jobAttempt.updateMany({
+          data: {
+            errorMessage,
+            finishedAt: now,
+            outcome: shouldDeadLetter ? "dead_letter" : "retryable",
+          },
+          where: {
+            attemptNumber: job.attempts,
+            jobId,
+            leaseToken: job.leaseToken,
+            workerId: job.leasedBy,
+          },
+        });
+
+        await tx.jobLease.updateMany({
+          data: {
+            jobId: null,
+            leaseExpiresAt: now,
+            leaseToken: null,
+            workerId: null,
+          },
+          where: {
+            jobId,
+            leaseToken: job.leaseToken,
+            shopDomain: job.shopDomain,
+            workerId: job.leasedBy,
+          },
+        });
+
+        return {
+          nextState,
+          recovered: true,
+        };
       });
     },
   };

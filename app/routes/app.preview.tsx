@@ -18,7 +18,11 @@ type PreviewLoaderData = {
   latestWrite: null | {
     outcome: string | null;
     previewJobId: string | null;
+    retentionExpired?: boolean;
     total: number | null;
+    writeJobId: string | null;
+  };
+  selectedPreviewVerifiedWrite: null | {
     writeJobId: string | null;
   };
   preview: null | {
@@ -81,6 +85,7 @@ export default function PreviewRoute() {
     state: string;
   }>();
   const undoFetcher = useFetcher<{
+    code?: string;
     error?: string;
     jobId: string;
     state: string;
@@ -117,19 +122,20 @@ export default function PreviewRoute() {
   const editedUploadAccept = editedLayout === "matrixify"
     ? ".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     : sourceUploadAccept;
-  const latestWriteMatchesPreview = Boolean(
-    latestWrite?.outcome === "verified_success"
-      && latestWrite.previewJobId
-      && latestWrite.previewJobId === activePreviewJobId,
-  );
+  const selectedPreviewVerifiedWrite = selectedLoaderData?.selectedPreviewVerifiedWrite ?? null;
+  const previewAlreadyHasVerifiedWrite = Boolean(selectedPreviewVerifiedWrite?.writeJobId);
+  const undoErrorMessage = undoFetcher.data?.code === "retention_expired"
+    ? "Latest rollbackable write retention has expired."
+    : undoFetcher.data?.error;
   const canConfirm = data.isAccountOwner
     && data.entitlementState === "ACTIVE_PAID"
     && activePreview?.jobState === "completed"
     && previewHasWritableRows
-    && !latestWriteMatchesPreview;
+    && !previewAlreadyHasVerifiedWrite;
   const canUndo = data.isAccountOwner
     && data.entitlementState === "ACTIVE_PAID"
     && selectedProfile === "product-core-seo-v1"
+    && !latestWrite?.retentionExpired
     && Boolean(latestWrite?.writeJobId);
 
   useEffect(() => {
@@ -361,8 +367,11 @@ export default function PreviewRoute() {
           {data.entitlementState !== "ACTIVE_PAID" ? (
             <s-paragraph>ACTIVE_PAID entitlement is required for write and undo.</s-paragraph>
           ) : null}
-          {latestWriteMatchesPreview ? (
-            <s-paragraph>This preview already has a verified successful write.</s-paragraph>
+          {previewAlreadyHasVerifiedWrite ? (
+            <s-paragraph>
+              This preview already has a verified successful write
+              {selectedPreviewVerifiedWrite?.writeJobId ? ` (${selectedPreviewVerifiedWrite.writeJobId})` : ""}.
+            </s-paragraph>
           ) : null}
           {writeFetcher.data?.error ? (
             <s-paragraph>Write error: {writeFetcher.data.error}</s-paragraph>
@@ -378,6 +387,8 @@ export default function PreviewRoute() {
         <s-section heading="Undo">
           {selectedProfile !== "product-core-seo-v1" ? (
             <s-paragraph>Undo is only available for product-core-seo-v1.</s-paragraph>
+          ) : latestWrite?.retentionExpired ? (
+            <s-paragraph>Latest rollbackable write retention has expired.</s-paragraph>
           ) : latestWrite?.writeJobId ? (
             <s-paragraph>
               Latest rollbackable write: {latestWrite.writeJobId} ({latestWrite.outcome})
@@ -394,7 +405,7 @@ export default function PreviewRoute() {
                 </button>
               </undoFetcher.Form>
               {undoFetcher.data?.error ? (
-                <s-paragraph>Undo error: {undoFetcher.data.error}</s-paragraph>
+                <s-paragraph>Undo error: {undoErrorMessage}</s-paragraph>
               ) : null}
               <s-paragraph>State: {activeUndo?.jobState ?? undoFetcher.data?.state ?? "idle"}</s-paragraph>
               {activeUndo?.outcome ? (

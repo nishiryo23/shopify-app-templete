@@ -31,7 +31,8 @@ import {
   resolveProductSpreadsheetFormatFromFileName,
 } from "~/domain/products/spreadsheet-format.mjs";
 import {
-  findLatestSuccessfulProductWriteArtifact,
+  findLatestRollbackableWriteState,
+  findVerifiedSuccessfulProductWriteArtifactByPreviewJobId,
 } from "~/domain/products/write-jobs.mjs";
 import {
   PRODUCT_UNDO_ERROR_ARTIFACT_KIND,
@@ -550,7 +551,40 @@ async function loadUndoJobDetail({ jobId, shopDomain }: { jobId: string; shopDom
 }
 
 async function loadLatestSuccessfulWrite(shopDomain: string, profile: string) {
-  const artifact = await findLatestSuccessfulProductWriteArtifact({
+  const state = await findLatestRollbackableWriteState({
+    prisma,
+    profile,
+    shopDomain,
+  });
+
+  if (!state) {
+    return null;
+  }
+
+  return {
+    outcome: (state.artifact.metadata as { outcome?: string } | null)?.outcome ?? null,
+    previewJobId: (state.artifact.metadata as { previewJobId?: string } | null)?.previewJobId ?? null,
+    retentionExpired: state.retentionExpired,
+    total: (state.artifact.metadata as { total?: number } | null)?.total ?? null,
+    writeJobId: state.artifact.jobId,
+  };
+}
+
+async function loadSelectedPreviewVerifiedWrite({
+  previewJobId,
+  profile,
+  shopDomain,
+}: {
+  previewJobId: string | null;
+  profile: string;
+  shopDomain: string;
+}) {
+  if (!previewJobId) {
+    return null;
+  }
+
+  const artifact = await findVerifiedSuccessfulProductWriteArtifactByPreviewJobId({
+    previewJobId,
     prisma,
     profile,
     shopDomain,
@@ -561,9 +595,6 @@ async function loadLatestSuccessfulWrite(shopDomain: string, profile: string) {
   }
 
   return {
-    outcome: (artifact.metadata as { outcome?: string } | null)?.outcome ?? null,
-    previewJobId: (artifact.metadata as { previewJobId?: string } | null)?.previewJobId ?? null,
-    total: (artifact.metadata as { total?: number } | null)?.total ?? null,
     writeJobId: artifact.jobId,
   };
 }
@@ -592,6 +623,11 @@ export async function loadProductPreviewPage({ request }: LoaderFunctionArgs) {
     isAccountOwner: session.accountOwner === true,
     latestWrite: await loadLatestSuccessfulWrite(shopDomain, profile),
     preview: previewJobId ? await loadPreviewJobDetail({ jobId: previewJobId, shopDomain }) : null,
+    selectedPreviewVerifiedWrite: await loadSelectedPreviewVerifiedWrite({
+      previewJobId,
+      profile,
+      shopDomain,
+    }),
     selectedProfile: profile,
     undo: undoJobId ? await loadUndoJobDetail({ jobId: undoJobId, shopDomain }) : null,
     write: writeJobId ? await loadWriteJobDetail({ jobId: writeJobId, shopDomain }) : null,

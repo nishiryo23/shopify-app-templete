@@ -12,12 +12,11 @@ import {
   enqueueOrFindActiveProductUndoJob,
   enqueueOrFindActiveProductWriteJob,
   findActiveProductUndoJob,
-  findLatestSuccessfulProductWriteArtifact,
+  findLatestRollbackableWriteState,
   findVerifiedSuccessfulProductWriteArtifactByPreviewJobId,
 } from "~/domain/products/write-jobs.mjs";
 import {
   PRODUCT_UNDO_KIND,
-  PRODUCT_WRITE_SNAPSHOT_ARTIFACT_KIND,
 } from "~/domain/products/write-profile.mjs";
 
 const jobQueue = createPrismaJobQueue(prisma);
@@ -38,6 +37,13 @@ function json(data: unknown, init?: { headers?: Record<string, string>; status?:
       ...init?.headers,
     },
   });
+}
+
+function retentionExpiredUndoResponse() {
+  return json({
+    code: "retention_expired",
+    error: "latest rollbackable write retention has expired",
+  }, { status: 400 });
 }
 
 async function requireOwnerPaidAction(request: Request) {
@@ -101,7 +107,7 @@ async function loadCompletedPreviewOrThrow({
 }
 
 async function readLatestRollbackableWriteOrNull(shopDomain: string) {
-  return findLatestSuccessfulProductWriteArtifact({
+  return findLatestRollbackableWriteState({
     prisma,
     profile: PRODUCT_CORE_SEO_EXPORT_PROFILE,
     shopDomain,
@@ -218,11 +224,6 @@ export async function createProductUndo({ request }: ActionFunctionArgs) {
     }
 
     const shopDomain = authContext.session.shop;
-    const latestRollbackableWrite = await readLatestRollbackableWriteOrNull(shopDomain);
-
-    if (!latestRollbackableWrite || latestRollbackableWrite.jobId !== writeJobId) {
-      return json({ error: "undo is only allowed for the latest rollbackable write" }, { status: 400 });
-    }
 
     const activeUndo = await findActiveProductUndoJob({
       prisma,
@@ -239,20 +240,23 @@ export async function createProductUndo({ request }: ActionFunctionArgs) {
       }, { status: 202 });
     }
 
-    const snapshotArtifact = await prisma.artifact.findFirst({
-      where: {
-        deletedAt: null,
-        jobId: writeJobId,
-        kind: PRODUCT_WRITE_SNAPSHOT_ARTIFACT_KIND,
-        shopDomain,
-      },
-    });
+    const latestRollbackableWrite = await readLatestRollbackableWriteOrNull(shopDomain);
+
+    if (!latestRollbackableWrite || latestRollbackableWrite.artifact.jobId !== writeJobId) {
+      return json({ error: "undo is only allowed for the latest rollbackable write" }, { status: 400 });
+    }
+
+    if (latestRollbackableWrite.retentionExpired) {
+      return retentionExpiredUndoResponse();
+    }
+
+    const snapshotArtifact = latestRollbackableWrite.snapshotArtifact;
 
     if (!snapshotArtifact) {
       return json({ error: "latest rollbackable write is missing snapshot artifact" }, { status: 400 });
     }
 
-    const profile = (latestRollbackableWrite.metadata as { profile?: string } | null)?.profile ?? PRODUCT_CORE_SEO_EXPORT_PROFILE;
+    const profile = (latestRollbackableWrite.artifact.metadata as { profile?: string } | null)?.profile ?? PRODUCT_CORE_SEO_EXPORT_PROFILE;
     if (profile !== PRODUCT_CORE_SEO_EXPORT_PROFILE) {
       return json({ error: "undo is not available for this write profile" }, { status: 400 });
     }
@@ -267,7 +271,7 @@ export async function createProductUndo({ request }: ActionFunctionArgs) {
       },
       shopDomain,
       snapshotArtifactId: snapshotArtifact.id,
-      writeArtifactId: latestRollbackableWrite.id,
+      writeArtifactId: latestRollbackableWrite.artifact.id,
       writeJobId,
     });
 

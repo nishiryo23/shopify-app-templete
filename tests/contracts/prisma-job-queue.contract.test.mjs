@@ -2,6 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { createPrismaJobQueue } from "../../domain/jobs/prisma-job-queue.mjs";
+import {
+  buildSystemStuckJobSweepDedupeKey,
+  SYSTEM_JOB_SHOP_DOMAIN,
+  SYSTEM_RETENTION_SWEEP_KIND,
+  SYSTEM_STUCK_JOB_SWEEP_KIND,
+} from "../../domain/system-jobs.mjs";
 
 function createQueuePrismaDouble(seedJobs = []) {
   const jobs = seedJobs.map((job, index) => ({
@@ -112,8 +118,13 @@ function createQueuePrismaDouble(seedJobs = []) {
             job.shopDomain === data.shopDomain &&
             job.kind === data.kind &&
             job.dedupeKey === data.dedupeKey &&
-            ["queued", "retryable", "leased"].includes(job.state) &&
-            data.dedupeKey !== null,
+            data.dedupeKey !== null &&
+            (
+              (
+                data.shopDomain === SYSTEM_JOB_SHOP_DOMAIN &&
+                job.state !== "dead_letter"
+              ) || ["queued", "retryable", "leased"].includes(job.state)
+            ),
         );
 
         if (duplicate) {
@@ -687,4 +698,198 @@ test("expired worker cannot fail after its lease timed out even without re-lease
 
   assert.equal(failed, null);
   assert.equal(prisma.jobs[0].state, "leased");
+});
+
+test("system jobs reserve the scheduler window until the prior run dead-letters", async () => {
+  const prisma = createQueuePrismaDouble();
+  const queue = createPrismaJobQueue(prisma);
+  const now = new Date("2026-03-17T09:27:33.000Z");
+  const stuckJobDedupeKey = buildSystemStuckJobSweepDedupeKey(now);
+
+  const firstStuckJob = await queue.enqueue({
+    dedupeKey: stuckJobDedupeKey,
+    kind: SYSTEM_STUCK_JOB_SWEEP_KIND,
+    payload: { requestedAt: now.toISOString() },
+    shopDomain: SYSTEM_JOB_SHOP_DOMAIN,
+  });
+  prisma.jobs[0].state = "completed";
+  const duplicateCompletedWindow = await queue.enqueue({
+    dedupeKey: stuckJobDedupeKey,
+    kind: SYSTEM_STUCK_JOB_SWEEP_KIND,
+    payload: { requestedAt: now.toISOString() },
+    shopDomain: SYSTEM_JOB_SHOP_DOMAIN,
+  });
+  prisma.jobs[0].state = "dead_letter";
+  const retryDeadLetteredWindow = await queue.enqueue({
+    dedupeKey: stuckJobDedupeKey,
+    kind: SYSTEM_STUCK_JOB_SWEEP_KIND,
+    payload: { requestedAt: now.toISOString() },
+    shopDomain: SYSTEM_JOB_SHOP_DOMAIN,
+  });
+
+  assert.equal(firstStuckJob.id, "job-1");
+  assert.equal(duplicateCompletedWindow, null);
+  assert.equal(retryDeadLetteredWindow.id, "job-2");
+});
+
+test("stuck-job sweep recovers stale leases with CAS checks", async () => {
+  const now = new Date("2026-03-17T09:35:00.000Z");
+  const scanCutoff = new Date("2026-03-17T09:25:00.000Z");
+  const prisma = createQueuePrismaDouble([
+    {
+      attempts: 1,
+      id: "job-a",
+      kind: "product.write",
+      leaseExpiresAt: new Date("2026-03-17T09:20:00.000Z"),
+      leaseToken: "stale-lease-token",
+      leasedAt: new Date("2026-03-17T09:10:00.000Z"),
+      leasedBy: "worker-1",
+      payload: { id: 1 },
+      shopDomain: "a.myshopify.com",
+      state: "leased",
+    },
+  ]);
+  prisma.leases.push({
+    shopDomain: "a.myshopify.com",
+    jobId: "job-a",
+    leaseExpiresAt: new Date("2026-03-17T09:20:00.000Z"),
+    leaseToken: "stale-lease-token",
+    workerId: "worker-1",
+  });
+  prisma.attempts.push({
+    attemptNumber: 1,
+    jobId: "job-a",
+    leaseExpiresAt: new Date("2026-03-17T09:20:00.000Z"),
+    leaseToken: "stale-lease-token",
+    startedAt: new Date("2026-03-17T09:10:00.000Z"),
+    workerId: "worker-1",
+  });
+  const queue = createPrismaJobQueue(prisma);
+
+  const result = await queue.recoverStaleLease({
+    jobId: "job-a",
+    now,
+    scanCutoff,
+  });
+
+  assert.deepEqual(result, { nextState: "retryable", recovered: true });
+  assert.equal(prisma.jobs[0].state, "retryable");
+  assert.equal(prisma.jobs[0].leaseToken, null);
+  assert.equal(prisma.jobs[0].leasedBy, null);
+});
+
+test("stuck-job sweep still recovers a stale job after the shop lease row moved to another job", async () => {
+  const prisma = createQueuePrismaDouble([
+    {
+      attempts: 1,
+      id: "job-a",
+      kind: "product.write",
+      leaseExpiresAt: new Date("2026-03-17T09:20:00.000Z"),
+      leaseToken: "stale-lease-token",
+      leasedAt: new Date("2026-03-17T09:10:00.000Z"),
+      leasedBy: "worker-1",
+      payload: { id: 1 },
+      shopDomain: "a.myshopify.com",
+      state: "leased",
+    },
+    {
+      attempts: 1,
+      id: "job-b",
+      kind: "product.write",
+      leaseExpiresAt: new Date("2026-03-17T09:40:00.000Z"),
+      leaseToken: "active-lease-token",
+      leasedAt: new Date("2026-03-17T09:30:00.000Z"),
+      leasedBy: "worker-2",
+      payload: { id: 2 },
+      shopDomain: "a.myshopify.com",
+      state: "leased",
+    },
+  ]);
+  prisma.leases.push({
+    shopDomain: "a.myshopify.com",
+    jobId: "job-b",
+    leaseExpiresAt: new Date("2026-03-17T09:40:00.000Z"),
+    leaseToken: "active-lease-token",
+    workerId: "worker-2",
+  });
+  prisma.attempts.push({
+    attemptNumber: 1,
+    jobId: "job-a",
+    leaseExpiresAt: new Date("2026-03-17T09:20:00.000Z"),
+    leaseToken: "stale-lease-token",
+    startedAt: new Date("2026-03-17T09:10:00.000Z"),
+    workerId: "worker-1",
+  });
+  const queue = createPrismaJobQueue(prisma);
+
+  const result = await queue.recoverStaleLease({
+    jobId: "job-a",
+    now: new Date("2026-03-17T09:35:00.000Z"),
+    scanCutoff: new Date("2026-03-17T09:25:00.000Z"),
+  });
+
+  assert.deepEqual(result, { nextState: "retryable", recovered: true });
+  assert.equal(prisma.jobs.find((job) => job.id === "job-a")?.state, "retryable");
+  assert.equal(prisma.jobs.find((job) => job.id === "job-a")?.leaseToken, null);
+  assert.equal(prisma.leases[0].jobId, "job-b");
+  assert.equal(prisma.leases[0].leaseToken, "active-lease-token");
+});
+
+test("system stuck-job sweep can recover a stale system job while holding the system lease row", async () => {
+  const now = new Date("2026-03-17T09:35:00.000Z");
+  const scanCutoff = new Date("2026-03-17T09:25:00.000Z");
+  const prisma = createQueuePrismaDouble([
+    {
+      attempts: 1,
+      id: "system-retention-job",
+      kind: SYSTEM_RETENTION_SWEEP_KIND,
+      leaseExpiresAt: new Date("2026-03-17T09:20:00.000Z"),
+      leaseToken: "stale-system-token",
+      leasedAt: new Date("2026-03-17T09:10:00.000Z"),
+      leasedBy: "worker-1",
+      payload: { requestedAt: "2026-03-17T09:00:00.000Z" },
+      shopDomain: SYSTEM_JOB_SHOP_DOMAIN,
+      state: "leased",
+    },
+    {
+      attempts: 1,
+      id: "system-stuck-sweep-job",
+      kind: SYSTEM_STUCK_JOB_SWEEP_KIND,
+      leaseExpiresAt: new Date("2026-03-17T09:40:00.000Z"),
+      leaseToken: "active-sweep-token",
+      leasedAt: new Date("2026-03-17T09:34:00.000Z"),
+      leasedBy: "worker-2",
+      payload: { requestedAt: "2026-03-17T09:35:00.000Z" },
+      shopDomain: SYSTEM_JOB_SHOP_DOMAIN,
+      state: "leased",
+    },
+  ]);
+  prisma.leases.push({
+    jobId: "system-stuck-sweep-job",
+    leaseExpiresAt: new Date("2026-03-17T09:40:00.000Z"),
+    leaseToken: "active-sweep-token",
+    shopDomain: SYSTEM_JOB_SHOP_DOMAIN,
+    workerId: "worker-2",
+  });
+  prisma.attempts.push({
+    attemptNumber: 1,
+    jobId: "system-retention-job",
+    leaseExpiresAt: new Date("2026-03-17T09:20:00.000Z"),
+    leaseToken: "stale-system-token",
+    startedAt: new Date("2026-03-17T09:10:00.000Z"),
+    workerId: "worker-1",
+  });
+  const queue = createPrismaJobQueue(prisma);
+
+  const result = await queue.recoverStaleLease({
+    jobId: "system-retention-job",
+    now,
+    scanCutoff,
+  });
+
+  assert.deepEqual(result, { nextState: "retryable", recovered: true });
+  assert.equal(prisma.jobs.find((job) => job.id === "system-retention-job")?.state, "retryable");
+  assert.equal(prisma.jobs.find((job) => job.id === "system-retention-job")?.leaseToken, null);
+  assert.equal(prisma.leases[0].jobId, "system-stuck-sweep-job");
+  assert.equal(prisma.leases[0].leaseToken, "active-sweep-token");
 });

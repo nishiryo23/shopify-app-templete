@@ -17,14 +17,19 @@ Product Domain Parity MVP は preview / write / verify / undo を前提とする
 - artifact metadata は PostgreSQL の `Artifact` に保持し、payload 実体は private storage adapter に保存する。
 - artifact visibility は launch v1 では `private` のみ許可し、public URL 前提の保存は採用しない。
 - artifact object key は危険な入力を正規化で救済せず、storage root 外に解釈され得る key を fail-fast で reject する。
+- artifact retention は kind ごとの `retentionUntil` を write 時点で確定し、retention sweep は S3 delete と `Artifact.deletedAt` soft-delete を idempotent に整合させる。
 - provenance signing は `PROVENANCE_SIGNING_KEY` を使い、offline token の `SHOP_TOKEN_ENCRYPTION_KEY` と分離する。
 - `PROVENANCE_SIGNING_KEY` が未設定のまま署名処理を呼んだ場合は fail-fast する。
+- `WebhookInbox` は ingress audit log のまま維持し、backlog/state machine へ広げない。raw payload retention boundary の詳細は `adr/0018-webhook-inbox-raw-payload-retention-boundary.md` を正本とし、未処理 residue は state 遷移せず telemetry で検知する。
+- system sweeps は新テーブルを増やさず、`shopDomain="__system__"` を使って queue 上で直列実行する。
+- scheduler window の重複 enqueue は `Job_shopDomain_kind_dedupeKey_active_key` に加えて、system job 専用の partial unique index で `dead_letter` 以外の同一 window 再投入を防ぐ。
 
 ## Consequences
 - `PD-001` 以降は共通 queue と artifact adapter を前提に preview / write / verify / undo を積み上げられる。
 - webhook inbox の retention / dedupe と job retry policy が分離され、運用ポリシーの衝突を避けられる。
 - 鍵用途を分離することで、token 復号鍵漏えいと manifest 署名鍵漏えいの影響範囲を分断できる。
 - `P-006` ではこの truth を前提に S3 / KMS / ECS wiring を定義する。
+- rollback/history download は 90 日以内のみ保証し、rollbackable job はあるが required artifact が soft-delete 済みの場合は `retention_expired` を返す。
 
 ## Alternatives considered
 - `WebhookInbox` をそのまま job queue に流用する案

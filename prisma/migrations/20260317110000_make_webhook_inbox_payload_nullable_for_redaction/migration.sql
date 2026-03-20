@@ -1,0 +1,3 @@
+ALTER TABLE "WebhookInbox"
+ALTER COLUMN "rawBody" DROP NOT NULL,
+ALTER COLUMN "hmacHeader" DROP NOT NULL;

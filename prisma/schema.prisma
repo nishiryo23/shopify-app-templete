@@ -45,8 +45,8 @@ model WebhookInbox {
   topic            String
   webhookId        String?
   subscriptionName String?
-  rawBody          String
-  hmacHeader       String
+  rawBody          String?
+  hmacHeader       String?
   createdAt        DateTime @default(now())
   processedAt      DateTime?
 }

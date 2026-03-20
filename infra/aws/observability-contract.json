@@ -1,0 +1,74 @@
+{
+  "namespace": "ShopifyMatri/Operations",
+  "logRetentionDays": 7,
+  "webhookPayloadRetentionDays": 7,
+  "jobAttemptRetentionDays": 30,
+  "artifactRetentionDays": {
+    "product.preview.edited-upload": 7,
+    "product.export.source": 90,
+    "product.export.manifest": 90,
+    "product.preview.result": 90,
+    "product.write.result": 90,
+    "product.write.snapshot": 90,
+    "product.write.error": 90,
+    "product.undo.result": 90,
+    "product.undo.error": 90
+  },
+  "scheduler": {
+    "retentionSweep": {
+      "kind": "system.retention-sweep",
+      "timeZone": "Asia/Tokyo",
+      "localTime": "03:00",
+      "dedupeKey": "system:retention-sweep:{JST calendar date}",
+      "deadLetterRetryCooldownMinutes": 30
+    },
+    "stuckJobSweep": {
+      "kind": "system.stuck-job-sweep",
+      "timeZone": "UTC",
+      "cadenceMinutes": 5,
+      "dedupeKey": "system:stuck-job-sweep:{UTC 5-minute window start ISO}",
+      "deadLetterRetryCooldownMinutes": 5
+    },
+    "fallbackDispatch": {
+      "prioritizeSystemJobs": true
+    }
+  },
+  "alarms": [
+    {
+      "metricName": "DeadLetteredJobs",
+      "dimensions": ["Environment", "Service"],
+      "statistic": "Sum",
+      "periodSeconds": 300,
+      "evaluationPeriods": 1,
+      "comparisonOperator": "GreaterThanOrEqualToThreshold",
+      "threshold": 1
+    },
+    {
+      "metricName": "LeaseLostJobs",
+      "dimensions": ["Environment", "Service", "JobKind"],
+      "statistic": "Sum",
+      "periodSeconds": 900,
+      "evaluationPeriods": 1,
+      "comparisonOperator": "GreaterThanOrEqualToThreshold",
+      "threshold": 3
+    },
+    {
+      "metricName": "RetentionSweepFailures",
+      "dimensions": ["Environment", "Service"],
+      "statistic": "Sum",
+      "periodSeconds": 3600,
+      "evaluationPeriods": 1,
+      "comparisonOperator": "GreaterThanOrEqualToThreshold",
+      "threshold": 1
+    },
+    {
+      "metricName": "StaleLeasedJobs",
+      "dimensions": ["Environment", "Service"],
+      "statistic": "Maximum",
+      "periodSeconds": 900,
+      "evaluationPeriods": 1,
+      "comparisonOperator": "GreaterThanThreshold",
+      "threshold": 0
+    }
+  ]
+}

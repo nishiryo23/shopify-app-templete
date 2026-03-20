@@ -49,7 +49,7 @@
     "setup": "pnpm run prisma:generate && pnpm run prisma:migrate:deploy",
     "shopify": "shopify",
     "start": "react-router-serve ./build/server/index.js",
-    "test:contracts": "node --test tests/contracts/*.test.mjs",
+    "test:contracts": "node --test --test-concurrency=4 tests/contracts/*.test.mjs",
     "test:smoke": "node scripts/validate-smoke-env.mjs && playwright test",
     "test:smoke:list": "playwright test --list",
     "typecheck": "react-router typegen && tsc --noEmit",

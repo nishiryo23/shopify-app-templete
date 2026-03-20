@@ -152,7 +152,7 @@ test("S3 artifact storage preserves descriptor metadata on structured reads", as
   assert.deepEqual(stored.descriptor.metadata, { source: "export" });
 });
 
-test("artifact catalog upserts metadata and soft deletes by object key", async () => {
+test("artifact catalog upserts metadata without extending default retention on update", async () => {
   const writes = [];
   const updates = [];
   const catalog = createPrismaArtifactCatalog({
@@ -172,7 +172,7 @@ test("artifact catalog upserts metadata and soft deletes by object key", async (
     bucket: "private-artifacts",
     checksumSha256: "abc",
     contentType: "text/csv",
-    kind: "result",
+    kind: "product.write.result",
     objectKey: "jobs/job-1/result.csv",
     shopDomain: "example.myshopify.com",
   });
@@ -185,6 +185,8 @@ test("artifact catalog upserts metadata and soft deletes by object key", async (
   assert.equal(writes.length, 1);
   assert.equal(writes[0].where.bucket_objectKey.bucket, "private-artifacts");
   assert.equal(writes[0].create.visibility, "private");
+  assert.equal(writes[0].create.retentionUntil instanceof Date, true);
+  assert.equal("retentionUntil" in writes[0].update, false);
   assert.equal(deleted, true);
   assert.equal(updates[0].where.objectKey, "jobs/job-1/result.csv");
 });

@@ -1,3 +1,5 @@
+import { resolveArtifactRetentionUntil } from "./retention.mjs";
+
 export function createPrismaArtifactCatalog(prisma) {
   return {
     async record({
@@ -13,6 +15,9 @@ export function createPrismaArtifactCatalog(prisma) {
       checksumSha256,
       visibility = "private",
     }) {
+      const resolvedRetentionUntil = retentionUntil ?? resolveArtifactRetentionUntil({ kind });
+      const updateRetentionUntil = retentionUntil == null ? undefined : resolvedRetentionUntil;
+
       return prisma.artifact.upsert({
         where: {
           bucket_objectKey: {
@@ -27,7 +32,7 @@ export function createPrismaArtifactCatalog(prisma) {
           jobId,
           kind,
           metadata,
-          retentionUntil,
+          ...(updateRetentionUntil === undefined ? {} : { retentionUntil: updateRetentionUntil }),
           shopDomain,
           sizeBytes,
           visibility,
@@ -40,7 +45,7 @@ export function createPrismaArtifactCatalog(prisma) {
           kind,
           metadata,
           objectKey,
-          retentionUntil,
+          retentionUntil: resolvedRetentionUntil,
           shopDomain,
           sizeBytes,
           visibility,

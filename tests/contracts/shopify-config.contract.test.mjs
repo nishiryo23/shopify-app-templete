@@ -35,6 +35,10 @@ test("shopify app config declares app-specific lifecycle webhooks", () => {
     config,
     /\[\[webhooks\.subscriptions\]\]\s+topics = \[\s*"app\/scopes_update"\s*\]\s+uri = "\/webhooks\/app\/scopes_update"/m,
   );
+  assert.match(
+    config,
+    /\[\[webhooks\.subscriptions\]\]\s+compliance_topics = \[\s*"customers\/data_request",\s*"customers\/redact",\s*"shop\/redact"\s*\]\s+uri = "\/webhooks\/compliance"/m,
+  );
   assert.match(webConfig, /webhooks_path = "\/webhooks\/app"/);
   assert.doesNotMatch(webConfig, /webhooks_path = "\/webhooks\/app\/uninstalled"/);
 });
@@ -56,13 +60,21 @@ test("prisma session storage uses the shared PostgreSQL database", () => {
 test("prisma schema persists webhook inbox deliveries for durable ingress", () => {
   const schema = readProjectFile("prisma/schema.prisma");
   const migration = readProjectFile("prisma/migrations/20260313090000_add_webhook_inbox_table/migration.sql");
+  const redactionMigration = readProjectFile(
+    "prisma/migrations/20260317110000_make_webhook_inbox_payload_nullable_for_redaction/migration.sql",
+  );
 
   assert.match(schema, /model WebhookInbox \{/);
   assert.match(schema, /deliveryKey\s+String\s+@unique/);
+  assert.match(schema, /rawBody\s+String\?/);
+  assert.match(schema, /hmacHeader\s+String\?/);
   assert.match(schema, /processedAt\s+DateTime\?/);
   assert.match(migration, /CREATE TABLE "WebhookInbox"/);
   assert.match(migration, /CREATE UNIQUE INDEX "WebhookInbox_deliveryKey_key"/);
   assert.match(migration, /"processedAt" TIMESTAMP\(3\)/);
+  assert.match(redactionMigration, /ALTER TABLE "WebhookInbox"/);
+  assert.match(redactionMigration, /ALTER COLUMN "rawBody" DROP NOT NULL/);
+  assert.match(redactionMigration, /ALTER COLUMN "hmacHeader" DROP NOT NULL/);
 });
 
 test("prisma schema persists encrypted shop bootstrap state", () => {
@@ -83,6 +95,12 @@ test("platform foundation persists queue and artifact metadata in PostgreSQL", (
   const migration = readProjectFile(
     "prisma/migrations/20260313143000_add_job_and_artifact_foundation/migration.sql",
   );
+  const retentionBackfillMigration = readProjectFile(
+    "prisma/migrations/20260317123000_backfill_artifact_retention_until/migration.sql",
+  );
+  const systemSchedulerWindowMigration = readProjectFile(
+    "prisma/migrations/20260318103000_add_system_job_scheduler_window_unique_index/migration.sql",
+  );
   const queue = readProjectFile("domain/jobs/prisma-job-queue.mjs");
   const catalog = readProjectFile("domain/artifacts/prisma-artifact-catalog.mjs");
   const artifactStorage = readProjectFile("domain/artifacts/storage.mjs");
@@ -97,6 +115,13 @@ test("platform foundation persists queue and artifact metadata in PostgreSQL", (
   assert.match(migration, /CREATE TABLE "Job"/);
   assert.match(migration, /CREATE TABLE "JobAttempt"/);
   assert.match(migration, /CREATE TABLE "Artifact"/);
+  assert.match(retentionBackfillMigration, /UPDATE "Artifact"/);
+  assert.match(retentionBackfillMigration, /product\.preview\.edited-upload/);
+  assert.match(retentionBackfillMigration, /INTERVAL '7 days'/);
+  assert.match(retentionBackfillMigration, /INTERVAL '90 days'/);
+  assert.match(systemSchedulerWindowMigration, /CREATE UNIQUE INDEX "Job_system_scheduler_window_key"/);
+  assert.match(systemSchedulerWindowMigration, /WHERE "shopDomain" = '__system__'/);
+  assert.match(systemSchedulerWindowMigration, /AND "state" <> 'dead_letter'/);
   assert.match(migration, /CREATE UNIQUE INDEX "Job_shopDomain_kind_dedupeKey_active_key"/);
   assert.match(migration, /WHERE "dedupeKey" IS NOT NULL AND "state" IN \('queued', 'retryable', 'leased'\)/);
   assert.match(queue, /await ensureJobLeaseRow\(tx, candidate\.shopDomain\)/);
@@ -151,7 +176,11 @@ test("scope updates no longer trust webhook payload as scope truth", () => {
 
   assert.match(
     handler,
-    /if \(normalizedTopic === "app\/scopes\/update"\) \{[\s\S]+await shopStateStore\.markScopesStale\(shop\);[\s\S]+await prisma\.webhookInbox\.update\(\{/m,
+    /if \(isScopesUpdateTopic\(normalizedTopic\)\) \{[\s\S]+await shopStateStore\.markScopesStale\(shop\);[\s\S]+await prisma\.webhookInbox\.update\(\{/m,
+  );
+  assert.match(
+    handler,
+    /function isScopesUpdateTopic\(topic: string\) \{\s+return topic === "app\/scopes_update" \|\| topic === "app\/scopes\/update";\s+\}/m,
   );
   assert.doesNotMatch(
     handler,
@@ -161,7 +190,13 @@ test("scope updates no longer trust webhook payload as scope truth", () => {
 
 test("lifecycle webhooks go through durable ingress before side effects", () => {
   const handler = readProjectFile("domain/webhooks/enqueue.server.ts");
+  const complianceRoute = readProjectFile("app/routes/webhooks.compliance.tsx");
 
+  assert.doesNotMatch(handler, /^if \(process\.env\.NODE_ENV === "production"\)/m);
+  assert.match(
+    handler,
+    /export async function enqueueWebhookInboxEvent\(\{ request \}: ActionFunctionArgs\) \{\s+requireWebhookTelemetryConfiguration\(process\.env\);/m,
+  );
   assert.match(
     handler,
     /const ingressResult = await processWebhookIngress\(/,
@@ -172,12 +207,23 @@ test("lifecycle webhooks go through durable ingress before side effects", () => 
   );
   assert.match(
     handler,
-    /if \(!ingressResult\.enqueued && inboxEvent\.processedAt\) \{\s+return new Response\(null, \{ status: 200 \}\);/m,
+    /if \(!ingressResult\.enqueued && inboxEvent\.processedAt\) \{[\s\S]*return new Response\(null, \{ status: 200 \}\);/m,
   );
   assert.match(
     handler,
-    /await prisma\.webhookInbox\.update\(\{\s+where: \{ deliveryKey \},\s+data: \{ processedAt: new Date\(\) \},\s+\}\);/m,
+    /buildMetadataOnlyWebhookInboxData/,
   );
+  assert.match(
+    handler,
+    /await prisma\.webhookInbox\.update\(\{\s+where: \{ deliveryKey \},\s+data: buildMetadataOnlyWebhookInboxData\(\{ processedAt: new Date\(\) \}\),\s+\}\);/m,
+  );
+  assert.match(handler, /event: "webhook\.received"/);
+  assert.match(handler, /event: "webhook\.duplicate"/);
+  assert.match(handler, /event: "webhook\.processed"/);
+  assert.match(handler, /if \(normalizedTopic === "shop\/redact"\) \{\s+const job = await enqueueOrFindActiveWebhookShopRedactJob\(/m);
+  assert.match(handler, /event: "webhook\.deferred"/);
+  assert.match(handler, /if \(isComplianceTopic\(normalizedTopic\)\) \{/);
+  assert.match(complianceRoute, /enqueueWebhookInboxEvent/);
 });
 
 test("authenticated admin loaders bootstrap shop state and custom session storage keeps offline tokens encrypted", () => {
@@ -189,6 +235,7 @@ test("authenticated admin loaders bootstrap shop state and custom session storag
   const bootstrap = readProjectFile("app/services/shop-state.server.ts");
 
   assert.match(server, /sessionStorage: new ShopSessionStorage\(prisma\)/);
+  assert.doesNotMatch(server, /requireTelemetryPseudonymKey/);
   assert.doesNotMatch(server, /validateShopTokenEncryptionKey\(\);/);
   assert.match(authBootstrap, /const authContext = await authenticate\.admin\(request\);/);
   assert.match(authBootstrap, /const bootstrapState = await shopStateStore\.getBootstrapState\(shopDomain\);/);

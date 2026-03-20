@@ -443,5 +443,5 @@ test("preview service latest-write lookup is not limited to product core profile
   const serviceFile = readProjectFile("app/services/product-previews.server.ts");
 
   assert.doesNotMatch(serviceFile, /profile !== PRODUCT_CORE_SEO_EXPORT_PROFILE/);
-  assert.match(serviceFile, /findLatestSuccessfulProductWriteArtifact\(\{/);
+  assert.match(serviceFile, /findLatestRollbackableWriteState\(\{/);
 });

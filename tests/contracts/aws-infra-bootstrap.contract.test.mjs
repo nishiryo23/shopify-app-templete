@@ -11,7 +11,15 @@ import {
   renderTaskDefinitionTemplate,
 } from "../../scripts/render-aws-task-definition.mjs";
 import {
+  createPrismaJobQueue,
+} from "../../domain/jobs/prisma-job-queue.mjs";
+import {
+  PRODUCT_EXPORT_KIND,
+} from "../../domain/products/export-profile.mjs";
+import {
   buildWorkerId,
+  cleanupCompletedRedactJob,
+  enqueueDueSystemJobs,
   JobFinalizeError,
   JobLeaseLostError,
   runBootstrapWorker,
@@ -19,6 +27,11 @@ import {
   validateWorkerEnvironment,
   waitForShutdownOrTimeout,
 } from "../../workers/bootstrap.mjs";
+import {
+  SYSTEM_RETENTION_SWEEP_KIND,
+  SYSTEM_STUCK_JOB_SWEEP_KIND,
+  resolveSystemJobMaxAttempts,
+} from "../../domain/system-jobs.mjs";
 
 const rootDir = path.resolve(import.meta.dirname, "../..");
 
@@ -42,6 +55,8 @@ const fixtureReplacements = Object.freeze({
   SHOPIFY_API_KEY: "test-api-key",
   SHOPIFY_API_SECRET_ARN: "arn:aws:secretsmanager:ap-northeast-1:123:secret:shopify-api",
   SHOPIFY_APP_URL: "https://example.com",
+  TELEMETRY_PSEUDONYM_KEY_SECRET_ARN:
+    "arn:aws:secretsmanager:ap-northeast-1:123:secret:telemetry",
   SHOP_TOKEN_ENCRYPTION_KEY_SECRET_ARN:
     "arn:aws:secretsmanager:ap-northeast-1:123:secret:shop-token",
   TASK_EXECUTION_ROLE_ARN: "arn:aws:iam::123:role/ecsTaskExecution",
@@ -60,6 +75,11 @@ test("aws bootstrap docs record required resources and existing service assumpti
   assert.match(readme, /private_subnet_ids/);
   assert.match(readme, /task_security_group_ids/);
   assert.match(readme, /ECS task definition の `secrets\.valueFrom` で注入/);
+  assert.match(readme, /observability-contract\.json/);
+  assert.match(readme, /Asia\/Tokyo.*03:00|03:00.*Asia\/Tokyo/);
+  assert.match(readme, /5 分ごと/);
+  assert.match(readme, /shop backlog より先に lease/);
+  assert.match(readme, /cooldown 後に同一 window を再試行/);
   assert.match(readme, /1\. Docker image build/);
   assert.match(readme, /4\. `migrate` one-off task run/);
 });
@@ -69,6 +89,10 @@ test("deploy workflow includes migrate before web and worker updates", () => {
 
   assert.match(workflow, /private_subnet_ids:/);
   assert.match(workflow, /task_security_group_ids:/);
+  assert.match(
+    workflow,
+    /run_shopify_deploy:\s+[\s\S]*default: "false"/m,
+  );
   assert.match(workflow, /Render task definitions/);
   assert.match(workflow, /Register and run migration task/);
   assert.match(workflow, /Update web service/);
@@ -81,7 +105,7 @@ test("deploy workflow includes migrate before web and worker updates", () => {
   assert.match(workflow, /Migration task failed: exitCode=/);
   assert.match(workflow, /wait services-stable/);
   assert.match(workflow, /npm install --global @shopify\/cli@latest/);
-  assert.match(workflow, /shopify app deploy/);
+  assert.match(workflow, /shopify app deploy --allow-updates/);
   assert.match(workflow, /SHOPIFY_CLI_PARTNERS_TOKEN/);
   assert.match(workflow, /Missing required secret: SHOPIFY_CLI_PARTNERS_TOKEN/);
   assert.match(workflow, /Validate required Shopify app config/);
@@ -107,9 +131,13 @@ test("web template requires port mappings and secret valueFrom entries", () => {
     template,
     /"name": "PROVENANCE_SIGNING_KEY",\s+"valueFrom": "__PROVENANCE_SIGNING_KEY_SECRET_ARN__"/,
   );
+  assert.match(
+    template,
+    /"name": "TELEMETRY_PSEUDONYM_KEY",\s+"valueFrom": "__TELEMETRY_PSEUDONYM_KEY_SECRET_ARN__"/,
+  );
 });
 
-test("worker and migrate templates omit port mappings but keep shared secrets", () => {
+test("worker and migrate templates omit port mappings and keep telemetry secret out of migrate", () => {
   const workerTemplate = readProjectFile("infra/aws/ecs/worker.task-definition.json");
   const migrateTemplate = readProjectFile("infra/aws/ecs/migrate.task-definition.json");
 
@@ -119,6 +147,8 @@ test("worker and migrate templates omit port mappings but keep shared secrets", 
   assert.match(migrateTemplate, /prisma:migrate:deploy/);
   assert.match(workerTemplate, /"name": "DATABASE_URL", "valueFrom": "__DATABASE_URL_SECRET_ARN__"/);
   assert.match(migrateTemplate, /"name": "DATABASE_URL", "valueFrom": "__DATABASE_URL_SECRET_ARN__"/);
+  assert.match(workerTemplate, /"name": "TELEMETRY_PSEUDONYM_KEY"/);
+  assert.doesNotMatch(migrateTemplate, /"name": "TELEMETRY_PSEUDONYM_KEY"/);
 });
 
 test("render script fills placeholders and writes valid JSON", async () => {
@@ -138,8 +168,743 @@ test("render script fills placeholders and writes valid JSON", async () => {
   assert.equal(rendered.containerDefinitions[0].portMappings[0].containerPort, 3000);
   assert.equal(
     rendered.containerDefinitions[0].secrets.map((entry) => entry.name).join(","),
-    "DATABASE_URL,SHOPIFY_API_SECRET,SHOP_TOKEN_ENCRYPTION_KEY,PROVENANCE_SIGNING_KEY",
+    "DATABASE_URL,SHOPIFY_API_SECRET,SHOP_TOKEN_ENCRYPTION_KEY,PROVENANCE_SIGNING_KEY,TELEMETRY_PSEUDONYM_KEY",
   );
+});
+
+test("observability contract fixes alarm metrics and scheduler cadence", () => {
+  const contract = JSON.parse(readProjectFile("infra/aws/observability-contract.json"));
+
+  assert.equal(contract.namespace, "ShopifyMatri/Operations");
+  assert.equal(contract.logRetentionDays, 7);
+  assert.equal(contract.webhookPayloadRetentionDays, 7);
+  assert.equal(contract.jobAttemptRetentionDays, 30);
+  assert.equal(contract.artifactRetentionDays["product.preview.edited-upload"], 7);
+  assert.equal(contract.artifactRetentionDays["product.write.result"], 90);
+  assert.deepEqual(contract.scheduler.retentionSweep, {
+    deadLetterRetryCooldownMinutes: 30,
+    dedupeKey: "system:retention-sweep:{JST calendar date}",
+    kind: "system.retention-sweep",
+    localTime: "03:00",
+    timeZone: "Asia/Tokyo",
+  });
+  assert.deepEqual(contract.scheduler.stuckJobSweep, {
+    cadenceMinutes: 5,
+    deadLetterRetryCooldownMinutes: 5,
+    dedupeKey: "system:stuck-job-sweep:{UTC 5-minute window start ISO}",
+    kind: "system.stuck-job-sweep",
+    timeZone: "UTC",
+  });
+  assert.deepEqual(contract.scheduler.fallbackDispatch, {
+    prioritizeSystemJobs: true,
+  });
+  assert.equal(contract.alarms[0].metricName, "DeadLetteredJobs");
+  assert.equal(contract.alarms[3].metricName, "StaleLeasedJobs");
+  assert.equal(contract.alarms[3].statistic, "Maximum");
+});
+
+test("worker self-enqueues due system sweep jobs when no scheduler resource is provisioned", async () => {
+  const prisma = {
+    jobs: [],
+    job: {
+      async create({ data }) {
+        const duplicate = prisma.jobs.find((job) =>
+          job.shopDomain === data.shopDomain
+          && job.kind === data.kind
+          && job.dedupeKey === data.dedupeKey
+          && data.dedupeKey !== null
+          && job.state !== "dead_letter"
+        );
+
+        if (duplicate) {
+          const error = new Error("duplicate");
+          error.code = "P2002";
+          throw error;
+        }
+
+        const created = {
+          createdAt: new Date("2026-03-17T03:05:00.000Z"),
+          id: `job-${prisma.jobs.length + 1}`,
+          state: "queued",
+          ...data,
+        };
+        prisma.jobs.push(created);
+        return created;
+      },
+      async findFirst() {
+        return null;
+      },
+    },
+  };
+
+  await enqueueDueSystemJobs({
+    jobQueue: createPrismaJobQueue(prisma),
+    logger: {
+      info() {},
+    },
+    now: new Date("2026-03-16T18:05:00.000Z"),
+  });
+
+  assert.deepEqual(
+    prisma.jobs.map((job) => job.kind).sort(),
+    [SYSTEM_RETENTION_SWEEP_KIND, SYSTEM_STUCK_JOB_SWEEP_KIND],
+  );
+  assert.equal(
+    prisma.jobs.find((job) => job.kind === SYSTEM_RETENTION_SWEEP_KIND)?.maxAttempts,
+    resolveSystemJobMaxAttempts(SYSTEM_RETENTION_SWEEP_KIND),
+  );
+  assert.equal(
+    prisma.jobs.find((job) => job.kind === SYSTEM_STUCK_JOB_SWEEP_KIND)?.maxAttempts,
+    resolveSystemJobMaxAttempts(SYSTEM_STUCK_JOB_SWEEP_KIND),
+  );
+});
+
+test("worker self-scheduler backfills missed retention sweep dates after downtime", async () => {
+  const prisma = {
+    jobs: [{
+      createdAt: new Date("2026-03-16T03:05:00.000Z"),
+      dedupeKey: "system:retention-sweep:2026-03-16",
+      id: "job-retention-2026-03-16",
+      kind: SYSTEM_RETENTION_SWEEP_KIND,
+      payload: {},
+      shopDomain: "__system__",
+      state: "completed",
+    }],
+    job: {
+      async create({ data }) {
+        const created = { id: `job-${prisma.jobs.length + 1}`, state: "queued", ...data };
+        prisma.jobs.push(created);
+        return created;
+      },
+      async findFirst({ where }) {
+        if (where.dedupeKey == null) {
+          return [...prisma.jobs]
+            .filter((job) => job.shopDomain === where.shopDomain && job.kind === where.kind)
+            .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())[0] ?? null;
+        }
+
+        return prisma.jobs.find((job) =>
+          job.shopDomain === where.shopDomain
+          && job.kind === where.kind
+          && job.dedupeKey === where.dedupeKey,
+        ) ?? null;
+      },
+    },
+  };
+
+  await enqueueDueSystemJobs({
+    jobQueue: createPrismaJobQueue(prisma),
+    logger: {
+      info() {},
+    },
+    now: new Date("2026-03-18T01:00:00.000Z"),
+  });
+
+  assert.deepEqual(
+    prisma.jobs
+      .filter((job) => job.kind === SYSTEM_RETENTION_SWEEP_KIND)
+      .map((job) => job.dedupeKey)
+      .sort(),
+    [
+      "system:retention-sweep:2026-03-16",
+      "system:retention-sweep:2026-03-17",
+      "system:retention-sweep:2026-03-18",
+    ],
+  );
+});
+
+test("worker self-scheduler backfills the missed prior-day retention window before 03:00 JST", async () => {
+  const prisma = {
+    jobs: [{
+      createdAt: new Date("2026-03-16T03:05:00.000Z"),
+      dedupeKey: "system:retention-sweep:2026-03-16",
+      id: "job-retention-2026-03-16",
+      kind: SYSTEM_RETENTION_SWEEP_KIND,
+      payload: {},
+      shopDomain: "__system__",
+      state: "completed",
+    }],
+    job: {
+      async create({ data }) {
+        const created = { id: `job-${prisma.jobs.length + 1}`, state: "queued", ...data };
+        prisma.jobs.push(created);
+        return created;
+      },
+      async findFirst({ where }) {
+        if (where.dedupeKey == null) {
+          return [...prisma.jobs]
+            .filter((job) => job.shopDomain === where.shopDomain && job.kind === where.kind)
+            .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())[0] ?? null;
+        }
+
+        return prisma.jobs.find((job) =>
+          job.shopDomain === where.shopDomain
+          && job.kind === where.kind
+          && job.dedupeKey === where.dedupeKey,
+        ) ?? null;
+      },
+    },
+  };
+
+  await enqueueDueSystemJobs({
+    jobQueue: createPrismaJobQueue(prisma),
+    logger: {
+      info() {},
+    },
+    now: new Date("2026-03-17T15:30:00.000Z"),
+  });
+
+  assert.deepEqual(
+    prisma.jobs
+      .filter((job) => job.kind === SYSTEM_RETENTION_SWEEP_KIND)
+      .map((job) => job.dedupeKey)
+      .sort(),
+    [
+      "system:retention-sweep:2026-03-16",
+      "system:retention-sweep:2026-03-17",
+    ],
+  );
+});
+
+test("worker self-scheduler backfills the prior-day retention window on a fresh queue before 03:00 JST", async () => {
+  const prisma = {
+    jobs: [],
+    job: {
+      async create({ data }) {
+        const created = { id: `job-${prisma.jobs.length + 1}`, state: "queued", ...data };
+        prisma.jobs.push(created);
+        return created;
+      },
+      async findFirst() {
+        return null;
+      },
+      async findMany() {
+        return [];
+      },
+    },
+  };
+
+  await enqueueDueSystemJobs({
+    jobQueue: createPrismaJobQueue(prisma),
+    logger: {
+      info() {},
+    },
+    now: new Date("2026-03-17T15:30:00.000Z"),
+  });
+
+  assert.deepEqual(
+    prisma.jobs
+      .filter((job) => job.kind === SYSTEM_RETENTION_SWEEP_KIND)
+      .map((job) => job.dedupeKey),
+    ["system:retention-sweep:2026-03-17"],
+  );
+});
+
+test("manual system job script uses the shared retry contract for each kind", () => {
+  const script = readProjectFile("scripts/enqueue-system-job.mjs");
+
+  assert.match(
+    script,
+    /maxAttempts: resolveSystemJobMaxAttempts\(SYSTEM_RETENTION_SWEEP_KIND\)/,
+  );
+  assert.match(
+    script,
+    /maxAttempts: resolveSystemJobMaxAttempts\(SYSTEM_STUCK_JOB_SWEEP_KIND\)/,
+  );
+  assert.match(
+    script,
+    /maxAttempts: jobConfig\.maxAttempts/,
+  );
+});
+
+test("worker self-scheduler does not enqueue the same system window twice after completion", async () => {
+  const prisma = {
+    jobs: [{
+      createdAt: new Date("2026-03-17T03:05:00.000Z"),
+      dedupeKey: "system:stuck-job-sweep:2026-03-17T03:05:00.000Z",
+      id: "job-existing",
+      kind: SYSTEM_STUCK_JOB_SWEEP_KIND,
+      payload: {},
+      shopDomain: "__system__",
+      state: "completed",
+    }],
+    job: {
+      async create({ data }) {
+        const duplicate = prisma.jobs.find((job) =>
+          job.shopDomain === data.shopDomain
+          && job.kind === data.kind
+          && job.dedupeKey === data.dedupeKey
+          && data.dedupeKey !== null
+          && job.state !== "dead_letter"
+        );
+
+        if (duplicate) {
+          const error = new Error("duplicate");
+          error.code = "P2002";
+          throw error;
+        }
+
+        const created = { id: "job-new", state: "queued", ...data };
+        prisma.jobs.push(created);
+        return created;
+      },
+      async findFirst({ where }) {
+        if (where.dedupeKey == null) {
+          return prisma.jobs.find((job) =>
+            job.shopDomain === where.shopDomain
+            && job.kind === where.kind,
+          ) ?? null;
+        }
+
+        return prisma.jobs.find((job) =>
+          job.shopDomain === where.shopDomain
+          && job.kind === where.kind
+          && job.dedupeKey === where.dedupeKey,
+        ) ?? null;
+      },
+    },
+  };
+
+  await enqueueDueSystemJobs({
+    jobQueue: createPrismaJobQueue(prisma),
+    logger: {
+      info() {},
+    },
+    now: new Date("2026-03-17T03:07:00.000Z"),
+  });
+
+  assert.equal(prisma.jobs.some((job) => job.kind === SYSTEM_STUCK_JOB_SWEEP_KIND && job.id !== "job-existing"), false);
+  assert.equal(prisma.jobs.some((job) => job.kind === SYSTEM_RETENTION_SWEEP_KIND), true);
+});
+
+test("worker self-scheduler retries a dead-lettered stuck-job sweep window after cooldown", async () => {
+  const prisma = {
+    jobs: [{
+      createdAt: new Date("2026-03-17T03:05:00.000Z"),
+      deadLetteredAt: new Date("2026-03-17T03:06:00.000Z"),
+      dedupeKey: "system:stuck-job-sweep:2026-03-17T03:05:00.000Z",
+      id: "job-dead-lettered",
+      kind: SYSTEM_STUCK_JOB_SWEEP_KIND,
+      payload: {},
+      shopDomain: "__system__",
+      state: "dead_letter",
+    }],
+    job: {
+      async create({ data }) {
+        const duplicate = prisma.jobs.find((job) =>
+          job.shopDomain === data.shopDomain
+          && job.kind === data.kind
+          && job.dedupeKey === data.dedupeKey
+          && data.dedupeKey !== null
+          && job.state !== "dead_letter"
+        );
+
+        if (duplicate) {
+          const error = new Error("duplicate");
+          error.code = "P2002";
+          throw error;
+        }
+
+        const created = { id: "job-retry", state: "queued", ...data };
+        prisma.jobs.push(created);
+        return created;
+      },
+      async findFirst({ where }) {
+        if (where.dedupeKey == null) {
+          return prisma.jobs.find((job) =>
+            job.shopDomain === where.shopDomain
+            && job.kind === where.kind,
+          ) ?? null;
+        }
+
+        return prisma.jobs.find((job) =>
+          job.shopDomain === where.shopDomain
+          && job.kind === where.kind
+          && job.dedupeKey === where.dedupeKey,
+        ) ?? null;
+      },
+    },
+  };
+
+  await enqueueDueSystemJobs({
+    jobQueue: createPrismaJobQueue(prisma),
+    logger: {
+      info() {},
+    },
+    now: new Date("2026-03-17T03:12:00.000Z"),
+  });
+
+  assert.equal(
+    prisma.jobs.some((job) => job.kind === SYSTEM_STUCK_JOB_SWEEP_KIND && job.id === "job-retry"),
+    true,
+  );
+});
+
+test("worker self-scheduler defers a dead-lettered daily retention sweep until cooldown expires", async () => {
+  const prisma = {
+    jobs: [{
+      createdAt: new Date("2026-03-17T03:00:00.000Z"),
+      deadLetteredAt: new Date("2026-03-17T03:10:00.000Z"),
+      dedupeKey: "system:retention-sweep:2026-03-17",
+      id: "job-dead-lettered-retention",
+      kind: SYSTEM_RETENTION_SWEEP_KIND,
+      payload: {},
+      shopDomain: "__system__",
+      state: "dead_letter",
+    }],
+    job: {
+      async create({ data }) {
+        const created = { id: "job-should-not-exist", state: "queued", ...data };
+        prisma.jobs.push(created);
+        return created;
+      },
+      async findFirst({ where }) {
+        if (where.dedupeKey == null) {
+          return prisma.jobs.find((job) =>
+            job.shopDomain === where.shopDomain
+            && job.kind === where.kind,
+          ) ?? null;
+        }
+
+        return prisma.jobs.find((job) =>
+          job.shopDomain === where.shopDomain
+          && job.kind === where.kind
+          && job.dedupeKey === where.dedupeKey,
+        ) ?? null;
+      },
+    },
+  };
+
+  await enqueueDueSystemJobs({
+    jobQueue: createPrismaJobQueue(prisma),
+    logger: {
+      info() {},
+    },
+    now: new Date("2026-03-17T03:25:00.000Z"),
+  });
+
+  assert.equal(
+    prisma.jobs.some((job) => job.kind === SYSTEM_RETENTION_SWEEP_KIND && job.id === "job-should-not-exist"),
+    false,
+  );
+});
+
+test("worker self-scheduler retries a dead-lettered daily retention sweep after cooldown", async () => {
+  const prisma = {
+    jobs: [{
+      createdAt: new Date("2026-03-17T03:00:00.000Z"),
+      deadLetteredAt: new Date("2026-03-17T03:10:00.000Z"),
+      dedupeKey: "system:retention-sweep:2026-03-17",
+      id: "job-dead-lettered-retention",
+      kind: SYSTEM_RETENTION_SWEEP_KIND,
+      payload: {},
+      shopDomain: "__system__",
+      state: "dead_letter",
+    }],
+    job: {
+      async create({ data }) {
+        const created = { id: "job-retention-retry", state: "queued", ...data };
+        prisma.jobs.push(created);
+        return created;
+      },
+      async findFirst({ where }) {
+        if (where.dedupeKey == null) {
+          return prisma.jobs.find((job) =>
+            job.shopDomain === where.shopDomain
+            && job.kind === where.kind,
+          ) ?? null;
+        }
+
+        return prisma.jobs.find((job) =>
+          job.shopDomain === where.shopDomain
+          && job.kind === where.kind
+          && job.dedupeKey === where.dedupeKey,
+        ) ?? null;
+      },
+    },
+  };
+
+  await enqueueDueSystemJobs({
+    jobQueue: createPrismaJobQueue(prisma),
+    logger: {
+      info() {},
+    },
+    now: new Date("2026-03-17T03:45:00.000Z"),
+  });
+
+  assert.equal(
+    prisma.jobs.some((job) => job.kind === SYSTEM_RETENTION_SWEEP_KIND && job.id === "job-retention-retry"),
+    true,
+  );
+});
+
+test("worker self-scheduler retries an older dead-lettered retention window even after later windows completed", async () => {
+  const prisma = {
+    jobs: [{
+      createdAt: new Date("2026-03-17T03:00:00.000Z"),
+      deadLetteredAt: new Date("2026-03-17T03:10:00.000Z"),
+      dedupeKey: "system:retention-sweep:2026-03-17",
+      id: "job-dead-lettered-retention",
+      kind: SYSTEM_RETENTION_SWEEP_KIND,
+      payload: {},
+      shopDomain: "__system__",
+      state: "dead_letter",
+    }, {
+      createdAt: new Date("2026-03-18T03:00:00.000Z"),
+      dedupeKey: "system:retention-sweep:2026-03-18",
+      id: "job-completed-retention",
+      kind: SYSTEM_RETENTION_SWEEP_KIND,
+      payload: {},
+      shopDomain: "__system__",
+      state: "completed",
+    }],
+    job: {
+      async create({ data }) {
+        const duplicate = prisma.jobs.find((job) =>
+          job.shopDomain === data.shopDomain
+          && job.kind === data.kind
+          && job.dedupeKey === data.dedupeKey
+          && data.dedupeKey !== null
+          && job.state !== "dead_letter"
+        );
+
+        if (duplicate) {
+          const error = new Error("duplicate");
+          error.code = "P2002";
+          throw error;
+        }
+
+        const created = { id: `job-${prisma.jobs.length + 1}`, state: "queued", ...data };
+        prisma.jobs.push(created);
+        return created;
+      },
+      async findFirst({ where }) {
+        if (where.dedupeKey == null) {
+          return [...prisma.jobs]
+            .filter((job) => job.shopDomain === where.shopDomain && job.kind === where.kind)
+            .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())[0] ?? null;
+        }
+
+        return [...prisma.jobs]
+          .filter((job) =>
+            job.shopDomain === where.shopDomain
+            && job.kind === where.kind
+            && job.dedupeKey === where.dedupeKey,
+          )
+          .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())[0] ?? null;
+      },
+      async findMany({ where }) {
+        return [...prisma.jobs]
+          .filter((job) => job.shopDomain === where.shopDomain && job.kind === where.kind)
+          .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
+      },
+    },
+  };
+
+  await enqueueDueSystemJobs({
+    jobQueue: createPrismaJobQueue(prisma),
+    logger: {
+      info() {},
+    },
+    now: new Date("2026-03-18T01:00:00.000Z"),
+  });
+
+  assert.equal(
+    prisma.jobs.some((job) =>
+      job.kind === SYSTEM_RETENTION_SWEEP_KIND
+      && job.dedupeKey === "system:retention-sweep:2026-03-17"
+      && job.id !== "job-dead-lettered-retention",
+    ),
+    true,
+  );
+});
+
+test("worker prioritizes due system sweep jobs ahead of ordinary backlog", async () => {
+  const leasedKinds = [];
+  const processRef = new EventEmitter();
+
+  await runBootstrapWorker({
+    artifactStorage: {},
+    env: {
+      AWS_REGION: "ap-northeast-1",
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/matri",
+      PROVENANCE_SIGNING_KEY: Buffer.alloc(32, 1).toString("base64"),
+      QUEUE_LEASE_MS: "300000",
+      QUEUE_POLL_INTERVAL_MS: "30000",
+      S3_ARTIFACT_BUCKET: "matri-artifacts",
+      S3_ARTIFACT_PREFIX: "artifacts",
+      SCOPES: "read_products,write_products",
+      SHOPIFY_API_KEY: "test-api-key",
+      SHOPIFY_API_SECRET: "secret",
+      SHOPIFY_APP_URL: "https://example.com",
+      SHOP_TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 2).toString("base64"),
+      TELEMETRY_PSEUDONYM_KEY: Buffer.alloc(32, 3).toString("base64"),
+    },
+    jobQueue: {
+      async complete() {
+        return true;
+      },
+      async fail() {
+        return null;
+      },
+      async heartbeat() {
+        return true;
+      },
+      async leaseNext({ kinds }) {
+        leasedKinds.push(kinds);
+        if (kinds?.includes(SYSTEM_RETENTION_SWEEP_KIND)) {
+          return {
+            id: "system-job-1",
+            kind: SYSTEM_RETENTION_SWEEP_KIND,
+            payload: {},
+            shopDomain: "__system__",
+          };
+        }
+
+        throw new Error("ordinary backlog should not be leased while a due system job exists");
+      },
+    },
+    logger: {
+      error() {},
+      info() {},
+    },
+    prisma: {
+      async $connect() {},
+      async $disconnect() {},
+    },
+    processRef,
+    runJob: async () => {
+      processRef.emit("SIGTERM");
+    },
+    workerId: "worker-1",
+  });
+
+  assert.deepEqual(leasedKinds, [[SYSTEM_RETENTION_SWEEP_KIND, SYSTEM_STUCK_JOB_SWEEP_KIND]]);
+});
+
+test("bootstrap cleanup removes finalized shop redact queue state after completion", async () => {
+  const deleted = [];
+
+  const result = await cleanupCompletedRedactJob({
+    jobId: "job-redact-active",
+    logger: {
+      info() {},
+    },
+    prisma: {
+      async $transaction(callback) {
+        return callback({
+          job: {
+            async deleteMany(args) {
+              deleted.push(["job", args]);
+              return { count: 1 };
+            },
+          },
+          jobLease: {
+            async deleteMany(args) {
+              deleted.push(["jobLease", args]);
+              return { count: 1 };
+            },
+          },
+        });
+      },
+    },
+    shopDomain: "example.myshopify.com",
+  });
+
+  assert.deepEqual(result, {
+    deletedJobLeases: 1,
+    deletedJobs: 1,
+  });
+  assert.deepEqual(deleted, [
+    ["job", { where: {
+      id: "job-redact-active",
+      shopDomain: "example.myshopify.com",
+    } }],
+    ["jobLease", { where: {
+      jobId: null,
+      leaseToken: null,
+      shopDomain: "example.myshopify.com",
+      workerId: null,
+    } }],
+  ]);
+});
+
+test("bootstrap worker emits the retention failure counter when the sweep job fails", async () => {
+  const lines = [];
+  const processRef = new EventEmitter();
+  let leased = false;
+
+  await runBootstrapWorker({
+    artifactStorage: {},
+    env: {
+      AWS_REGION: "ap-northeast-1",
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/matri",
+      NODE_ENV: "production",
+      PROVENANCE_SIGNING_KEY: Buffer.alloc(32, 1).toString("base64"),
+      QUEUE_LEASE_MS: "300000",
+      QUEUE_POLL_INTERVAL_MS: "30000",
+      S3_ARTIFACT_BUCKET: "matri-artifacts",
+      S3_ARTIFACT_PREFIX: "artifacts",
+      SCOPES: "read_products,write_products",
+      SHOPIFY_API_KEY: "test-api-key",
+      SHOPIFY_API_SECRET: "secret",
+      SHOPIFY_APP_URL: "https://example.com",
+      SHOP_TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 2).toString("base64"),
+      TELEMETRY_PSEUDONYM_KEY: Buffer.alloc(32, 3).toString("base64"),
+    },
+    jobQueue: {
+      async complete() {
+        return true;
+      },
+      async enqueue() {
+        return null;
+      },
+      async fail() {
+        processRef.emit("SIGTERM");
+        return { id: "system-retention-1", state: "retryable" };
+      },
+      async findLatestByDedupeKey() {
+        return null;
+      },
+      async heartbeat() {
+        return true;
+      },
+      async leaseNext() {
+        if (leased) {
+          return null;
+        }
+
+        leased = true;
+        return {
+          id: "system-retention-1",
+          kind: SYSTEM_RETENTION_SWEEP_KIND,
+          payload: {},
+          shopDomain: "__system__",
+        };
+      },
+    },
+    logger: {
+      error() {},
+      info() {},
+      log(line) {
+        lines.push(JSON.parse(line));
+      },
+    },
+    prisma: {
+      async $connect() {},
+      async $disconnect() {},
+    },
+    processRef,
+    runJob: async () => {
+      const error = new Error("retention-sweep-retry-needed");
+      error.code = "retention-sweep-retry-needed";
+      throw error;
+    },
+    workerId: "worker-1",
+  });
+
+  assert.equal(lines.some((line) => line.RetentionSweepFailures === 1), true);
+  assert.equal(lines.some((line) => line.event === "system.retention_sweep.failed"), true);
 });
 
 test("render script rejects unresolved placeholders", () => {
@@ -192,7 +957,10 @@ test("worker validation fails fast outside production when provenance signing ke
         S3_ARTIFACT_PREFIX: "artifacts",
         SCOPES: "read_products,write_products",
         SHOPIFY_API_KEY: "test-api-key",
+        SHOPIFY_API_SECRET: "secret",
         SHOPIFY_APP_URL: "https://example.com",
+        SHOP_TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 2).toString("base64"),
+        TELEMETRY_PSEUDONYM_KEY: Buffer.alloc(32, 3).toString("base64"),
       }),
     /Missing required worker secrets: PROVENANCE_SIGNING_KEY/,
   );
@@ -213,6 +981,7 @@ test("worker validation fails fast outside production when Shopify API secret is
         SHOPIFY_API_KEY: "test-api-key",
         SHOPIFY_APP_URL: "https://example.com",
         SHOP_TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 2).toString("base64"),
+        TELEMETRY_PSEUDONYM_KEY: Buffer.alloc(32, 3).toString("base64"),
       }),
     /Missing required worker secrets: SHOPIFY_API_SECRET/,
   );
@@ -233,9 +1002,51 @@ test("worker validation fails fast outside production when offline session encry
         SHOPIFY_API_KEY: "test-api-key",
         SHOPIFY_API_SECRET: "secret",
         SHOPIFY_APP_URL: "https://example.com",
+        TELEMETRY_PSEUDONYM_KEY: Buffer.alloc(32, 3).toString("base64"),
       }),
     /Missing required worker secrets: SHOP_TOKEN_ENCRYPTION_KEY/,
   );
+});
+
+test("worker validation fails fast when telemetry pseudonym key is missing", () => {
+  assert.throws(
+    () =>
+      validateWorkerEnvironment({
+        AWS_REGION: "ap-northeast-1",
+        DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/matri",
+        NODE_ENV: "production",
+        PROVENANCE_SIGNING_KEY: Buffer.alloc(32, 1).toString("base64"),
+        QUEUE_LEASE_MS: "300000",
+        QUEUE_POLL_INTERVAL_MS: "30000",
+        S3_ARTIFACT_BUCKET: "matri-artifacts",
+        S3_ARTIFACT_PREFIX: "artifacts",
+        SCOPES: "read_products,write_products",
+        SHOPIFY_API_KEY: "test-api-key",
+        SHOPIFY_API_SECRET: "secret",
+        SHOPIFY_APP_URL: "https://example.com",
+        SHOP_TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 2).toString("base64"),
+      }),
+    /Missing required worker secrets: TELEMETRY_PSEUDONYM_KEY/,
+  );
+});
+
+test("worker validation allows telemetry pseudonym key to be omitted outside production", () => {
+  const config = validateWorkerEnvironment({
+    AWS_REGION: "ap-northeast-1",
+    DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/matri",
+    PROVENANCE_SIGNING_KEY: Buffer.alloc(32, 1).toString("base64"),
+    QUEUE_LEASE_MS: "300000",
+    QUEUE_POLL_INTERVAL_MS: "30000",
+    S3_ARTIFACT_BUCKET: "matri-artifacts",
+    S3_ARTIFACT_PREFIX: "artifacts",
+    SCOPES: "read_products,write_products",
+    SHOPIFY_API_KEY: "test-api-key",
+    SHOPIFY_API_SECRET: "secret",
+    SHOPIFY_APP_URL: "https://example.com",
+    SHOP_TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 2).toString("base64"),
+  });
+
+  assert.equal(config.awsRegion, "ap-northeast-1");
 });
 
 test("worker validation fails fast when provenance signing key is not 32-byte base64", () => {
@@ -254,6 +1065,7 @@ test("worker validation fails fast when provenance signing key is not 32-byte ba
         SHOPIFY_API_SECRET: "secret",
         SHOPIFY_APP_URL: "https://example.com",
         SHOP_TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString("base64"),
+        TELEMETRY_PSEUDONYM_KEY: Buffer.alloc(32, 8).toString("base64"),
       }),
     /PROVENANCE_SIGNING_KEY must decode to 32 bytes/,
   );
@@ -275,6 +1087,7 @@ test("worker validation fails fast when shop token encryption key is not 32-byte
         SHOPIFY_API_SECRET: "secret",
         SHOPIFY_APP_URL: "https://example.com",
         SHOP_TOKEN_ENCRYPTION_KEY: "invalid",
+        TELEMETRY_PSEUDONYM_KEY: Buffer.alloc(32, 8).toString("base64"),
       }),
     /SHOP_TOKEN_ENCRYPTION_KEY must decode to 32 bytes/,
   );
@@ -296,6 +1109,7 @@ test("worker validation accepts a fully configured production environment", () =
     SHOPIFY_API_SECRET: "secret",
     SHOPIFY_APP_URL: "https://example.com",
     SHOP_TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 2).toString("base64"),
+    TELEMETRY_PSEUDONYM_KEY: Buffer.alloc(32, 3).toString("base64"),
   });
 
   assert.equal(config.awsRegion, "ap-northeast-1");
@@ -320,6 +1134,7 @@ test("worker validation rejects a one-millisecond lease that cannot heartbeat be
         SHOPIFY_API_SECRET: "secret",
         SHOPIFY_APP_URL: "https://example.com",
         SHOP_TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 2).toString("base64"),
+        TELEMETRY_PSEUDONYM_KEY: Buffer.alloc(32, 3).toString("base64"),
       }),
     /QUEUE_LEASE_MS must be greater than 1/,
   );
@@ -605,6 +1420,7 @@ test("worker drains the active job before disconnecting prisma on shutdown", asy
       SHOPIFY_API_SECRET: "secret",
       SHOPIFY_APP_URL: "https://example.com",
       SHOP_TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 2).toString("base64"),
+      TELEMETRY_PSEUDONYM_KEY: Buffer.alloc(32, 3).toString("base64"),
     },
     jobQueue: {
       async complete() {
@@ -686,6 +1502,7 @@ test("worker releases a newly leased job instead of starting it after shutdown i
       SHOPIFY_API_SECRET: "secret",
       SHOPIFY_APP_URL: "https://example.com",
       SHOP_TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 2).toString("base64"),
+      TELEMETRY_PSEUDONYM_KEY: Buffer.alloc(32, 3).toString("base64"),
     },
     jobQueue: {
       async complete() {
@@ -742,6 +1559,171 @@ test("worker releases a newly leased job instead of starting it after shutdown i
   assert.deepEqual(events, ["connect", "lease-wait", "release:job-export-1:worker-1", "disconnect"]);
 });
 
+test("worker passes configured queueLeaseMs to system stuck-job sweep handlers", async () => {
+  const seenArgs = [];
+  const processRef = new EventEmitter();
+  let leased = false;
+
+  await runBootstrapWorker({
+    artifactStorage: {},
+    env: {
+      AWS_REGION: "ap-northeast-1",
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/matri",
+      PROVENANCE_SIGNING_KEY: Buffer.alloc(32, 1).toString("base64"),
+      QUEUE_LEASE_MS: "420000",
+      QUEUE_POLL_INTERVAL_MS: "30000",
+      S3_ARTIFACT_BUCKET: "matri-artifacts",
+      S3_ARTIFACT_PREFIX: "artifacts",
+      SCOPES: "read_products,write_products",
+      SHOPIFY_API_KEY: "test-api-key",
+      SHOPIFY_API_SECRET: "secret",
+      SHOPIFY_APP_URL: "https://example.com",
+      SHOP_TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 2).toString("base64"),
+      TELEMETRY_PSEUDONYM_KEY: Buffer.alloc(32, 3).toString("base64"),
+    },
+    jobQueue: {
+      async complete() {
+        return true;
+      },
+      async fail() {
+        return { id: "system-job-1" };
+      },
+      async heartbeat() {
+        return true;
+      },
+      async leaseNext() {
+        if (leased) {
+          return null;
+        }
+
+        leased = true;
+        return {
+          id: "system-job-1",
+          kind: SYSTEM_STUCK_JOB_SWEEP_KIND,
+          payload: {},
+          shopDomain: "__system__",
+        };
+      },
+    },
+    logger: {
+      error() {},
+      info() {},
+    },
+    prisma: {
+      async $connect() {},
+      async $disconnect() {},
+    },
+    processRef,
+    runJob: async (args) => {
+      seenArgs.push({
+        leaseMs: args.leaseMs,
+        queueLeaseMs: args.queueLeaseMs,
+      });
+      processRef.emit("SIGTERM");
+    },
+    workerId: "worker-1",
+  });
+
+  assert.deepEqual(seenArgs, [{
+    leaseMs: 420000,
+    queueLeaseMs: 420000,
+  }]);
+});
+
+test("worker keeps draining ordinary jobs when scheduled system job enqueue fails", async () => {
+  const events = [];
+  const processRef = new EventEmitter();
+  let enqueueAttempts = 0;
+  let leased = false;
+
+  await runBootstrapWorker({
+    artifactStorage: {},
+    env: {
+      AWS_REGION: "ap-northeast-1",
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/matri",
+      PROVENANCE_SIGNING_KEY: Buffer.alloc(32, 1).toString("base64"),
+      QUEUE_LEASE_MS: "300000",
+      QUEUE_POLL_INTERVAL_MS: "30000",
+      S3_ARTIFACT_BUCKET: "matri-artifacts",
+      S3_ARTIFACT_PREFIX: "artifacts",
+      SCOPES: "read_products,write_products",
+      SHOPIFY_API_KEY: "test-api-key",
+      SHOPIFY_API_SECRET: "secret",
+      SHOPIFY_APP_URL: "https://example.com",
+      SHOP_TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 2).toString("base64"),
+      TELEMETRY_PSEUDONYM_KEY: Buffer.alloc(32, 3).toString("base64"),
+    },
+    jobQueue: {
+      async complete() {
+        events.push("complete");
+        return true;
+      },
+      async enqueue() {
+        enqueueAttempts += 1;
+        if (enqueueAttempts === 1) {
+          throw new Error("transient-enqueue-failure");
+        }
+        return null;
+      },
+      async fail() {
+        events.push("fail");
+        return null;
+      },
+      async heartbeat() {
+        return true;
+      },
+      async leaseNext() {
+        if (leased) {
+          return null;
+        }
+
+        leased = true;
+        return {
+          id: "job-export-1",
+          kind: PRODUCT_EXPORT_KIND,
+          payload: {},
+          shopDomain: "test-shop.myshopify.com",
+        };
+      },
+    },
+    logger: {
+      error(message, payload) {
+        events.push(["error", message, payload?.error?.message, payload?.workerId]);
+      },
+      info(message) {
+        events.push(["info", message]);
+      },
+      log(line) {
+        events.push(["log", line]);
+      },
+    },
+    prisma: {
+      async $connect() {
+        events.push("connect");
+      },
+      async $disconnect() {
+        events.push("disconnect");
+      },
+    },
+    processRef,
+    runJob: async () => {
+      events.push("run-job");
+      processRef.emit("SIGTERM");
+    },
+    workerId: "worker-1",
+  });
+
+  assert.equal(enqueueAttempts >= 1, true);
+  assert.equal(events.includes("run-job"), true);
+  assert.equal(events.includes("complete"), true);
+  assert.deepEqual(events.find((event) => Array.isArray(event) && event[0] === "error"), [
+    "error",
+    "Bootstrap worker failed to enqueue scheduled system jobs",
+    "transient-enqueue-failure",
+    "worker-1",
+  ]);
+});
+
 test("worker does not downgrade a successful export into fail() when complete() cannot finalize", async () => {
   const events = [];
 
@@ -761,6 +1743,7 @@ test("worker does not downgrade a successful export into fail() when complete() 
         SHOPIFY_API_SECRET: "secret",
         SHOPIFY_APP_URL: "https://example.com",
         SHOP_TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 2).toString("base64"),
+        TELEMETRY_PSEUDONYM_KEY: Buffer.alloc(32, 3).toString("base64"),
       },
       jobQueue: {
         async complete() {
