@@ -206,6 +206,25 @@ function createQueuePrismaDouble(seedJobs = []) {
         leases.push(created);
         return created;
       },
+      async upsert({ create, update, where }) {
+        const existing = leases.find((lease) => lease.shopDomain === where.shopDomain);
+        if (existing) {
+          applyJobData(existing, update);
+          return existing;
+        }
+
+        const created = {
+          createdAt: new Date("2026-03-13T00:00:00.000Z"),
+          jobId: null,
+          leaseExpiresAt: null,
+          leaseToken: null,
+          updatedAt: new Date("2026-03-13T00:00:00.000Z"),
+          workerId: null,
+          ...create,
+        };
+        leases.push(created);
+        return created;
+      },
       async findFirst({ where }) {
         return leases.find((lease) => matchesWhere(lease, where)) ?? null;
       },

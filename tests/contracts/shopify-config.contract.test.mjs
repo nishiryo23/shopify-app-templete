@@ -144,6 +144,7 @@ test("platform foundation persists queue and artifact metadata in PostgreSQL", (
   assert.match(migration, /CREATE UNIQUE INDEX "Job_shopDomain_kind_dedupeKey_active_key"/);
   assert.match(migration, /WHERE "dedupeKey" IS NOT NULL AND "state" IN \('queued', 'retryable', 'leased'\)/);
   assert.match(queue, /await ensureJobLeaseRow\(tx, candidate\.shopDomain\)/);
+  assert.match(queue, /await tx\.jobLease\.upsert\(\{/);
   assert.match(queue, /const lockedShop = await tx\.jobLease\.updateMany\(/);
   assert.match(queue, /leaseToken = crypto\.randomUUID\(\)/);
   assert.match(queue, /const updatedLease = await tx\.jobLease\.updateMany\(/);

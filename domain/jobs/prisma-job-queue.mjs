@@ -1,7 +1,4 @@
 import crypto from "node:crypto";
-function isUniqueConstraintError(error) {
-  return Boolean(error && typeof error === "object" && "code" in error && error.code === "P2002");
-}
 
 function addMilliseconds(value, milliseconds) {
   return new Date(value.getTime() + milliseconds);
@@ -20,17 +17,15 @@ function currentAttemptNumber(job) {
 }
 
 async function ensureJobLeaseRow(tx, shopDomain) {
-  try {
-    await tx.jobLease.create({
-      data: {
-        shopDomain,
-      },
-    });
-  } catch (error) {
-    if (!isUniqueConstraintError(error)) {
-      throw error;
-    }
-  }
+  await tx.jobLease.upsert({
+    create: {
+      shopDomain,
+    },
+    update: {},
+    where: {
+      shopDomain,
+    },
+  });
 }
 
 async function releaseJobLease(tx, { jobId, leaseToken, now, workerId }) {
@@ -81,7 +76,7 @@ export function createPrismaJobQueue(prisma) {
           },
         });
       } catch (error) {
-        if (isUniqueConstraintError(error)) {
+        if (error && typeof error === "object" && "code" in error && error.code === "P2002") {
           return null;
         }
 
