@@ -2,6 +2,10 @@ import crypto from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
+
+import { applyShopifyDevAppUrl } from "../scripts/shopify-dev-app-url.mjs";
+
+applyShopifyDevAppUrl();
 import { createArtifactStorageFromEnv } from "../domain/artifacts/factory.mjs";
 import { createPrismaJobQueue } from "../domain/jobs/prisma-job-queue.mjs";
 import { PRODUCT_EXPORT_KIND } from "../domain/products/export-profile.mjs";

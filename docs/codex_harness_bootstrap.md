@@ -46,3 +46,6 @@
   - 未解決事項
   - 次の ticket
   を残す
+
+## 7. ローカルで `shopify app dev` を使うとき
+- `pnpm dev` と CLI トンネル URL の扱いは **`docs/shopify_local_development.md`** を参照（`README.md` にも要約あり）。

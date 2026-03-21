@@ -2,13 +2,9 @@ import { reactRouter } from "@react-router/dev/vite";
 import { defineConfig, type UserConfig } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 
-if (
-  process.env.HOST &&
-  (!process.env.SHOPIFY_APP_URL || process.env.SHOPIFY_APP_URL === process.env.HOST)
-) {
-  process.env.SHOPIFY_APP_URL = process.env.HOST;
-  delete process.env.HOST;
-}
+import { applyShopifyDevAppUrl } from "./scripts/shopify-dev-app-url.mjs";
+
+applyShopifyDevAppUrl();
 
 const host = new URL(process.env.SHOPIFY_APP_URL || "http://localhost").hostname;
 

@@ -5,8 +5,12 @@ import {
   shopifyApp,
 } from "@shopify/shopify-app-react-router/server";
 
+import { applyShopifyDevAppUrl } from "../scripts/shopify-dev-app-url.mjs";
+
 import prisma from "./db.server";
 import { ShopSessionStorage } from "./services/shop-session-storage.server";
+
+applyShopifyDevAppUrl();
 
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,

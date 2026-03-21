@@ -21,3 +21,7 @@
 ## Runtime notes
 - `SHOP_TOKEN_ENCRYPTION_KEY`: offline token 暗号化用の base64 エンコード済み 32 byte key。未設定時は既存実装どおり開発環境で legacy fallback する。
 - `PROVENANCE_SIGNING_KEY`: row fingerprint / manifest 署名用の base64 エンコード済み 32 byte key。offline token 用の鍵とは分離する。未設定のまま署名が必要な処理を呼ぶと fail-fast する。
+
+## ローカル開発（トンネル URL）
+
+`shopify app dev` が渡すトンネル URL を `SHOPIFY_APP_URL` に自動正規化する。詳細は **`docs/shopify_local_development.md`** を参照。
