@@ -1028,10 +1028,24 @@ test("product export route delegates to shared service boundary", () => {
   const serviceFile = readProjectFile("app/services/product-exports.server.ts");
   const domainFile = readProjectFile("domain/products/export-jobs.mjs");
 
-  assert.match(routeFile, /import \{ createProductExport \} from "~\/app\/services\/product-exports\.server"/);
+  assert.match(routeFile, /import \{ createProductExport, loadProductExportDownload \} from "~\/app\/services\/product-exports\.server"/);
+  assert.match(routeFile, /export const action.*createProductExport/);
+  assert.match(routeFile, /export const loader.*loadProductExportDownload/);
+  assert.doesNotMatch(routeFile, /export default function/);
   assert.doesNotMatch(routeFile, /~\/domain\//);
   assert.match(serviceFile, /enqueueOrFindActiveProductExportJob/);
+  assert.match(serviceFile, /loadProductExportDownload/);
   assert.match(domainFile, /return findActiveProductExportJob\(\{/);
+});
+
+test("product export download verifies shop ownership and returns attachment disposition", () => {
+  const serviceFile = readProjectFile("app/services/product-exports.server.ts");
+
+  assert.match(serviceFile, /authenticateAndBootstrapShop/);
+  assert.match(serviceFile, /shopDomain.*authContext\.session\.shop/);
+  assert.match(serviceFile, /Content-Disposition.*attachment/);
+  assert.match(serviceFile, /state:\s*["']completed["']/);
+  assert.match(serviceFile, /PRODUCT_EXPORT_SOURCE_ARTIFACT_KIND/);
 });
 
 test("product export plan and ADR capture profile artifact and offline-session truth", () => {

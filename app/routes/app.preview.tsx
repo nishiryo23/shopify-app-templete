@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useFetcher, useLoaderData, useSearchParams } from "react-router";
-import { Page, Layout, Card, BlockStack, InlineStack, Text, Button, Select, Badge, Banner, Divider, Box, FormLayout } from "@shopify/polaris";
+import { Page, Layout, Card, BlockStack, InlineStack, Text, Button, Select, Badge, Banner, Divider, Box, FormLayout, Link } from "@shopify/polaris";
 import type { LoaderFunctionArgs } from "react-router";
 
 import { loadProductPreviewPage } from "~/app/services/product-previews.server";
@@ -302,6 +302,13 @@ export default function PreviewRoute() {
                         onChange={setSelectedExportJobId}
                         value={selectedExportJobId}
                       />
+                      {selectedExportJobId && (
+                        <InlineStack gap="200" align="start">
+                          <Link url={`/app/product-exports?jobId=${selectedExportJobId}`} target="_blank">
+                            原本ファイルをダウンロード
+                          </Link>
+                        </InlineStack>
+                      )}
                       <input name="profile" type="hidden" value={selectedProfile} />
                       <Select
                         label="編集レイアウト"

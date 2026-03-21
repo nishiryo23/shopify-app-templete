@@ -1,9 +1,7 @@
-import type { ActionFunctionArgs } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 
-import { createProductExport } from "~/app/services/product-exports.server";
+import { createProductExport, loadProductExportDownload } from "~/app/services/product-exports.server";
+
+export const loader = (args: LoaderFunctionArgs) => loadProductExportDownload(args);
 
 export const action = (args: ActionFunctionArgs) => createProductExport(args);
-
-export default function ProductExportsRoute() {
-  return null;
-}
