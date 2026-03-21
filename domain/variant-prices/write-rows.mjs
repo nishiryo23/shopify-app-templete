@@ -18,7 +18,7 @@ export function buildVariantPriceMutationFromPreviewRow(row) {
 
   if (!targetVariantId) {
     return {
-      errors: ["variant_id is required"],
+      errors: ["variant_id は必須です"],
       ok: false,
     };
   }
@@ -32,7 +32,7 @@ export function buildVariantPriceMutationFromPreviewRow(row) {
     if (!validation.valid) {
       errors.push(validation.error);
     } else if (!validation.normalized) {
-      errors.push("price cannot be blank when changed");
+      errors.push("price を変更した場合、空欄にはできません");
     } else {
       input.price = validation.canonical;
     }

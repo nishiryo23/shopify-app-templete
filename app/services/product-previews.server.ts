@@ -83,7 +83,7 @@ function json(data: unknown, init?: { headers?: Record<string, string>; status?:
 
 async function readFileText(file: File | null) {
   if (!(file instanceof File)) {
-    throw new Error("file upload is required");
+    throw new Error("ファイルのアップロードが必要です");
   }
 
   return {
@@ -112,7 +112,7 @@ async function loadCompletedExportBaseline({
   });
 
   if (!job) {
-    throw new Error("selected export job is not a completed product export for this shop");
+    throw new Error("選択したエクスポートジョブは、このショップの完了済み商品エクスポートではありません");
   }
 
   const [sourceArtifact, manifestArtifact] = await Promise.all([
@@ -135,7 +135,7 @@ async function loadCompletedExportBaseline({
   ]);
 
   if (!sourceArtifact || !manifestArtifact) {
-    throw new Error("selected export job is missing source or manifest artifact");
+    throw new Error("選択したエクスポートジョブに原本または manifest artifact がありません");
   }
 
   return {
@@ -168,7 +168,7 @@ export async function createProductPreview({ request }: ActionFunctionArgs) {
   const editedLayout = resolveEditedLayout(formData.get("editedLayout"));
 
   if (!exportJobId) {
-    return json({ error: "exportJobId is required" }, { status: 400 });
+    return json({ error: "エクスポートジョブを選択してください" }, { status: 400 });
   }
 
   try {
@@ -189,7 +189,7 @@ export async function createProductPreview({ request }: ActionFunctionArgs) {
     const storedSourceBody = extractArtifactBody(sourceRecord);
 
     if (!manifestBody || !storedSourceBody) {
-      throw new Error("selected export baseline body could not be read");
+      throw new Error("選択したエクスポート元ファイルを読み取れませんでした");
     }
 
     const sourceFormat = baseline.format;
@@ -207,7 +207,7 @@ export async function createProductPreview({ request }: ActionFunctionArgs) {
         role: "edited",
       });
     } else if (!inferredEditedFormat) {
-      throw new Error("edited file must use the .csv or .xlsx extension in matrixify mode");
+      throw new Error("Matrixify 互換モードでは、編集ファイルは .csv または .xlsx 拡張子である必要があります");
     } else {
       editedFormat = inferredEditedFormat;
     }
@@ -233,7 +233,7 @@ export async function createProductPreview({ request }: ActionFunctionArgs) {
     });
 
     if (!verification.ok) {
-      throw new Error(`source provenance verification failed: ${verification.reason}`);
+      throw new Error(`原本ファイルの整合性を確認できませんでした: ${verification.reason}`);
     }
 
     const editedDigest = sha256Hex(editedCanonical.canonicalCsvText);
@@ -311,17 +311,17 @@ export async function createProductPreview({ request }: ActionFunctionArgs) {
       });
 
       if (!job) {
-        throw new Error("Failed to enqueue product preview job");
+        throw new Error("商品プレビュージョブの登録に失敗しました");
       }
 
       if (job.payload?.editedUploadArtifactId !== createdArtifact.id) {
         await deleteArtifactIfPresent(createdArtifact);
       }
 
-      return json({
-        editedFormat,
-        editedLayout,
-        exportJobId,
+    return json({
+      editedFormat,
+      editedLayout,
+      exportJobId,
         format: sourceFormat,
         jobId: job.id,
         kind: PRODUCT_PREVIEW_KIND,
@@ -338,7 +338,7 @@ export async function createProductPreview({ request }: ActionFunctionArgs) {
     }
   } catch (error) {
     return json({
-      error: error instanceof Error ? error.message : "product preview request failed",
+      error: error instanceof Error ? error.message : "商品プレビューのリクエストに失敗しました",
     }, { status: 400 });
   }
 }
@@ -417,7 +417,7 @@ async function loadPreviewJobDetail({ jobId, shopDomain }: { jobId: string; shop
   const resultBody = extractArtifactBody(resultRecord);
 
   if (!resultBody) {
-    throw new Error("preview result artifact body could not be read");
+    throw new Error("プレビュー結果 artifact の内容を読み取れませんでした");
   }
 
   const payload = JSON.parse(resultBody.toString("utf8"));
@@ -477,7 +477,7 @@ async function loadJsonArtifactPayload(artifact: { objectKey: string } | null) {
   const body = extractArtifactBody(record);
 
   if (!body) {
-    throw new Error("artifact body could not be read");
+    throw new Error("artifact の内容を読み取れませんでした");
   }
 
   return JSON.parse(body.toString("utf8"));

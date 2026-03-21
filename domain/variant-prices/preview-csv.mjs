@@ -58,7 +58,7 @@ function parseCsvRows(csvText) {
   }
 
   if (inQuotes) {
-    throw new Error("CSV parsing failed: unclosed quoted field");
+    throw new Error("CSV の解析に失敗しました: 閉じられていない引用符があります");
   }
 
   if (currentCell.length > 0 || currentRow.length > 0) {
@@ -75,7 +75,7 @@ function assertHeader(headerRow) {
     actual.length !== PRODUCT_VARIANT_PRICES_EXPORT_HEADERS.length
     || actual.some((value, index) => value !== PRODUCT_VARIANT_PRICES_EXPORT_HEADERS[index])
   ) {
-    throw new Error("CSV header must exactly match product-variants-prices-v1");
+    throw new Error("CSV ヘッダーは product-variants-prices-v1 と完全一致する必要があります");
   }
 }
 
@@ -105,7 +105,7 @@ function stableSortObject(value) {
 function validateReadOnlyColumns({ baselineRow, editedRow, messages }) {
   for (const header of READ_ONLY_HEADERS) {
     if ((baselineRow?.[header] ?? "") !== (editedRow?.[header] ?? "")) {
-      messages.push(`${header} is read-only and must match the export baseline`);
+      messages.push(`${header} は読み取り専用で、export baseline と一致する必要があります`);
     }
   }
 }
@@ -119,7 +119,7 @@ function validateMoneyColumns(editedRow, changedFields, messages) {
   }
 
   if (changedFields.includes("price") && !String(editedRow?.price ?? "").trim()) {
-    messages.push("price cannot be blank when changed");
+    messages.push("price を変更した場合、空欄にはできません");
   }
 }
 
@@ -138,7 +138,7 @@ function diffChangedFields(baselineRow, editedRow) {
 export function parseVariantPricePreviewCsv(csvText) {
   const rows = parseCsvRows(csvText);
   if (rows.length === 0) {
-    throw new Error("CSV must include a header row");
+    throw new Error("CSV にはヘッダー行が必要です");
   }
 
   assertHeader(rows[0]);
@@ -147,7 +147,7 @@ export function parseVariantPricePreviewCsv(csvText) {
   for (let index = 1; index < rows.length; index += 1) {
     const cells = rows[index];
     if (cells.length !== PRODUCT_VARIANT_PRICES_EXPORT_HEADERS.length) {
-      throw new Error(`CSV row ${index + 1} must contain ${PRODUCT_VARIANT_PRICES_EXPORT_HEADERS.length} columns`);
+      throw new Error(`CSV の ${index + 1} 行目は ${PRODUCT_VARIANT_PRICES_EXPORT_HEADERS.length} 列である必要があります`);
     }
 
     parsedRows.push({
@@ -170,7 +170,7 @@ export function indexVariantPriceRows(parsedRows) {
     }
 
     if (rowsByVariantId.has(variantId)) {
-      throw new Error(`Duplicate variant_id detected: ${variantId}`);
+      throw new Error(`variant_id が重複しています: ${variantId}`);
     }
 
     rowsByVariantId.set(variantId, entry);
@@ -233,22 +233,22 @@ export function buildVariantPricePreviewRows({
 
     if (!productId) {
       classification = "error";
-      messages.push("product_id is required");
+      messages.push("product_id は必須です");
     } else if (!variantId) {
       classification = "error";
-      messages.push("variant_id is required");
+      messages.push("variant_id は必須です");
     } else if (!baselineRow) {
       classification = "error";
-      messages.push("variant_id was not present in the selected export baseline");
+      messages.push("variant_id が選択したエクスポート baseline に存在しません");
     } else if ((editedRow.product_id || "") !== productId) {
       classification = "error";
-      messages.push("product_id must match the product that owns the baseline variant");
+      messages.push("product_id は baseline 上でそのバリエーションを所有する商品と一致する必要があります");
     } else if (!currentRow) {
       classification = "error";
-      messages.push("Live Shopify variant could not be found");
+      messages.push("Shopify 上の最新のバリエーションが見つかりません");
     } else if (currentRow.product_id !== productId) {
       classification = "error";
-      messages.push("product_id must match the product that owns the live variant");
+      messages.push("product_id は Shopify 上の最新でそのバリエーションを所有する商品と一致する必要があります");
     } else {
       validateReadOnlyColumns({ baselineRow, editedRow, messages });
       validateMoneyColumns(editedRow, changedFields, messages);
@@ -257,7 +257,7 @@ export function buildVariantPricePreviewRows({
         classification = "error";
       } else if (!variantPriceRowsMatch(currentRow, baselineRow)) {
         classification = "warning";
-        messages.push("Live Shopify variant changed after the selected export baseline");
+        messages.push("選択したエクスポート baseline 以降に、Shopify 上の最新のバリエーションが変更されました");
       } else if (changedFields.length === 0) {
         classification = "unchanged";
       }

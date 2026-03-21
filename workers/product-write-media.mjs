@@ -617,8 +617,8 @@ export async function runMediaProductWriteJob({
         messages: matchesPreview
           ? []
           : [requiresProductSetRevalidation && !expectedMediaSet
-              ? "Preview artifact lacks full media set evidence required for media revalidation"
-              : "Live Shopify media changed after preview confirmation was requested"],
+              ? "メディアの再確認に必要なプレビュー情報が不足しています"
+              : "プレビュー確定後に、Shopify 上の最新のメディアが変更されました"],
         mutationStatus: "skipped",
         mutationUserErrors: [],
         operation: row.operation,

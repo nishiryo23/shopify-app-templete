@@ -3,6 +3,17 @@ import { useFetcher, useLoaderData, useSearchParams } from "react-router";
 import type { LoaderFunctionArgs } from "react-router";
 
 import { loadProductPreviewPage } from "~/app/services/product-previews.server";
+import {
+  getClassificationLabel,
+  getEditedLayoutLabel,
+  getEntitlementStateLabel,
+  getFieldLabel,
+  getFormatLabel,
+  getJobStateLabel,
+  getOutcomeLabel,
+  getProductProfileLabel,
+  PRODUCT_PROFILE_OPTIONS,
+} from "~/app/utils/admin-copy";
 
 export const loader = (args: LoaderFunctionArgs) => loadProductPreviewPage(args);
 
@@ -125,7 +136,7 @@ export default function PreviewRoute() {
   const selectedPreviewVerifiedWrite = selectedLoaderData?.selectedPreviewVerifiedWrite ?? null;
   const previewAlreadyHasVerifiedWrite = Boolean(selectedPreviewVerifiedWrite?.writeJobId);
   const undoErrorMessage = undoFetcher.data?.code === "retention_expired"
-    ? "Latest rollbackable write retention has expired."
+    ? "最新のロールバック可能な書き戻しは保持期限切れです。"
     : undoFetcher.data?.error;
   const canConfirm = data.isAccountOwner
     && data.entitlementState === "ACTIVE_PAID"
@@ -226,11 +237,11 @@ export default function PreviewRoute() {
 
   return (
     <div data-testid="preview-shell">
-      <s-page heading="Preview">
-        <s-section heading="Profile">
+      <s-page heading="プレビュー">
+        <s-section heading="対象プロファイル">
           <div style={{ display: "grid", gap: "0.75rem", maxWidth: "24rem" }}>
             <label>
-              <span>Profile</span>
+              <span>プロファイル</span>
               <select
                 onChange={(event) => {
                   const nextParams = new URLSearchParams(searchParams);
@@ -243,18 +254,16 @@ export default function PreviewRoute() {
                 }}
                 value={selectedProfile}
               >
-                <option value="product-core-seo-v1">product-core-seo-v1</option>
-                <option value="product-variants-v1">product-variants-v1</option>
-                <option value="product-variants-prices-v1">product-variants-prices-v1</option>
-                <option value="product-inventory-v1">product-inventory-v1</option>
-                <option value="product-media-v1">product-media-v1</option>
-                <option value="product-metafields-v1">product-metafields-v1</option>
-                <option value="product-manual-collections-v1">product-manual-collections-v1</option>
+                {PRODUCT_PROFILE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {getProductProfileLabel(option.value)}
+                  </option>
+                ))}
               </select>
             </label>
             <exportFetcher.Form action="/app/product-exports" method="post">
               <label>
-                <span>Format</span>
+                <span>形式</span>
                 <select onChange={(event) => setSelectedExportFormat(event.currentTarget.value)} value={selectedExportFormat}>
                   <option value="csv">csv</option>
                   <option value="xlsx">xlsx</option>
@@ -263,22 +272,24 @@ export default function PreviewRoute() {
               <input name="format" type="hidden" value={selectedExportFormat} />
               <input name="profile" type="hidden" value={selectedProfile} />
               <button type="submit">
-                {exportFetcher.state === "submitting" ? "Exporting..." : "Create export"}
+                {exportFetcher.state === "submitting" ? "エクスポートを作成しています..." : "エクスポートを作成"}
               </button>
             </exportFetcher.Form>
             {exportFetcher.data?.jobId ? (
-              <s-paragraph>Export job: {exportFetcher.data.jobId} ({exportFetcher.data.format ?? selectedExportFormat})</s-paragraph>
+              <s-paragraph>
+                エクスポートジョブ: {exportFetcher.data.jobId} ({getFormatLabel(exportFetcher.data.format ?? selectedExportFormat)})
+              </s-paragraph>
             ) : null}
           </div>
         </s-section>
-        <s-section heading="Upload source and edited file">
+        <s-section heading="原本ファイルと編集ファイルのアップロード">
           <s-paragraph>
-            source file は選択した export と同じ format の原本のみ有効です。baseline は canonical rows で provenance verify され、matrixify mode でも source upload は必須です。
+            原本ファイルは、選択したエクスポートと同じ形式のみアップロードできます。原本との一致確認を行うため、Matrixify 互換モードでも原本ファイルが必要です。
           </s-paragraph>
           <createFetcher.Form action="/app/product-previews" encType="multipart/form-data" method="post">
             <div style={{ display: "grid", gap: "0.75rem", maxWidth: "42rem" }}>
               <label>
-                <span>Completed export</span>
+                <span>完了済みエクスポート</span>
                 <select
                   name="exportJobId"
                   onChange={(event) => setSelectedExportJobId(event.currentTarget.value)}
@@ -293,140 +304,143 @@ export default function PreviewRoute() {
               </label>
               <input name="profile" type="hidden" value={selectedProfile} />
               <label>
-                <span>Edited layout</span>
+                <span>編集レイアウト</span>
                 <select
                   name="editedLayout"
                   onChange={(event) => setEditedLayout(event.currentTarget.value)}
                   value={editedLayout}
                 >
-                  <option value="canonical">canonical</option>
-                  <option value="matrixify">matrixify</option>
+                  <option value="canonical">{getEditedLayoutLabel("canonical")}</option>
+                  <option value="matrixify">{getEditedLayoutLabel("matrixify")}</option>
                 </select>
               </label>
               <label>
-                <span>Source {selectedBaselineFormat.toUpperCase()}</span>
+                <span>原本 {getFormatLabel(selectedBaselineFormat)}</span>
                 <input name="sourceFile" required type="file" accept={sourceUploadAccept} />
               </label>
               <label>
                 <span>
-                  Edited {editedLayout === "matrixify" ? "CSV/XLSX (Matrixify subset)" : selectedBaselineFormat.toUpperCase()}
+                  編集版 {editedLayout === "matrixify" ? "CSV/XLSX (Matrixify 互換サブセット)" : getFormatLabel(selectedBaselineFormat)}
                 </span>
                 <input name="editedFile" required type="file" accept={editedUploadAccept} />
               </label>
               <s-paragraph>
                 {editedLayout === "matrixify"
-                  ? "matrixify mode では edited file だけが Matrixify subset です。source は app export 原本、edited は csv/xlsx を受理します。"
-                  : "canonical mode では source / edited の両方が選択 export と同じ format である必要があります。"}
+                  ? "Matrixify 互換モードでは、編集ファイルに Matrixify 互換の CSV または XLSX を使えます。原本にはアプリから出力したファイルを指定してください。"
+                  : "標準レイアウトでは、原本と編集版の両方が選択したエクスポートと同じ形式である必要があります。"}
               </s-paragraph>
               <button type="submit">
-                {createFetcher.state === "submitting" ? "Uploading..." : "Create preview"}
+                {createFetcher.state === "submitting" ? "アップロードしています..." : "プレビューを作成"}
               </button>
             </div>
           </createFetcher.Form>
           {createFetcher.data?.jobId ? (
-            <s-paragraph>Preview job: {createFetcher.data.jobId}</s-paragraph>
+            <s-paragraph>プレビュージョブ: {createFetcher.data.jobId}</s-paragraph>
           ) : null}
           {createFetcher.data?.error ? (
-            <s-paragraph>Request error: {createFetcher.data.error}</s-paragraph>
+            <s-paragraph>リクエストエラー: {createFetcher.data.error}</s-paragraph>
           ) : null}
         </s-section>
-        <s-section heading="Preview status">
+        <s-section heading="プレビューの状態">
           <s-paragraph>
-            State: {activePreview?.jobState ?? createFetcher.data?.state ?? "idle"}
+            状態: {getJobStateLabel(activePreview?.jobState ?? createFetcher.data?.state ?? "idle")}
           </s-paragraph>
           {activePreview?.lastError ? (
-            <s-paragraph>Last error: {activePreview.lastError}</s-paragraph>
+            <s-paragraph>直近のエラー: {activePreview.lastError}</s-paragraph>
           ) : null}
           {activePreview?.summary ? (
             <div data-testid="preview-summary">
-              <s-paragraph>Total: {activePreview.summary.total}</s-paragraph>
-              <s-paragraph>Changed: {activePreview.summary.changed}</s-paragraph>
-              <s-paragraph>Unchanged: {activePreview.summary.unchanged}</s-paragraph>
-              <s-paragraph>Warning: {activePreview.summary.warning}</s-paragraph>
-              <s-paragraph>Error: {activePreview.summary.error}</s-paragraph>
+              <s-paragraph>合計: {activePreview.summary.total}</s-paragraph>
+              <s-paragraph>変更あり: {activePreview.summary.changed}</s-paragraph>
+              <s-paragraph>変更なし: {activePreview.summary.unchanged}</s-paragraph>
+              <s-paragraph>要確認: {activePreview.summary.warning}</s-paragraph>
+              <s-paragraph>エラー: {activePreview.summary.error}</s-paragraph>
             </div>
           ) : (
-            <s-paragraph>Submit source and edited files to generate a preview.</s-paragraph>
+            <s-paragraph>原本ファイルと編集ファイルを送信するとプレビューを生成できます。</s-paragraph>
           )}
         </s-section>
-        <s-section heading="Write">
-          <s-paragraph>Entitlement: {data.entitlementState}</s-paragraph>
-          <s-paragraph>Owner: {data.isAccountOwner ? "yes" : "no"}</s-paragraph>
+        <s-section heading="書き込み">
+          <s-paragraph>契約状態: {getEntitlementStateLabel(data.entitlementState)}</s-paragraph>
+          <s-paragraph>ショップオーナー権限: {data.isAccountOwner ? "あり" : "なし"}</s-paragraph>
           <writeFetcher.Form action="/app/product-writes" method="post">
             <input name="previewJobId" type="hidden" value={activePreviewJobId ?? ""} />
             <button disabled={!canConfirm} type="submit">
-              {writeFetcher.state === "submitting" ? "Confirming..." : "Confirm and write"}
+              {writeFetcher.state === "submitting" ? "確定して書き込んでいます..." : "確定して書き込む"}
             </button>
           </writeFetcher.Form>
           {!previewHasWritableRows && activePreview?.jobState === "completed" ? (
-            <s-paragraph>No writable rows in this preview.</s-paragraph>
+            <s-paragraph>このプレビューには書き込み対象の行がありません。</s-paragraph>
           ) : null}
           {!data.isAccountOwner ? (
-            <s-paragraph>Only the shop owner can confirm writes.</s-paragraph>
+            <s-paragraph>書き込み確定はショップオーナーのみ実行できます。</s-paragraph>
           ) : null}
           {data.entitlementState !== "ACTIVE_PAID" ? (
-            <s-paragraph>ACTIVE_PAID entitlement is required for write and undo.</s-paragraph>
+            <s-paragraph>書き込みと取り消しには有効な契約が必要です。</s-paragraph>
           ) : null}
           {previewAlreadyHasVerifiedWrite ? (
             <s-paragraph>
-              This preview already has a verified successful write
+              このプレビューには、すでに検証済みの成功書き込みがあります
               {selectedPreviewVerifiedWrite?.writeJobId ? ` (${selectedPreviewVerifiedWrite.writeJobId})` : ""}.
             </s-paragraph>
           ) : null}
           {writeFetcher.data?.error ? (
-            <s-paragraph>Write error: {writeFetcher.data.error}</s-paragraph>
+            <s-paragraph>書き込みエラー: {writeFetcher.data.error}</s-paragraph>
           ) : null}
-          <s-paragraph>State: {activeWrite?.jobState ?? writeFetcher.data?.state ?? "idle"}</s-paragraph>
+          <s-paragraph>状態: {getJobStateLabel(activeWrite?.jobState ?? writeFetcher.data?.state ?? "idle")}</s-paragraph>
           {activeWrite?.outcome ? (
-            <s-paragraph>Outcome: {activeWrite.outcome}</s-paragraph>
+            <s-paragraph>結果: {getOutcomeLabel(activeWrite.outcome)}</s-paragraph>
           ) : null}
           {activeWrite?.lastError ? (
-            <s-paragraph>Last error: {activeWrite.lastError}</s-paragraph>
+            <s-paragraph>直近のエラー: {activeWrite.lastError}</s-paragraph>
           ) : null}
         </s-section>
-        <s-section heading="Undo">
+        <s-section heading="取り消し">
           {selectedProfile !== "product-core-seo-v1" ? (
-            <s-paragraph>Undo is only available for product-core-seo-v1.</s-paragraph>
+            <s-paragraph>取り消しは商品基本情報・SEOプロファイルでのみ利用できます。</s-paragraph>
           ) : latestWrite?.retentionExpired ? (
-            <s-paragraph>Latest rollbackable write retention has expired.</s-paragraph>
+            <s-paragraph>最新のロールバック可能な書き戻しは保持期限切れです。</s-paragraph>
           ) : latestWrite?.writeJobId ? (
             <s-paragraph>
-              Latest rollbackable write: {latestWrite.writeJobId} ({latestWrite.outcome})
+              最新のロールバック可能な書き戻し: {latestWrite.writeJobId}
+              {latestWrite.outcome ? ` (${getOutcomeLabel(latestWrite.outcome)})` : ""}
             </s-paragraph>
           ) : (
-            <s-paragraph>No rollbackable write yet.</s-paragraph>
+            <s-paragraph>まだロールバック可能な書き戻しはありません。</s-paragraph>
           )}
           {selectedProfile === "product-core-seo-v1" ? (
             <>
               <undoFetcher.Form action="/app/product-undos" method="post">
                 <input name="writeJobId" type="hidden" value={latestWrite?.writeJobId ?? ""} />
                 <button disabled={!canUndo} type="submit">
-                  {undoFetcher.state === "submitting" ? "Undoing..." : "Undo latest rollbackable write"}
+                  {undoFetcher.state === "submitting" ? "取り消しています..." : "最新のロールバック可能な書き戻しを取り消す"}
                 </button>
               </undoFetcher.Form>
               {undoFetcher.data?.error ? (
-                <s-paragraph>Undo error: {undoErrorMessage}</s-paragraph>
+                <s-paragraph>取り消しエラー: {undoErrorMessage}</s-paragraph>
               ) : null}
-              <s-paragraph>State: {activeUndo?.jobState ?? undoFetcher.data?.state ?? "idle"}</s-paragraph>
+              <s-paragraph>状態: {getJobStateLabel(activeUndo?.jobState ?? undoFetcher.data?.state ?? "idle")}</s-paragraph>
               {activeUndo?.outcome ? (
-                <s-paragraph>Outcome: {activeUndo.outcome}</s-paragraph>
+                <s-paragraph>結果: {getOutcomeLabel(activeUndo.outcome)}</s-paragraph>
               ) : null}
               {activeUndo?.lastError ? (
-                <s-paragraph>Last error: {activeUndo.lastError}</s-paragraph>
+                <s-paragraph>直近のエラー: {activeUndo.lastError}</s-paragraph>
               ) : null}
             </>
           ) : null}
         </s-section>
-        <s-section heading="Rows">
+        <s-section heading="行ごとの結果">
           {activePreview?.rows?.length ? (
             <div>
               {activePreview.rows.slice(0, 20).map((row) => (
                 <div key={`${row.editedRowNumber}:${row.productId}`} style={{ marginBottom: "0.75rem" }}>
                   <s-paragraph>
-                    edited #{row.editedRowNumber} / source #{row.sourceRowNumber ?? "-"} / {row.productId} / {row.classification}
+                    編集 #{row.editedRowNumber} / 原本 #{row.sourceRowNumber ?? "-"} / {row.productId} / {getClassificationLabel(row.classification)}
                   </s-paragraph>
                   {row.changedFields.length > 0 ? (
-                    <s-paragraph>Changed: {row.changedFields.join(", ")}</s-paragraph>
+                    <s-paragraph>
+                      変更項目: {row.changedFields.map((field) => getFieldLabel(field)).join(", ")}
+                    </s-paragraph>
                   ) : null}
                   {row.messages.map((message) => (
                     <s-paragraph key={message}>{message}</s-paragraph>
@@ -435,7 +449,7 @@ export default function PreviewRoute() {
               ))}
             </div>
           ) : (
-            <s-paragraph>No preview rows yet.</s-paragraph>
+            <s-paragraph>まだプレビュー行はありません。</s-paragraph>
           )}
         </s-section>
       </s-page>

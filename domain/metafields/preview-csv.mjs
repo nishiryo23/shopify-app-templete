@@ -60,7 +60,7 @@ function parseCsvRows(csvText) {
   }
 
   if (inQuotes) {
-    throw new Error("CSV parsing failed: unclosed quoted field");
+    throw new Error("CSV の解析に失敗しました: 閉じられていない引用符があります");
   }
 
   if (currentCell.length > 0 || currentRow.length > 0) {
@@ -77,7 +77,7 @@ function assertHeader(headerRow) {
     actual.length !== PRODUCT_METAFIELDS_EXPORT_HEADERS.length
     || actual.some((value, index) => value !== PRODUCT_METAFIELDS_EXPORT_HEADERS[index])
   ) {
-    throw new Error("CSV header must exactly match product-metafields-v1");
+    throw new Error("CSV ヘッダーは product-metafields-v1 と完全一致する必要があります");
   }
 }
 
@@ -191,23 +191,23 @@ export function normalizeMetafieldForWrite(type, value) {
 
 function validateCanonicalValue(type, value) {
   if (value === "") {
-    return "value is required";
+    return "value は必須です";
   }
 
   if (!isSupportedProductMetafieldType(type)) {
-    return `unsupported metafield type: ${type}`;
+    return `未対応の metafield type です: ${type}`;
   }
 
   if (type === "boolean" && !["true", "false"].includes(String(value).trim().toLowerCase())) {
-    return "boolean metafield value must be true or false";
+    return "boolean 型の metafield value は true または false である必要があります";
   }
 
   if (type === "number_integer" && !isStrictInteger(value)) {
-    return "number_integer metafield value must be a signed integer";
+    return "number_integer 型の metafield value は符号付き整数である必要があります";
   }
 
   if (type === "number_decimal" && !isStrictDecimal(value)) {
-    return "number_decimal metafield value must be a decimal string";
+    return "number_decimal 型の metafield value は 10 進文字列である必要があります";
   }
 
   return null;
@@ -237,7 +237,7 @@ function normalizeComparableRow(row) {
 export function parseMetafieldPreviewCsv(csvText) {
   const rows = parseCsvRows(csvText);
   if (rows.length === 0) {
-    throw new Error("CSV must include a header row");
+    throw new Error("CSV にはヘッダー行が必要です");
   }
 
   assertHeader(rows[0]);
@@ -246,7 +246,7 @@ export function parseMetafieldPreviewCsv(csvText) {
   for (let index = 1; index < rows.length; index += 1) {
     const cells = rows[index];
     if (cells.length !== PRODUCT_METAFIELDS_EXPORT_HEADERS.length) {
-      throw new Error(`CSV row ${index + 1} must contain ${PRODUCT_METAFIELDS_EXPORT_HEADERS.length} columns`);
+      throw new Error(`CSV の ${index + 1} 行目は ${PRODUCT_METAFIELDS_EXPORT_HEADERS.length} 列である必要があります`);
     }
 
     parsedRows.push({
@@ -269,7 +269,7 @@ export function indexMetafieldRows(parsedRows) {
 
     const key = buildMetafieldRowKey(entry.row);
     if (rowsByKey.has(key)) {
-      throw new Error(`Duplicate metafield row detected: ${key}`);
+      throw new Error(`metafield 行が重複しています: ${key}`);
     }
 
     rowsByKey.set(key, entry);
@@ -339,26 +339,26 @@ function validateReadOnlyColumns({ baselineRow, currentRow, editedRow, messages,
   for (const header of READ_ONLY_HEADERS) {
     const baselineValue = referenceRow?.[header] ?? "";
     if (baselineValue !== (editedRow?.[header] ?? "")) {
-      messages.push(`${header} is read-only and must match the current Shopify row`);
+      messages.push(`${header} は読み取り専用で、Shopify 上の最新行と一致する必要があります`);
     }
   }
 }
 
 function validateRequiredFields(editedRow, messages) {
   if (!String(editedRow?.product_id ?? "").trim()) {
-    messages.push("product_id is required");
+    messages.push("product_id は必須です");
   }
 
   if (!String(editedRow?.namespace ?? "").trim()) {
-    messages.push("namespace is required");
+    messages.push("namespace は必須です");
   }
 
   if (!String(editedRow?.key ?? "").trim()) {
-    messages.push("key is required");
+    messages.push("key は必須です");
   }
 
   if (!String(editedRow?.type ?? "").trim()) {
-    messages.push("type is required");
+    messages.push("type は必須です");
   }
 
   const canonicalError = validateCanonicalValue(
@@ -412,11 +412,11 @@ export function buildMetafieldPreviewRows({
     const productExists = existingProductIds.has(editedRow.product_id);
 
     if (hasCurrent && currentRow.type !== editedRow.type) {
-      messages.push(`type mismatch for existing metafield: ${currentRow.type}`);
+      messages.push(`既存 metafield の type が一致しません: ${currentRow.type}`);
     }
 
     if (!hasCurrent && !productExists) {
-      messages.push("owner product does not exist in Shopify");
+      messages.push("対象商品が Shopify 上に存在しません");
     }
 
     let classification = "unchanged";
@@ -428,11 +428,11 @@ export function buildMetafieldPreviewRows({
     } else if (hasBaseline && !metafieldRowsMatch(baselineRow, currentRow)) {
       classification = "warning";
       operation = "update";
-      messages.push("Live Shopify metafield changed after the selected export baseline");
+      messages.push("選択したエクスポート baseline 以降に、Shopify 上の最新の metafield が変更されました");
     } else if (!hasBaseline && hasCurrent) {
       classification = "warning";
       operation = "update";
-      messages.push("Live Shopify metafield was created after the selected export baseline");
+      messages.push("選択したエクスポート baseline 以降に、Shopify 上で metafield が新規作成されました");
     } else {
       changedFields = diffChangedFields({ currentRow, editedRow, operation });
       classification = changedFields.length > 0 ? "changed" : "unchanged";

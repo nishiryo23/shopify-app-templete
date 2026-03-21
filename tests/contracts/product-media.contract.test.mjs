@@ -121,7 +121,7 @@ test("mapMediaNodeToExportRows preserves global media position across mixed medi
 test("media preview CSV parser rejects wrong header", () => {
   assert.throws(
     () => parseMediaPreviewCsv("wrong_header\nvalue\n"),
-    /CSV header must exactly match product-media-v1/,
+    /CSV ヘッダーは product-media-v1 と完全一致する必要があります/,
   );
 });
 
@@ -202,7 +202,7 @@ test("media preview warns when live Shopify media source drifted from the export
   assert.equal(rows.length, 1);
   assert.equal(rows[0].classification, "warning");
   assert.deepStrictEqual(rows[0].changedFields, []);
-  assert.match(rows[0].messages[0], /changed after the selected export baseline/);
+  assert.match(rows[0].messages[0], /選択したエクスポート baseline 以降/);
   assert.equal(summary.warning, 1);
 });
 
@@ -347,7 +347,7 @@ test("media preview rejects invalid image_position for new media row", () => {
   });
 
   assert.equal(rows[0].classification, "error");
-  assert.ok(rows[0].messages.some((msg) => msg.includes("positive integer")));
+  assert.ok(rows[0].messages.some((msg) => msg.includes("1 以上の整数")));
 });
 
 test("media preview rejects non-IMAGE media_content_type for new media row", () => {
@@ -372,7 +372,7 @@ test("media preview rejects non-IMAGE media_content_type for new media row", () 
   });
 
   assert.equal(rows[0].classification, "error");
-  assert.ok(rows[0].messages.some((msg) => msg.includes("blank or IMAGE")));
+  assert.ok(rows[0].messages.some((msg) => msg.includes("空欄または IMAGE")));
 });
 
 test("media preview classifies empty image_src on existing media as delete", () => {
@@ -485,7 +485,7 @@ test("media write-rows: buildMediaCreateInputFromPreviewRow rejects non-IMAGE me
   });
 
   assert.ok(!result.ok);
-  assert.ok(result.errors.some((error) => error.includes("blank or IMAGE")));
+  assert.ok(result.errors.some((error) => error.includes("空欄または IMAGE")));
 });
 
 test("media write-rows: buildMediaUpdateInputFromPreviewRow builds valid input", () => {
@@ -839,5 +839,5 @@ test("media preview rejects invalid image_position", () => {
   });
 
   assert.equal(rows[0].classification, "error");
-  assert.ok(rows[0].messages.some((msg) => msg.includes("positive integer")));
+  assert.ok(rows[0].messages.some((msg) => msg.includes("1 以上の整数")));
 });

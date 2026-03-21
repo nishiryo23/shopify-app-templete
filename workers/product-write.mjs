@@ -445,10 +445,10 @@ export async function runProductWriteJob({
       const messages = [];
 
       if (!matchesPreview) {
-        messages.push("Live Shopify product changed after preview confirmation was requested");
+        messages.push("プレビュー確定後に、Shopify 上の最新の商品が変更されました");
       }
       if (redirectConflict) {
-        messages.push("A live redirect already exists for the previous product handle");
+        messages.push("変更前の商品 URL には、すでにリダイレクトが設定されています");
       }
 
       return {

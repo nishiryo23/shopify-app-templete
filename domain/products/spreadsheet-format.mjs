@@ -48,8 +48,8 @@ const PRODUCT_EXPORT_FILE_NAMES = Object.freeze({
 
 function buildHeaderError(profile, format) {
   return format === PRODUCT_EXPORT_XLSX_FORMAT
-    ? `XLSX header must exactly match ${profile}`
-    : `CSV header must exactly match ${profile}`;
+    ? `XLSX ヘッダーは ${profile} と完全一致する必要があります`
+    : `CSV ヘッダーは ${profile} と完全一致する必要があります`;
 }
 
 export function getProductExportHeaders(profile) {
@@ -94,7 +94,7 @@ export function assertProductSpreadsheetFileName({ fileName, format = PRODUCT_EX
   const expectedExtension = format === PRODUCT_EXPORT_XLSX_FORMAT ? ".xlsx" : ".csv";
 
   if (extension !== expectedExtension) {
-    throw new Error(`${role} file must use the ${expectedExtension} extension`);
+    throw new Error(`${role} ファイルは ${expectedExtension} 拡張子である必要があります`);
   }
 }
 

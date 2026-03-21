@@ -246,7 +246,7 @@ export async function runVariantProductWriteJob({
         editedRow: row.editedRow,
         editedRowNumber: row.editedRowNumber,
         finalRow: currentRow,
-        messages: matchesPreview ? [] : ["Live Shopify variant changed after preview confirmation was requested"],
+        messages: matchesPreview ? [] : ["プレビュー確定後に、Shopify 上の最新のバリエーションが変更されました"],
         mutationStatus: "skipped",
         mutationUserErrors: [],
         operation: row.operation,

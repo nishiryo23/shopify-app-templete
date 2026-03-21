@@ -336,7 +336,7 @@ export async function runProductUndoJob({
         conflict: !matches,
         currentRow,
         finalRow: resultRow?.finalRow ?? null,
-        messages: matches ? [] : ["Live Shopify product drifted after the successful write"],
+        messages: matches ? [] : ["書き込み完了後に、Shopify 上の最新の商品が変更されました"],
         nextHandle: resultRow?.nextHandle ?? null,
         productId: snapshotRow.productId,
         redirectCleanupMode: resultRow?.redirectCleanupMode ?? null,
@@ -495,8 +495,8 @@ export async function runProductUndoJob({
           ? row.messages
           : row.messages.concat(
             redirectCleared
-              ? "Undo verification failed"
-              : "A live redirect still exists for the previous product handle after undo",
+              ? "取り消し後の確認に失敗しました"
+              : "取り消し後も、変更前の商品 URL のリダイレクトが残っています",
           ),
         verificationStatus: verified && redirectCleared ? "verified" : "failed",
       };

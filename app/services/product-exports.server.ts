@@ -29,7 +29,7 @@ export async function createProductExport({ request }: ActionFunctionArgs) {
   });
 
   if (!job) {
-    throw new Error("Failed to enqueue product export job");
+    throw new Error("商品エクスポートジョブの登録に失敗しました");
   }
 
   return new Response(

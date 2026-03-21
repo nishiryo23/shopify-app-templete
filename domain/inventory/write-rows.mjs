@@ -21,15 +21,15 @@ export function buildInventorySetQuantityInputFromPreviewRow(row) {
   const errors = [];
 
   if (!currentRow?.inventory_item_id) {
-    errors.push("inventoryItemId is required");
+    errors.push("inventoryItemId は必須です");
   }
 
   if (!row?.locationId && !currentRow?.location_id) {
-    errors.push("location_id is required");
+    errors.push("location_id は必須です");
   }
 
   if (!/^-?\d+$/.test(String(canonicalQuantity ?? "").trim())) {
-    errors.push("available must be a signed integer");
+    errors.push("available は符号付き整数である必要があります");
   }
 
   if (errors.length > 0) {

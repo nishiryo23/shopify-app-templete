@@ -122,7 +122,7 @@ test("metafield export mapping normalizes multiline values and filters unsupport
 test("metafield preview CSV parser rejects wrong header", () => {
   assert.throws(
     () => parseMetafieldPreviewCsv("wrong_header\nvalue\n"),
-    /CSV header must exactly match product-metafields-v1/,
+    /CSV ヘッダーは product-metafields-v1 と完全一致する必要があります/,
   );
 });
 
@@ -209,7 +209,7 @@ test("metafield preview warns when live metafield drifted after baseline", () =>
   });
 
   assert.equal(rows[0].classification, "warning");
-  assert.match(rows[0].messages[0], /changed after the selected export baseline/);
+  assert.match(rows[0].messages[0], /選択したエクスポート baseline 以降/);
   assert.equal(summary.warning, 1);
 });
 
@@ -260,8 +260,8 @@ test("metafield preview rejects create rows when read-only product columns drift
   });
 
   assert.equal(rows[0].classification, "error");
-  assert.match(rows[0].messages.join("\n"), /product_handle is read-only/);
-  assert.match(rows[0].messages.join("\n"), /updated_at is read-only/);
+  assert.match(rows[0].messages.join("\n"), /product_handle は読み取り専用/);
+  assert.match(rows[0].messages.join("\n"), /updated_at は読み取り専用/);
   assert.equal(summary.error, 1);
   assert.equal(getWritableMetafieldPreviewRows(rows).length, 0);
 });
@@ -281,7 +281,7 @@ test("metafield preview rejects create rows when owner product does not exist", 
 
   assert.equal(rows[0].classification, "error");
   assert.equal(rows[0].operation, "create");
-  assert.match(rows[0].messages.join("\n"), /owner product does not exist in Shopify/);
+  assert.match(rows[0].messages.join("\n"), /対象商品が Shopify 上に存在しません/);
   assert.equal(summary.error, 1);
   assert.equal(getWritableMetafieldPreviewRows(rows).length, 0);
 });
@@ -309,8 +309,8 @@ test("metafield preview rejects blank value and type mismatch", () => {
   });
 
   assert.equal(rows[0].classification, "error");
-  assert.match(rows[0].messages.join("\n"), /value is required/);
-  assert.match(rows[0].messages.join("\n"), /type mismatch/);
+  assert.match(rows[0].messages.join("\n"), /value は必須です/);
+  assert.match(rows[0].messages.join("\n"), /type が一致しません/);
   assert.equal(summary.error, 1);
 });
 
@@ -515,8 +515,10 @@ test("metafield reader paginates product metafields for preview and verification
 
 test("preview page lists metafield profile", () => {
   const pageFile = readProjectFile("app/routes/app.preview.tsx");
+  const copyFile = readProjectFile("app/utils/admin-copy.ts");
 
-  assert.match(pageFile, /product-metafields-v1/);
+  assert.match(pageFile, /PRODUCT_PROFILE_OPTIONS/);
+  assert.match(copyFile, /product-metafields-v1/);
 });
 
 test("product write worker dispatch includes metafield profile", () => {

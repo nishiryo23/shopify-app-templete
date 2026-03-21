@@ -6,6 +6,7 @@ import {
   type BillingEntitlement,
   type BillingGateLoaderData,
 } from "~/app/services/billing.server";
+import { getEntitlementStateLabel } from "~/app/utils/admin-copy";
 
 export const loader = (args: LoaderFunctionArgs) => loadPricingGate(args);
 
@@ -54,16 +55,17 @@ export default function PricingRoute() {
   const refreshFetcher = useFetcher<BillingEntitlement>();
   const entitlement = refreshFetcher.data ?? initialEntitlement;
   const stateCopy = renderPricingStateCopy(entitlement.state);
+  const entitlementLabel = getEntitlementStateLabel(entitlement.state);
 
   return (
     <div data-testid="pricing-shell">
-      <s-page heading="Pricing">
+      <s-page heading="料金プラン">
         <s-section heading={stateCopy.heading}>
           <div data-testid={stateCopy.testId}>
             <s-paragraph>{stateCopy.description}</s-paragraph>
             <s-paragraph>
-              現在状態: {entitlement.state}
-              {entitlement.sourceStatus ? ` (${entitlement.sourceStatus})` : ""}
+              現在の状態: {entitlementLabel}
+              {entitlement.sourceStatus ? ` / Shopify 状態: ${entitlement.sourceStatus}` : ""}
             </s-paragraph>
             {entitlement.subscriptionName ? (
               <s-paragraph>契約名: {entitlement.subscriptionName}</s-paragraph>
@@ -78,7 +80,7 @@ export default function PricingRoute() {
                 onClick={() => refreshFetcher.load("/app/billing/refresh")}
                 type="button"
               >
-                {refreshFetcher.state === "idle" ? "状態を再確認" : "再確認中..."}
+                {refreshFetcher.state === "idle" ? "状態を再確認" : "状態を再確認しています..."}
               </button>
               {stateCopy.actionHref && stateCopy.actionLabel ? (
                 <a href={stateCopy.actionHref}>{stateCopy.actionLabel}</a>
@@ -86,12 +88,12 @@ export default function PricingRoute() {
             </div>
           </div>
         </s-section>
-        <s-section heading="Billing truth">
+        <s-section heading="課金判定の正本">
           <s-paragraph>
-            この画面の状態は Shopify の currentAppInstallation.activeSubscriptions を正本にしています。
+            この画面の状態は、Shopify の最新の契約状態をもとに表示しています。
           </s-paragraph>
           <s-paragraph>
-            welcome 遷移や webhook 到着だけでは entitlement は付与されません。
+            利用開始画面を開いただけでは契約は有効になりません。承認後にこの画面で状態を再確認してください。
           </s-paragraph>
         </s-section>
       </s-page>

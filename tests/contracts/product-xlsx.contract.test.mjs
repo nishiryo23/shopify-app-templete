@@ -222,7 +222,7 @@ test("matrixify csv subset rejects ambiguous updates to existing media rows", as
       layout: PRODUCT_SPREADSHEET_LAYOUT_MATRIXIFY,
       profile: PRODUCT_MEDIA_EXPORT_PROFILE,
     }),
-    /ambiguous updates to existing media are unsupported/,
+    /既存メディアへの曖昧な更新は未対応です/,
   );
 });
 
@@ -319,7 +319,7 @@ test("matrixify csv subset rejects omitted baseline manual collections", async (
       layout: PRODUCT_SPREADSHEET_LAYOUT_MATRIXIFY,
       profile: PRODUCT_MANUAL_COLLECTIONS_EXPORT_PROFILE,
     }),
-    /remove semantics are unsupported/,
+    /remove セマンティクスは未対応です/,
   );
 });
 
@@ -337,7 +337,7 @@ test("matrixify csv subset rejects blank media source cells", async () => {
       layout: PRODUCT_SPREADSHEET_LAYOUT_MATRIXIFY,
       profile: PRODUCT_MEDIA_EXPORT_PROFILE,
     }),
-    /Matrixify media row 2 must include Image Src; delete semantics are unsupported/,
+    /Matrixify のメディア 2 行目には Image Src が必要です。削除セマンティクスは未対応です/,
   );
 });
 
@@ -413,7 +413,7 @@ test("matrixify xlsx subset requires the Matrixify worksheet name", async () => 
       layout: PRODUCT_SPREADSHEET_LAYOUT_MATRIXIFY,
       profile: PRODUCT_CORE_SEO_EXPORT_PROFILE,
     }),
-    /XLSX worksheet name must exactly match Products/,
+    /XLSX ワークシート名は Products と完全一致する必要があります/,
   );
 });
 
@@ -435,7 +435,7 @@ test("xlsx canonicalization rejects extra worksheets", async () => {
       format: PRODUCT_EXPORT_XLSX_FORMAT,
       profile: PRODUCT_CORE_SEO_EXPORT_PROFILE,
     }),
-    /exactly one worksheet named product-core-seo-v1/,
+    /product-core-seo-v1 という名前のワークシートが 1 つだけ必要です/,
   );
 });
 
@@ -459,7 +459,7 @@ test("xlsx canonicalization rejects non-text and formula cells", async () => {
       format: PRODUCT_EXPORT_XLSX_FORMAT,
       profile: PRODUCT_CORE_SEO_EXPORT_PROFILE,
     }),
-    /must be text, not number|must not contain a formula/,
+    /数値ではなくテキストである必要があります|数式を含められません/,
   );
 });
 
@@ -482,7 +482,7 @@ test("xlsx canonicalization rejects sparse extra columns", async () => {
       format: PRODUCT_EXPORT_XLSX_FORMAT,
       profile: PRODUCT_CORE_SEO_EXPORT_PROFILE,
     }),
-    /unsupported extra columns/,
+    /未対応の余分な列があります/,
   );
 });
 

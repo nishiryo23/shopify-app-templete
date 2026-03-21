@@ -34,7 +34,7 @@ export function validateMoneyValue(value, field) {
   const canonical = canonicalizeMoney(normalized);
   if (canonical === null) {
     return {
-      error: `invalid ${field} value: ${value}`,
+      error: `${field} の値が不正です: ${value}`,
       normalized,
       valid: false,
     };

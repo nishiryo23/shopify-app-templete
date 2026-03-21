@@ -118,7 +118,7 @@ export function buildVariantMutationFromPreviewRow(row) {
 
   if (!editedRow.variant_id) {
     return {
-      errors: ["variant_id is required"],
+      errors: ["variant_id は必須です"],
       ok: false,
     };
   }

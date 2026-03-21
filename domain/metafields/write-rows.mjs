@@ -21,23 +21,23 @@ export function buildMetafieldSetInputFromPreviewRow(row) {
   const type = String(editedRow.type ?? "").trim();
 
   if (!row?.productId) {
-    errors.push("product_id is required");
+    errors.push("product_id は必須です");
   }
 
   if (!String(editedRow.namespace ?? "").trim()) {
-    errors.push("namespace is required");
+    errors.push("namespace は必須です");
   }
 
   if (!String(editedRow.key ?? "").trim()) {
-    errors.push("key is required");
+    errors.push("key は必須です");
   }
 
   if (!type) {
-    errors.push("type is required");
+    errors.push("type は必須です");
   }
 
   if (!String(editedRow.value ?? "")) {
-    errors.push("value is required");
+    errors.push("value は必須です");
   }
 
   if (errors.length > 0) {

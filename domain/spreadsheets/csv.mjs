@@ -51,7 +51,7 @@ export function parseCsvRows(csvText) {
   }
 
   if (inQuotes) {
-    throw new Error("CSV parsing failed: unclosed quoted field");
+    throw new Error("CSV の解析に失敗しました: 閉じられていない引用符があります");
   }
 
   if (currentCell.length > 0 || currentRow.length > 0) {
@@ -150,7 +150,7 @@ export async function* parseCsvRowsFromStream(readable) {
   }
 
   if (inQuotes) {
-    throw new Error("CSV parsing failed: unclosed quoted field");
+    throw new Error("CSV の解析に失敗しました: 閉じられていない引用符があります");
   }
 
   if (currentCell.length > 0 || currentRow.length > 0) {
@@ -182,7 +182,7 @@ export function canonicalizeCsvSpreadsheet({
   const rows = parseCsvRows(csvText);
 
   if (rows.length === 0) {
-    throw new Error("CSV must include a header row");
+    throw new Error("CSV にはヘッダー行が必要です");
   }
 
   const headerRow = Array.isArray(rows[0]) ? rows[0] : [];
@@ -194,7 +194,7 @@ export function canonicalizeCsvSpreadsheet({
   for (let index = 1; index < rows.length; index += 1) {
     const cells = rows[index];
     if (cells.length !== headers.length) {
-      throw new Error(`${rowErrorPrefix} ${index + 1} must contain ${headers.length} columns`);
+      throw new Error(`${rowErrorPrefix} ${index + 1} 行目は ${headers.length} 列である必要があります`);
     }
 
     canonicalRows.push(cells.map((value) => value ?? ""));

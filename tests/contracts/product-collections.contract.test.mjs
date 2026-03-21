@@ -111,7 +111,7 @@ test("collection export mapping returns no rows for smart collections", () => {
 test("collection preview CSV parser rejects wrong header", () => {
   assert.throws(
     () => parseCollectionPreviewCsv("wrong_header\nvalue\n"),
-    /CSV header must exactly match product-manual-collections-v1/,
+    /CSV ヘッダーは product-manual-collections-v1 と完全一致する必要があります/,
   );
 });
 
@@ -194,7 +194,7 @@ test("collection preview warns when live state drift conflicts with edited inten
 
   assert.equal(rows[0].classification, "warning");
   assert.deepEqual(rows[0].changedFields, ["membership"]);
-  assert.match(rows[0].messages[0], /changed after the selected export baseline/);
+  assert.match(rows[0].messages[0], /選択したエクスポート baseline 以降/);
   assert.equal(summary.warning, 1);
 });
 
@@ -266,7 +266,7 @@ test("collection preview warns when live collection metadata drifted after expor
   });
 
   assert.equal(rows[0].classification, "warning");
-  assert.match(rows[0].messages[0], /changed after the selected export baseline/);
+  assert.match(rows[0].messages[0], /選択したエクスポート baseline 以降/);
   assert.equal(summary.warning, 1);
 });
 
@@ -300,7 +300,7 @@ test("collection preview rejects smart collections", () => {
   });
 
   assert.equal(rows[0].classification, "error");
-  assert.match(rows[0].messages[0], /smart collections/);
+  assert.match(rows[0].messages[0], /スマートコレクション/);
   assert.equal(summary.error, 1);
 });
 
@@ -324,7 +324,7 @@ test("collection index rejects duplicate raw product and collection rows", () =>
       `${header}\ngid://shopify/Product/1,hat,,summer,Summer,member,\n`
       + `gid://shopify/Product/1,hat,,summer,Summer,member,\n`,
     )),
-    /Duplicate collection row detected/,
+    /コレクション行が重複しています/,
   );
 });
 
@@ -370,7 +370,7 @@ test("collection preview rejects clearing read-only baseline columns", () => {
   });
 
   assert.equal(rows[0].classification, "error");
-  assert.match(rows[0].messages[0], /product_handle is read-only/);
+  assert.match(rows[0].messages[0], /product_handle は読み取り専用/);
   assert.equal(summary.error, 1);
 });
 
@@ -416,7 +416,7 @@ test("collection preview rejects edited updated_at values", () => {
   });
 
   assert.equal(rows[0].classification, "error");
-  assert.match(rows[0].messages[0], /updated_at is read-only/);
+  assert.match(rows[0].messages[0], /updated_at は読み取り専用/);
   assert.equal(summary.error, 1);
 });
 
@@ -547,8 +547,10 @@ test("collection handle resolver caches normalized handles", async () => {
 
 test("preview page lists manual collection profile", () => {
   const pageFile = readProjectFile("app/routes/app.preview.tsx");
+  const copyFile = readProjectFile("app/utils/admin-copy.ts");
 
-  assert.match(pageFile, /product-manual-collections-v1/);
+  assert.match(pageFile, /PRODUCT_PROFILE_OPTIONS/);
+  assert.match(copyFile, /product-manual-collections-v1/);
 });
 
 test("product write worker dispatch includes manual collection profile", () => {

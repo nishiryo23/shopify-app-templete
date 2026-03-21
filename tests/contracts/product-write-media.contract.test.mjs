@@ -554,7 +554,7 @@ test("media write worker stores revalidation_failed result when live Shopify med
   assert.equal(updateCalls, 0);
   assert.equal(result.outcome, "revalidation_failed");
   assert.equal(result.rows[0].verificationStatus, "revalidation_failed");
-  assert.match(result.rows[0].messages[0], /changed after preview confirmation was requested/);
+  assert.match(result.rows[0].messages[0], /プレビュー確定後に、Shopify 上の最新のメディアが変更されました/);
 });
 
 test("media write worker stores revalidation_failed result when mixed-media set changed after preview", async () => {
@@ -705,7 +705,7 @@ test("media write worker stores revalidation_failed result when mixed-media set 
   assert.equal(createCalls, 0);
   assert.equal(result.outcome, "revalidation_failed");
   assert.equal(result.rows[0].verificationStatus, "revalidation_failed");
-  assert.match(result.rows[0].messages[0], /changed after preview confirmation was requested/);
+  assert.match(result.rows[0].messages[0], /プレビュー確定後に、Shopify 上の最新のメディアが変更されました/);
 });
 
 test("media write worker stores revalidation_failed result when create rows no longer match the live product media set", async () => {
@@ -818,7 +818,7 @@ test("media write worker stores revalidation_failed result when create rows no l
   assert.equal(createCalls, 0);
   assert.equal(result.outcome, "revalidation_failed");
   assert.equal(result.rows[0].verificationStatus, "revalidation_failed");
-  assert.match(result.rows[0].messages[0], /changed after preview confirmation was requested/);
+  assert.match(result.rows[0].messages[0], /プレビュー確定後に、Shopify 上の最新のメディアが変更されました/);
 });
 
 test("media write worker rolls back newly created media when replace delete throws", async () => {

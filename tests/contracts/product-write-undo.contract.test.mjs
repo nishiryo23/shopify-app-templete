@@ -1380,7 +1380,7 @@ test("product undo worker fails when a replacement same-path redirect still exis
 
   assert.equal(result.outcome, "verified_failure");
   assert.equal(result.rows[0].verificationStatus, "failed");
-  assert.match(result.rows[0].messages.join(" "), /live redirect still exists/i);
+  assert.match(result.rows[0].messages.join(" "), /変更前の商品 URL のリダイレクトが残っています/);
 });
 
 test("product undo worker rejects expired rollback artifacts at execution time", async () => {

@@ -238,7 +238,7 @@ export async function runMetafieldProductWriteJob({
         editedRowNumber: row.editedRowNumber,
         finalRow: currentRow,
         key: row.key,
-        messages: matchesPreview ? [] : ["Live Shopify metafield changed after preview confirmation was requested"],
+        messages: matchesPreview ? [] : ["プレビュー確定後に、Shopify 上の最新のメタフィールドが変更されました"],
         mutationStatus: "skipped",
         mutationUserErrors: [],
         namespace: row.namespace,

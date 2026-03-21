@@ -81,7 +81,7 @@ export function buildProductUpdateInputFromPreviewRow(row, { allowRedirect = tru
       case "status": {
         const status = String(editedRow.status ?? "").trim().toUpperCase();
         if (!isValidProductStatus(status)) {
-          errors.push(`invalid status value: ${editedRow.status}`);
+          errors.push(`status の値が不正です: ${editedRow.status}`);
         } else {
           input.status = status;
         }
@@ -96,7 +96,7 @@ export function buildProductUpdateInputFromPreviewRow(row, { allowRedirect = tru
         break;
       default:
         if (EDITABLE_HEADERS.includes(field)) {
-          errors.push(`unsupported changed field: ${field}`);
+          errors.push(`未対応の変更項目です: ${field}`);
         }
         break;
     }

@@ -46,7 +46,7 @@ function parseCsvRows(csvText) {
   }
 
   if (inQuotes) {
-    throw new Error("CSV parsing failed: unclosed quoted field");
+    throw new Error("CSV の解析に失敗しました: 閉じられていない引用符があります");
   }
 
   if (currentCell.length > 0 || currentRow.length > 0) {
@@ -63,7 +63,7 @@ function assertHeader(headerRow) {
     actual.length !== PRODUCT_MANUAL_COLLECTIONS_EXPORT_HEADERS.length
     || actual.some((value, index) => value !== PRODUCT_MANUAL_COLLECTIONS_EXPORT_HEADERS[index])
   ) {
-    throw new Error("CSV header must exactly match product-manual-collections-v1");
+    throw new Error("CSV ヘッダーは product-manual-collections-v1 と完全一致する必要があります");
   }
 }
 
@@ -120,7 +120,7 @@ function collectionRowsMatch(leftRow, rightRow) {
 export function parseCollectionPreviewCsv(csvText) {
   const rows = parseCsvRows(csvText);
   if (rows.length === 0) {
-    throw new Error("CSV must include a header row");
+    throw new Error("CSV にはヘッダー行が必要です");
   }
 
   assertHeader(rows[0]);
@@ -129,7 +129,7 @@ export function parseCollectionPreviewCsv(csvText) {
   for (let index = 1; index < rows.length; index += 1) {
     const cells = rows[index];
     if (cells.length !== PRODUCT_MANUAL_COLLECTIONS_EXPORT_HEADERS.length) {
-      throw new Error(`CSV row ${index + 1} must contain ${PRODUCT_MANUAL_COLLECTIONS_EXPORT_HEADERS.length} columns`);
+      throw new Error(`CSV の ${index + 1} 行目は ${PRODUCT_MANUAL_COLLECTIONS_EXPORT_HEADERS.length} 列である必要があります`);
     }
 
     parsedRows.push({
@@ -165,7 +165,7 @@ export function indexCollectionRows(parsedRows) {
     if (entry.row.product_id && identityToken) {
       const rawKey = `${entry.row.product_id}\u001e${identityToken}`;
       if (rawIdentityKeys.has(rawKey)) {
-        throw new Error(`Duplicate collection row detected: ${rawKey}`);
+        throw new Error(`コレクション行が重複しています: ${rawKey}`);
       }
       rawIdentityKeys.add(rawKey);
     }
@@ -190,7 +190,7 @@ function resolveCollectionForRow({
 
   if (collectionId && normalizedHandle && resolvedById && resolvedByHandle && resolvedById.id !== resolvedByHandle.id) {
     return {
-      error: "collection_id and collection_handle must refer to the same collection",
+      error: "collection_id と collection_handle は同じコレクションを指す必要があります",
       resolvedCollection: null,
     };
   }
@@ -290,13 +290,13 @@ export function buildCollectionPreviewRows({
       && String(entry.row.updated_at ?? "") === MATRIXIFY_NOOP_COLLECTION_UPDATED_AT;
 
     if (!productId) {
-      messages.push("product_id is required");
+      messages.push("product_id は必須です");
     } else if (!existingProductIds.has(productId)) {
-      messages.push("product_id must reference an existing Shopify product");
+      messages.push("product_id は既存の Shopify 商品を参照する必要があります");
     }
 
     if (!membership && !isMatrixifyNoopRow) {
-      messages.push("membership must be member or remove");
+      messages.push("membership は member または remove である必要があります");
     }
 
     const { error: collectionResolveError, resolvedCollection } = resolveCollectionForRow({
@@ -310,9 +310,9 @@ export function buildCollectionPreviewRows({
     }
 
     if (!resolvedCollection && !isMatrixifyNoopRow) {
-      messages.push("collection_id or collection_handle must reference an existing manual collection");
+      messages.push("collection_id または collection_handle は既存の手動コレクションを参照する必要があります");
     } else if (resolvedCollection?.ruleSet != null) {
-      messages.push("smart collections are not supported in product-manual-collections-v1");
+      messages.push("product-manual-collections-v1 ではスマートコレクションをサポートしていません");
     }
 
     const key = resolvedCollection?.id && productId
@@ -327,7 +327,7 @@ export function buildCollectionPreviewRows({
 
     if (key) {
       if (editedRowKeys.has(key)) {
-        throw new Error(`Duplicate collection row detected: ${key}`);
+        throw new Error(`コレクション行が重複しています: ${key}`);
       }
       editedRowKeys.add(key);
     }
@@ -335,39 +335,39 @@ export function buildCollectionPreviewRows({
     if (productRow) {
       if (baselineRow) {
         if ((entry.row.product_handle ?? "") !== baselineRow.product_handle) {
-          messages.push("product_handle is read-only and must match the export baseline");
+          messages.push("product_handle は読み取り専用で、export baseline と一致する必要があります");
         }
       } else if (entry.row.product_handle && entry.row.product_handle !== productRow.product_handle) {
-        messages.push("product_handle is read-only and must match Shopify");
+        messages.push("product_handle は読み取り専用で、Shopify と一致する必要があります");
       }
     }
 
     if (resolvedCollection) {
       if (baselineRow) {
         if ((entry.row.collection_id ?? "") !== baselineRow.collection_id) {
-          messages.push("collection_id is read-only and must match the export baseline");
+          messages.push("collection_id は読み取り専用で、export baseline と一致する必要があります");
         }
         if ((entry.row.collection_handle ?? "") !== baselineRow.collection_handle) {
-          messages.push("collection_handle is read-only and must match the export baseline");
+          messages.push("collection_handle は読み取り専用で、export baseline と一致する必要があります");
         }
         if ((entry.row.collection_title ?? "") !== baselineRow.collection_title) {
-          messages.push("collection_title is read-only and must match the export baseline");
+          messages.push("collection_title は読み取り専用で、export baseline と一致する必要があります");
         }
         if ((entry.row.updated_at ?? "") !== baselineRow.updated_at) {
-          messages.push("updated_at is read-only and must match the export baseline");
+          messages.push("updated_at は読み取り専用で、export baseline と一致する必要があります");
         }
       } else {
         if (entry.row.collection_id && entry.row.collection_id !== resolvedCollection.id) {
-          messages.push("collection_id is read-only and must match Shopify");
+          messages.push("collection_id は読み取り専用で、Shopify と一致する必要があります");
         }
         if (entry.row.collection_handle && normalizeHandle(entry.row.collection_handle) !== normalizeHandle(resolvedCollection.handle)) {
-          messages.push("collection_handle is read-only and must match Shopify");
+          messages.push("collection_handle は読み取り専用で、Shopify と一致する必要があります");
         }
         if (entry.row.collection_title && entry.row.collection_title !== resolvedCollection.title) {
-          messages.push("collection_title is read-only and must match Shopify");
+          messages.push("collection_title は読み取り専用で、Shopify と一致する必要があります");
         }
         if (entry.row.updated_at) {
-          messages.push("updated_at is read-only and must match Shopify");
+          messages.push("updated_at は読み取り専用で、Shopify と一致する必要があります");
         }
       }
     }
@@ -418,7 +418,7 @@ export function buildCollectionPreviewRows({
     let classification = changedFields.length === 0 ? "unchanged" : "changed";
     if (!baselineMatchesCurrent) {
       classification = "warning";
-      messages.push("Live Shopify collection changed after the selected export baseline");
+      messages.push("選択したエクスポート baseline 以降に、Shopify 上の最新のコレクション状態が変更されました");
     }
 
     return {

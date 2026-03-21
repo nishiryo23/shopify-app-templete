@@ -13,10 +13,10 @@ export default function AppShell() {
   return (
     <AppProvider embedded apiKey={apiKey}>
       <s-app-nav>
-        <s-link href="/app">Home</s-link>
-        <s-link href="/app/preview">Preview</s-link>
-        <s-link href="/app/pricing">Pricing</s-link>
-        <s-link href="/app/welcome">Welcome</s-link>
+        <s-link href="/app">ホーム</s-link>
+        <s-link href="/app/preview">プレビュー</s-link>
+        <s-link href="/app/pricing">料金</s-link>
+        <s-link href="/app/welcome">利用開始</s-link>
       </s-app-nav>
       <Outlet />
     </AppProvider>

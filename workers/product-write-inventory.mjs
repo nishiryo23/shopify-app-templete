@@ -240,7 +240,7 @@ export async function runInventoryProductWriteJob({
         editedRowNumber: row.editedRowNumber,
         finalRow: currentRow,
         locationId: row.locationId,
-        messages: matchesPreview ? [] : ["Live Shopify inventory level changed after preview confirmation was requested"],
+        messages: matchesPreview ? [] : ["プレビュー確定後に、Shopify 上の最新の在庫数が変更されました"],
         mutationStatus: "skipped",
         mutationUserErrors: [],
         operation: row.operation,

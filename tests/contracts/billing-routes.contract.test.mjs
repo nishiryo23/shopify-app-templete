@@ -32,7 +32,7 @@ test("pricing route uses shared gate data and refresh endpoint", () => {
   assert.match(pricingRoute, /loadPricingGate/);
   assert.match(pricingRoute, /useFetcher/);
   assert.match(pricingRoute, /load\("\/app\/billing\/refresh"\)/);
-  assert.match(pricingRoute, /currentAppInstallation\.activeSubscriptions を正本/);
+  assert.match(pricingRoute, /Shopify の最新の契約状態をもとに表示しています/);
   assert.doesNotMatch(pricingRoute, /P-003 で pricing gate を実装する前の最小 shell/);
 });
 
@@ -42,6 +42,6 @@ test("welcome route redirects active paid shops and ignores query-parameter shor
 
   assert.match(welcomeRoute, /loadWelcomeGate/);
   assert.match(service, /if \(entitlement\.state === "ACTIVE_PAID"\) \{\s+throw redirect\("\/app"\);/m);
-  assert.match(welcomeRoute, /query parameter だけでは entitlement は付与されません/);
+  assert.match(welcomeRoute, /この画面を開いただけでは契約は有効になりません/);
   assert.doesNotMatch(welcomeRoute, /charge_id|searchParams|URLSearchParams/);
 });

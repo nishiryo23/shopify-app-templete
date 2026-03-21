@@ -345,7 +345,7 @@ test("product preview rows expose handle redirect metadata and reject existing l
   assert.equal(preview.rows[0].nextHandle, "hat-new");
   assert.equal(preview.rows[0].redirectPath, "/products/hat-old");
   assert.equal(preview.rows[0].redirectTarget, "/products/hat-new");
-  assert.match(preview.rows[0].messages[0], /live redirect already exists/i);
+  assert.match(preview.rows[0].messages[0], /最新の redirect が存在します/);
 });
 
 test("product preview rows normalize handle redirect metadata without inventing a slug", async () => {
@@ -460,7 +460,7 @@ test("product preview rejects invalid handle edits instead of canonicalizing the
 
   assert.deepEqual(preview.rows[0].changedFields, ["handle"]);
   assert.equal(preview.rows[0].classification, "error");
-  assert.match(preview.rows[0].messages.join(" "), /letters-numbers-hyphens contract/i);
+  assert.match(preview.rows[0].messages.join(" "), /letters-numbers-hyphens 契約/);
   assert.equal(preview.rows[0].nextHandle, "");
   assert.equal(preview.rows[0].redirectTarget, "");
 });
@@ -579,7 +579,7 @@ test("product preview marks already-applied live handle edits as non-writable wa
 
   assert.deepEqual(preview.rows[0].changedFields, []);
   assert.equal(preview.rows[0].classification, "warning");
-  assert.match(preview.rows[0].messages.join(" "), /already matches the edited handle/i);
+  assert.match(preview.rows[0].messages.join(" "), /すでに編集後の handle と一致しています/);
   assert.equal(preview.rows[0].previousHandle, null);
   assert.equal(preview.rows[0].nextHandle, null);
   assert.equal(preview.rows[0].redirectPath, null);
@@ -702,7 +702,7 @@ test("product write worker fails revalidation when a handle redirect appears aft
 
   assert.equal(result.outcome, "revalidation_failed");
   assert.equal(result.rows[0].verificationStatus, "revalidation_failed");
-  assert.match(result.rows[0].messages.join(" "), /redirect/i);
+  assert.match(result.rows[0].messages.join(" "), /リダイレクトが設定されています/);
   assert.equal(updateCalls, 0);
   assert.equal(puts.length, 1);
 });
@@ -1220,12 +1220,14 @@ test("product write worker keeps normalized handle rows rollbackable after trans
 
 test("preview page exposes write and undo controls", () => {
   const route = readProjectFile("app/routes/app.preview.tsx");
-  assert.match(route, /product-variants-v1/);
-  assert.match(route, /product-variants-prices-v1/);
-  assert.match(route, /Create export/);
-  assert.match(route, /product-media-v1/);
-  assert.match(route, /Confirm and write/);
-  assert.match(route, /Undo latest rollbackable write/);
+  const copyFile = readProjectFile("app/utils/admin-copy.ts");
+  assert.match(route, /PRODUCT_PROFILE_OPTIONS/);
+  assert.match(copyFile, /product-variants-v1/);
+  assert.match(copyFile, /product-variants-prices-v1/);
+  assert.match(route, /エクスポートを作成/);
+  assert.match(copyFile, /product-media-v1/);
+  assert.match(route, /確定して書き込む/);
+  assert.match(route, /最新のロールバック可能な書き戻しを取り消す/);
   assert.match(route, /previewJobId/);
   assert.match(route, /writeJobId/);
   assert.match(route, /undoJobId/);

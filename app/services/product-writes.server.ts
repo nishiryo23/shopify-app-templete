@@ -42,7 +42,7 @@ function json(data: unknown, init?: { headers?: Record<string, string>; status?:
 function retentionExpiredUndoResponse() {
   return json({
     code: "retention_expired",
-    error: "latest rollbackable write retention has expired",
+    error: "最新のロールバック可能な書き戻しは保持期限切れです",
   }, { status: 400 });
 }
 
@@ -54,11 +54,11 @@ async function requireOwnerPaidAction(request: Request) {
   });
 
   if (session.accountOwner !== true) {
-    throw new Error("owner confirmation is required");
+    throw new Error("ショップオーナーによる確定が必要です");
   }
 
   if (entitlement.state !== "ACTIVE_PAID") {
-    throw new Error("ACTIVE_PAID entitlement is required");
+    throw new Error("有効な契約が必要です");
   }
 
   return {
@@ -84,7 +84,7 @@ async function loadCompletedPreviewOrThrow({
   });
 
   if (!job) {
-    throw new Error("selected preview job is not a completed product preview for this shop");
+    throw new Error("選択したプレビュージョブは、このショップの完了済み商品プレビューではありません");
   }
 
   const artifact = await prisma.artifact.findFirst({
@@ -97,7 +97,7 @@ async function loadCompletedPreviewOrThrow({
   });
 
   if (!artifact) {
-    throw new Error("selected preview job is missing result artifact");
+    throw new Error("選択したプレビュージョブに結果 artifact がありません");
   }
 
   return {
@@ -130,7 +130,7 @@ export async function createProductWrite({ request }: ActionFunctionArgs) {
     const previewJobId = String(formData.get("previewJobId") ?? "").trim();
 
     if (!previewJobId) {
-      return json({ error: "previewJobId is required" }, { status: 400 });
+      return json({ error: "プレビューを選択してください" }, { status: 400 });
     }
 
     const shopDomain = authContext.session.shop;
@@ -140,7 +140,7 @@ export async function createProductWrite({ request }: ActionFunctionArgs) {
     const previewBody = Buffer.isBuffer(previewFile) ? previewFile : previewFile?.body;
 
     if (!previewBody) {
-      throw new Error("preview result artifact body could not be read");
+      throw new Error("プレビュー結果を読み取れませんでした");
     }
 
     const payload = JSON.parse(previewBody.toString("utf8"));
@@ -152,7 +152,7 @@ export async function createProductWrite({ request }: ActionFunctionArgs) {
       shopDomain,
     });
     if (existingVerifiedSuccess) {
-      return json({ error: "this preview already has a verified successful write" }, { status: 409 });
+      return json({ error: "このプレビューには、すでに検証済みの成功書き込みがあります" }, { status: 409 });
     }
 
     const existingActiveJob = await prisma.job.findFirst({
@@ -176,10 +176,10 @@ export async function createProductWrite({ request }: ActionFunctionArgs) {
 
     const rowState = findPreviewJobRows(payload);
     if (rowState.hasErrors) {
-      return json({ error: "preview contains error rows and cannot be confirmed" }, { status: 400 });
+      return json({ error: "プレビューにエラー行が含まれているため確定できません" }, { status: 400 });
     }
     if (!rowState.hasWritableRows) {
-      return json({ error: "preview does not contain writable rows" }, { status: 400 });
+      return json({ error: "プレビューに書き込み対象の行がありません" }, { status: 400 });
     }
 
     const job = await enqueueOrFindActiveProductWriteJob({
@@ -197,7 +197,7 @@ export async function createProductWrite({ request }: ActionFunctionArgs) {
     });
 
     if (!job) {
-      throw new Error("Failed to enqueue product write job");
+      throw new Error("商品書き込みジョブの登録に失敗しました");
     }
 
     return json({
@@ -208,7 +208,7 @@ export async function createProductWrite({ request }: ActionFunctionArgs) {
     }, { status: 202 });
   } catch (error) {
     return json({
-      error: error instanceof Error ? error.message : "product write request failed",
+      error: error instanceof Error ? error.message : "商品書き込みのリクエストに失敗しました",
     }, { status: 400 });
   }
 }
@@ -220,7 +220,7 @@ export async function createProductUndo({ request }: ActionFunctionArgs) {
     const writeJobId = String(formData.get("writeJobId") ?? "").trim();
 
     if (!writeJobId) {
-      return json({ error: "writeJobId is required" }, { status: 400 });
+      return json({ error: "取り消し対象の書き込みを選択してください" }, { status: 400 });
     }
 
     const shopDomain = authContext.session.shop;
@@ -243,7 +243,7 @@ export async function createProductUndo({ request }: ActionFunctionArgs) {
     const latestRollbackableWrite = await readLatestRollbackableWriteOrNull(shopDomain);
 
     if (!latestRollbackableWrite || latestRollbackableWrite.artifact.jobId !== writeJobId) {
-      return json({ error: "undo is only allowed for the latest rollbackable write" }, { status: 400 });
+      return json({ error: "取り消しは最新のロールバック可能な書き戻しに対してのみ実行できます" }, { status: 400 });
     }
 
     if (latestRollbackableWrite.retentionExpired) {
@@ -253,12 +253,12 @@ export async function createProductUndo({ request }: ActionFunctionArgs) {
     const snapshotArtifact = latestRollbackableWrite.snapshotArtifact;
 
     if (!snapshotArtifact) {
-      return json({ error: "latest rollbackable write is missing snapshot artifact" }, { status: 400 });
+      return json({ error: "取り消しに必要な復元データが見つかりません" }, { status: 400 });
     }
 
     const profile = (latestRollbackableWrite.artifact.metadata as { profile?: string } | null)?.profile ?? PRODUCT_CORE_SEO_EXPORT_PROFILE;
     if (profile !== PRODUCT_CORE_SEO_EXPORT_PROFILE) {
-      return json({ error: "undo is not available for this write profile" }, { status: 400 });
+      return json({ error: "この書き込みプロファイルでは取り消しを利用できません" }, { status: 400 });
     }
 
     const job = await enqueueOrFindActiveProductUndoJob({
@@ -276,7 +276,7 @@ export async function createProductUndo({ request }: ActionFunctionArgs) {
     });
 
     if (!job) {
-      throw new Error("Failed to enqueue product undo job");
+      throw new Error("商品取り消しジョブの登録に失敗しました");
     }
 
     return json({
@@ -287,7 +287,7 @@ export async function createProductUndo({ request }: ActionFunctionArgs) {
     }, { status: 202 });
   } catch (error) {
     return json({
-      error: error instanceof Error ? error.message : "product undo request failed",
+      error: error instanceof Error ? error.message : "商品取り消しのリクエストに失敗しました",
     }, { status: 400 });
   }
 }

@@ -153,7 +153,7 @@ test("inventory write worker stores revalidation_failed result when preview has 
               },
               editedRowNumber: 2,
               locationId: "gid://shopify/Location/1",
-              messages: ["Live Shopify inventory level changed after the selected export baseline"],
+              messages: ["選択したエクスポート baseline 以降に、Shopify 上の最新の在庫レベルが変更されました"],
               operation: "update",
               productId: "gid://shopify/Product/1",
               variantId: "gid://shopify/ProductVariant/1",
@@ -1393,5 +1393,5 @@ test("collection write worker fails revalidation when the confirmed handle no lo
   assert.equal(addMembershipCalls, 0);
   assert.equal(result.outcome, "revalidation_failed");
   assert.equal(result.rows[0].verificationStatus, "revalidation_failed");
-  assert.match(result.rows[0].messages[0], /changed after preview confirmation was requested/);
+  assert.match(result.rows[0].messages[0], /プレビュー確定後に、Shopify 上の最新のコレクション状態が変更されました/);
 });

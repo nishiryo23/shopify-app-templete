@@ -45,7 +45,7 @@ function readProjectFile(relativePath) {
 test("preview CSV parser requires exact product-core-seo-v1 headers", () => {
   assert.throws(
     () => parseProductPreviewCsv("product_id,title\n1,Hat\n"),
-    /CSV header must exactly match product-core-seo-v1/,
+    /CSV ヘッダーは product-core-seo-v1 と完全一致する必要があります/,
   );
 });
 
@@ -63,14 +63,14 @@ test("preview CSV parser preserves row numbers and values", () => {
 test("variant preview CSV parser requires exact product-variants-v1 headers", () => {
   assert.throws(
     () => parseVariantPreviewCsv("product_id,variant_id\n1,2\n"),
-    /CSV header must exactly match product-variants-v1/,
+    /CSV ヘッダーは product-variants-v1 と完全一致する必要があります/,
   );
 });
 
 test("variant price preview CSV parser requires exact product-variants-prices-v1 headers", () => {
   assert.throws(
     () => parseVariantPricePreviewCsv("product_id,variant_id\n1,2\n"),
-    /CSV header must exactly match product-variants-prices-v1/,
+    /CSV ヘッダーは product-variants-prices-v1 と完全一致する必要があります/,
   );
 });
 
@@ -92,7 +92,7 @@ test("variant preview rejects create rows outside the baseline product set", () 
   });
 
   assert.equal(rows[0].classification, "error");
-  assert.match(rows[0].messages[0], /selected export baseline/);
+  assert.match(rows[0].messages[0], /選択したエクスポート baseline/);
   assert.equal(summary.error, 1);
 });
 
@@ -141,7 +141,7 @@ test("variant price preview rejects mismatched product_id for baseline variant",
   });
 
   assert.equal(rows[0].classification, "error");
-  assert.match(rows[0].messages[0], /owns the baseline variant/);
+  assert.match(rows[0].messages[0], /baseline 上でそのバリエーションを所有する商品/);
   assert.equal(summary.error, 1);
 });
 
@@ -163,7 +163,7 @@ test("variant preview rejects create rows with edited option names that do not m
   });
 
   assert.equal(rows[0].classification, "error");
-  assert.match(rows[0].messages[0], /option1_name must match the live product option name/);
+  assert.match(rows[0].messages[0], /option1_name は Shopify 上の最新の商品オプション名と一致する必要があります/);
   assert.equal(summary.error, 1);
 });
 
@@ -440,7 +440,7 @@ test("variant price preview rejects edited rows that retarget variant_id", () =>
   });
 
   assert.equal(rows[0].classification, "error");
-  assert.match(rows[0].messages[0], /option1_value is read-only/);
+  assert.match(rows[0].messages[0], /option1_value は読み取り専用/);
   assert.equal(rows[0].variantId, "gid://shopify/ProductVariant/2");
   assert.equal(summary.error, 1);
 });
@@ -536,7 +536,7 @@ test("preview row index rejects duplicate product ids", () => {
     + "gid://shopify/Product/1,hat-2,Hat 2,ACTIVE,Matri,Hat,sale,<p>Body</p>,SEO title,SEO description,2026-03-13T00:00:00Z\n",
   );
 
-  assert.throws(() => indexRowsByProductId(rows), /Duplicate product_id detected/);
+  assert.throws(() => indexRowsByProductId(rows), /product_id が重複しています/);
 });
 
 test("preview row classification prioritizes warning ahead of changed", () => {
@@ -1201,16 +1201,18 @@ test("preview plan and ADR capture route truth and edited upload semantics", () 
 test("preview route and page delegate to the shared services", () => {
   const routeFile = readProjectFile("app/routes/app.product-previews.ts");
   const pageFile = readProjectFile("app/routes/app.preview.tsx");
+  const copyFile = readProjectFile("app/utils/admin-copy.ts");
   const workerBootstrap = readProjectFile("workers/bootstrap.mjs");
 
   assert.match(routeFile, /createProductPreview/);
   assert.match(pageFile, /loadProductPreviewPage/);
   assert.match(pageFile, /preview-shell/);
-  assert.match(pageFile, /product-variants-prices-v1/);
+  assert.match(pageFile, /PRODUCT_PROFILE_OPTIONS/);
+  assert.match(copyFile, /product-variants-prices-v1/);
   assert.match(pageFile, /useSearchParams/);
-  assert.match(pageFile, /Edited layout/);
-  assert.match(pageFile, /matrixify mode/);
-  assert.match(pageFile, /Request error:/);
+  assert.match(pageFile, /編集レイアウト/);
+  assert.match(pageFile, /Matrixify 互換モード/);
+  assert.match(pageFile, /リクエストエラー:/);
   assert.match(workerBootstrap, /PRODUCT_PREVIEW_KIND/);
 });
 

@@ -16,17 +16,17 @@ export function buildMediaCreateInputFromPreviewRow(row) {
   const errors = [];
 
   if (!row?.productId) {
-    errors.push("product_id is required");
+    errors.push("product_id は必須です");
   }
 
   const src = (editedRow.image_src ?? "").trim();
   if (!src) {
-    errors.push("image_src is required for new media");
+    errors.push("新規メディアでは image_src が必須です");
   }
 
   const mediaContentType = (editedRow.media_content_type ?? "").trim();
   if (mediaContentType && mediaContentType !== "IMAGE") {
-    errors.push("media_content_type must be blank or IMAGE for new media");
+    errors.push("新規メディアでは media_content_type は空欄または IMAGE である必要があります");
   }
 
   if (errors.length > 0) {
@@ -49,7 +49,7 @@ export function buildMediaUpdateInputFromPreviewRow(row) {
   const errors = [];
 
   if (!row?.mediaId) {
-    errors.push("media_id is required for update");
+    errors.push("update では media_id が必須です");
   }
 
   if (errors.length > 0) {
@@ -75,11 +75,11 @@ export function buildMediaDeleteInputFromPreviewRow(row) {
   const errors = [];
 
   if (!row?.mediaId) {
-    errors.push("media_id is required for delete");
+    errors.push("delete では media_id が必須です");
   }
 
   if (!row?.productId) {
-    errors.push("product_id is required for delete");
+    errors.push("delete では product_id が必須です");
   }
 
   if (errors.length > 0) {

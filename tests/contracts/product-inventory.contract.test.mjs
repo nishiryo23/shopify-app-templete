@@ -96,7 +96,7 @@ test("inventory preview warns when live quantity drifted after baseline", () => 
   });
 
   assert.equal(rows[0].classification, "warning");
-  assert.match(rows[0].messages[0], /changed after the selected export baseline/);
+  assert.match(rows[0].messages[0], /選択したエクスポート baseline 以降/);
   assert.deepEqual(rows[0].changedFields, []);
   assert.equal(summary.warning, 1);
   assert.deepEqual(getWritableInventoryPreviewRows(rows), []);
@@ -154,7 +154,7 @@ test("inventory preview rejects edited rows that retarget variant_id or location
   });
 
   assert.equal(rows[0].classification, "error");
-  assert.match(rows[0].messages.join("\n"), /variant_id \+ location_id was not present/);
+  assert.match(rows[0].messages.join("\n"), /variant_id \+ location_id が選択したエクスポート baseline に存在しません/);
   assert.equal(summary.error, 1);
 });
 
@@ -215,8 +215,8 @@ test("inventory preview index ignores duplicate missing identity rows so row val
 
   assert.equal(rows[0].classification, "error");
   assert.equal(rows[1].classification, "error");
-  assert.match(rows[0].messages.join("\n"), /variant_id is required/);
-  assert.match(rows[1].messages.join("\n"), /variant_id is required/);
+  assert.match(rows[0].messages.join("\n"), /variant_id は必須です/);
+  assert.match(rows[1].messages.join("\n"), /variant_id は必須です/);
   assert.equal(summary.error, 2);
 });
 
@@ -435,8 +435,10 @@ test("inventory write input includes compare-and-set quantity and reference docu
 
 test("preview page lists inventory profile", () => {
   const pageFile = readProjectFile("app/routes/app.preview.tsx");
+  const copyFile = readProjectFile("app/utils/admin-copy.ts");
 
-  assert.match(pageFile, /product-inventory-v1/);
+  assert.match(pageFile, /PRODUCT_PROFILE_OPTIONS/);
+  assert.match(copyFile, /product-inventory-v1/);
 });
 
 test("preview service latest-write lookup is not limited to product core profile", () => {

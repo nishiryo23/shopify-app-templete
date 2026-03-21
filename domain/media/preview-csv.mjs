@@ -57,7 +57,7 @@ function parseCsvRows(csvText) {
   }
 
   if (inQuotes) {
-    throw new Error("CSV parsing failed: unclosed quoted field");
+    throw new Error("CSV の解析に失敗しました: 閉じられていない引用符があります");
   }
 
   if (currentCell.length > 0 || currentRow.length > 0) {
@@ -74,7 +74,7 @@ function assertHeader(headerRow) {
     actual.length !== PRODUCT_MEDIA_EXPORT_HEADERS.length
     || actual.some((value, index) => value !== PRODUCT_MEDIA_EXPORT_HEADERS[index])
   ) {
-    throw new Error("CSV header must exactly match product-media-v1");
+    throw new Error("CSV ヘッダーは product-media-v1 と完全一致する必要があります");
   }
 }
 
@@ -123,7 +123,7 @@ function diffChangedFields(baselineRow, editedRow) {
 export function parseMediaPreviewCsv(csvText) {
   const rows = parseCsvRows(csvText);
   if (rows.length === 0) {
-    throw new Error("CSV must include a header row");
+    throw new Error("CSV にはヘッダー行が必要です");
   }
 
   assertHeader(rows[0]);
@@ -132,7 +132,7 @@ export function parseMediaPreviewCsv(csvText) {
   for (let index = 1; index < rows.length; index += 1) {
     const cells = rows[index];
     if (cells.length !== PRODUCT_MEDIA_EXPORT_HEADERS.length) {
-      throw new Error(`CSV row ${index + 1} must contain ${PRODUCT_MEDIA_EXPORT_HEADERS.length} columns`);
+      throw new Error(`CSV の ${index + 1} 行目は ${PRODUCT_MEDIA_EXPORT_HEADERS.length} 列である必要があります`);
     }
 
     parsedRows.push({
@@ -156,7 +156,7 @@ export function indexMediaRows(parsedRows) {
 
     const key = buildMediaRowKey(entry.row);
     if (entry.row.media_id && rowsByKey.has(key)) {
-      throw new Error(`Duplicate media row detected: ${key}`);
+      throw new Error(`メディア行が重複しています: ${key}`);
     }
 
     if (entry.row.media_id) {
@@ -237,7 +237,7 @@ function buildSummary(rows) {
 function validateReadOnlyColumns({ baselineRow, editedRow, messages }) {
   for (const header of READ_ONLY_HEADERS) {
     if ((baselineRow?.[header] ?? "") !== (editedRow?.[header] ?? "")) {
-      messages.push(`${header} is read-only and must match the export baseline`);
+      messages.push(`${header} は読み取り専用で、export baseline と一致する必要があります`);
     }
   }
 }
@@ -250,7 +250,7 @@ function validateImageSrc(value) {
 
   if (!/^https:\/\/.+/i.test(trimmed)) {
     return {
-      error: "image_src must be a valid HTTPS URL",
+      error: "image_src は有効な HTTPS URL である必要があります",
       valid: false,
     };
   }
@@ -266,7 +266,7 @@ function validateImagePosition(value) {
 
   if (!/^\d+$/.test(trimmed) || Number.parseInt(trimmed, 10) < 1) {
     return {
-      error: "image_position must be a positive integer",
+      error: "image_position は 1 以上の整数である必要があります",
       valid: false,
     };
   }
@@ -281,7 +281,7 @@ function validateNewMediaContentType(value) {
   }
 
   return {
-    error: "media_content_type must be blank or IMAGE for new media",
+    error: "新規メディアでは media_content_type は空欄または IMAGE である必要があります",
     valid: false,
   };
 }
@@ -315,10 +315,10 @@ export function buildMediaPreviewRows({
 
     if (!productId) {
       classification = "error";
-      messages.push("product_id is required");
+      messages.push("product_id は必須です");
     } else if (!baselineProductIds?.has(productId)) {
       classification = "error";
-      messages.push("product_id was not present in the selected export baseline");
+      messages.push("product_id が選択したエクスポート baseline に存在しません");
     } else if (isNewMedia) {
       const contentTypeValidation = validateNewMediaContentType(editedRow.media_content_type);
       if (!contentTypeValidation.valid) {
@@ -337,7 +337,7 @@ export function buildMediaPreviewRows({
           classification = "unchanged";
         } else {
           classification = "error";
-          messages.push("image_src is required for new media");
+          messages.push("新規メディアでは image_src が必須です");
         }
       } else if (messages.length === 0) {
         const srcValidation = validateImageSrc(editedRow.image_src);
@@ -353,10 +353,10 @@ export function buildMediaPreviewRows({
       }
     } else if (!baselineRow) {
       classification = "error";
-      messages.push("media_id was not present in the selected export baseline");
+      messages.push("media_id が選択したエクスポート baseline に存在しません");
     } else if (!currentRow) {
       classification = "error";
-      messages.push("Live Shopify media could not be found");
+      messages.push("Shopify 上の最新のメディアが見つかりません");
     } else {
       validateReadOnlyColumns({ baselineRow, editedRow, messages });
 
@@ -375,7 +375,7 @@ export function buildMediaPreviewRows({
       } else if (!mediaRowsMatch(currentRow, baselineRow)) {
         classification = "warning";
         changedFields = [];
-        messages.push("Live Shopify media changed after the selected export baseline");
+        messages.push("選択したエクスポート baseline 以降に、Shopify 上の最新のメディアが変更されました");
       } else {
         changedFields = diffChangedFields(baselineRow, editedRow);
 

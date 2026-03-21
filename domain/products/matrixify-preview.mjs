@@ -159,12 +159,12 @@ function buildSubsetHeaderMap({ allowedHeaders, headers, profile }) {
     }
     headerSet.add(header);
     if (!allowedHeaderSet.has(header)) {
-      throw new Error(`Unsupported Matrixify header for ${profile}: ${header}`);
+      throw new Error(`${profile} では未対応の Matrixify ヘッダーです: ${header}`);
     }
   }
 
   if (duplicateHeaders.length > 0) {
-    throw new Error(`Duplicate Matrixify headers for ${profile}: ${duplicateHeaders.join(", ")}`);
+    throw new Error(`${profile} で Matrixify ヘッダーが重複しています: ${duplicateHeaders.join(", ")}`);
   }
 
   return headerSet;
@@ -173,7 +173,7 @@ function buildSubsetHeaderMap({ allowedHeaders, headers, profile }) {
 function assertRequiredHeaders({ headerSet, profile, requiredHeaders }) {
   for (const header of requiredHeaders) {
     if (!headerSet.has(header)) {
-      throw new Error(`Missing required Matrixify header for ${profile}: ${header}`);
+      throw new Error(`${profile} で必須の Matrixify ヘッダーが不足しています: ${header}`);
     }
   }
 }
@@ -181,7 +181,7 @@ function assertRequiredHeaders({ headerSet, profile, requiredHeaders }) {
 function buildParsedRows({ headers, rows }) {
   return rows.slice(1).map((cells, index) => {
     if (cells.length > headers.length) {
-      throw new Error(`Matrixify row ${index + 2} contains more columns than the header`);
+      throw new Error(`Matrixify の ${index + 2} 行目はヘッダーより多い列を含められません`);
     }
 
     return {
@@ -194,7 +194,7 @@ function buildParsedRows({ headers, rows }) {
 function parseCanonicalBaseline({ canonicalCsvText, canonicalHeaders, profile }) {
   const rows = parseCsvRows(canonicalCsvText);
   if (rows.length === 0) {
-    throw new Error(`Baseline canonical CSV is empty for ${profile}`);
+    throw new Error(`${profile} の baseline canonical CSV が空です`);
   }
 
   const headerRow = rows[0] ?? [];
@@ -202,7 +202,7 @@ function parseCanonicalBaseline({ canonicalCsvText, canonicalHeaders, profile })
     headerRow.length !== canonicalHeaders.length
     || headerRow.some((value, index) => value !== canonicalHeaders[index])
   ) {
-    throw new Error(`Baseline canonical CSV header mismatch for ${profile}`);
+    throw new Error(`${profile} の baseline canonical CSV ヘッダーが一致しません`);
   }
 
   return rows.slice(1).map((cells, index) => ({
@@ -236,7 +236,7 @@ function buildCanonicalResult({ canonicalHeaders, editedRowNumbers, canonicalRow
 function getConfig(profile) {
   const config = MATRIXIFY_PROFILE_CONFIGS[profile];
   if (!config) {
-    throw new Error(`Unsupported Matrixify profile: ${profile}`);
+    throw new Error(`未対応の Matrixify プロファイルです: ${profile}`);
   }
   return config;
 }
@@ -250,7 +250,7 @@ async function readMatrixifyRows({ body, format, worksheetName }) {
   }
 
   if (format !== PRODUCT_EXPORT_FORMAT) {
-    throw new Error(`Unsupported Matrixify format: ${format}`);
+    throw new Error(`未対応の Matrixify 形式です: ${format}`);
   }
 
   return normalizeRows(parseCsvRows(Buffer.isBuffer(body) ? body.toString("utf8") : String(body ?? "")));
@@ -464,7 +464,7 @@ function normalizeMedia({ baselineRowsByProductId, headerSet, rows }) {
   for (const entry of rows) {
     const imageSrc = toTrimmedString(entry.row["Image Src"]);
     if (!imageSrc) {
-      throw new Error(`Matrixify media row ${entry.rowNumber} must include Image Src; delete semantics are unsupported`);
+      throw new Error(`Matrixify のメディア ${entry.rowNumber} 行目には Image Src が必要です。削除セマンティクスは未対応です`);
     }
 
     const productId = toTrimmedString(entry.row.ID);
@@ -479,8 +479,8 @@ function normalizeMedia({ baselineRowsByProductId, headerSet, rows }) {
     });
     if (!baselineRow && hasExistingBaselineMedia) {
       throw new Error(
-        `Matrixify media row ${entry.rowNumber} could not be matched to a baseline media row; `
-        + "ambiguous updates to existing media are unsupported",
+        `Matrixify のメディア ${entry.rowNumber} 行目を baseline のメディア行に対応付けできませんでした。`
+        + "既存メディアへの曖昧な更新は未対応です",
       );
     }
     const command = toTrimmedString(entry.row["Image Command"]).toUpperCase();
@@ -606,7 +606,7 @@ function normalizeCollections({ baselineRowsByProductId, headerSet, rows }) {
 
     if (String(rawValue) === "") {
       if (baselineMembershipRows.length > 0) {
-        throw new Error(`Matrixify custom collections row ${entry.rowNumber} cannot clear baseline collections; remove semantics are unsupported`);
+        throw new Error(`Matrixify の custom collections ${entry.rowNumber} 行目では baseline のコレクションを空にできません。remove セマンティクスは未対応です`);
       }
       canonicalRows.push(
         buildMatrixifyNoopCollectionRow({
@@ -620,7 +620,7 @@ function normalizeCollections({ baselineRowsByProductId, headerSet, rows }) {
 
     if (nonEmptyHandles.length === 0) {
       if (baselineMembershipRows.length > 0) {
-        throw new Error(`Matrixify custom collections row ${entry.rowNumber} cannot clear baseline collections; remove semantics are unsupported`);
+        throw new Error(`Matrixify の custom collections ${entry.rowNumber} 行目では baseline のコレクションを空にできません。remove セマンティクスは未対応です`);
       }
       canonicalRows.push(
         buildMatrixifyNoopCollectionRow({
@@ -633,7 +633,7 @@ function normalizeCollections({ baselineRowsByProductId, headerSet, rows }) {
     }
 
     if (omittedBaselineHandles.length > 0) {
-      throw new Error(`Matrixify custom collections row ${entry.rowNumber} cannot remove baseline collections; remove semantics are unsupported`);
+      throw new Error(`Matrixify の custom collections ${entry.rowNumber} 行目では baseline のコレクションを削除できません。remove セマンティクスは未対応です`);
     }
 
     for (const handle of nonEmptyHandles) {
@@ -668,7 +668,7 @@ export async function canonicalizeMatrixifyProductSpreadsheet({
   });
 
   if (rows.length === 0) {
-    throw new Error("Matrixify spreadsheet must include a header row");
+    throw new Error("Matrixify スプレッドシートにはヘッダー行が必要です");
   }
 
   const headers = rows[0] ?? [];

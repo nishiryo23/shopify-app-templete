@@ -338,7 +338,7 @@ export async function runCollectionProductWriteJob({
         finalRow: currentRow,
         messages: currentMatchesPreview && collectionMatchesPreview
           ? []
-          : ["Live Shopify collection changed after preview confirmation was requested"],
+          : ["プレビュー確定後に、Shopify 上の最新のコレクション状態が変更されました"],
         mutationStatus: "skipped",
         mutationUserErrors: [],
         preWriteRow: currentRow,

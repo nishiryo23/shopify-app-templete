@@ -49,22 +49,22 @@ function readWorksheetCellAsStrictText(cell, { header, rowNumber }) {
   const cellReference = `${columnLabelFromIndex(cell.col)}${rowNumber}`;
 
   if (typeof value === "number") {
-    throw new Error(`XLSX cell ${cellReference} for ${header} must be text, not number`);
+    throw new Error(`XLSX の ${cellReference} セル (${header}) は数値ではなくテキストである必要があります`);
   }
 
   if (typeof value === "boolean") {
-    throw new Error(`XLSX cell ${cellReference} for ${header} must be text, not boolean`);
+    throw new Error(`XLSX の ${cellReference} セル (${header}) は boolean ではなくテキストである必要があります`);
   }
 
   if (value instanceof Date) {
-    throw new Error(`XLSX cell ${cellReference} for ${header} must be text, not date`);
+    throw new Error(`XLSX の ${cellReference} セル (${header}) は日付ではなくテキストである必要があります`);
   }
 
   if (isObjectValue(value) && "formula" in value) {
-    throw new Error(`XLSX cell ${cellReference} for ${header} must not contain a formula`);
+    throw new Error(`XLSX の ${cellReference} セル (${header}) には数式を含められません`);
   }
 
-  throw new Error(`XLSX cell ${cellReference} for ${header} must be plain text`);
+  throw new Error(`XLSX の ${cellReference} セル (${header}) はプレーンテキストである必要があります`);
 }
 
 function rowHasExtraColumns(worksheetRow, fromColumnIndex) {
@@ -93,16 +93,16 @@ export async function canonicalizeXlsxWorksheet({
   await workbook.xlsx.load(body);
 
   if (workbook.worksheets.length === 0) {
-    throw new Error(`XLSX workbook must contain exactly one worksheet named ${worksheetName}`);
+    throw new Error(`XLSX ブックには ${worksheetName} という名前のワークシートが 1 つだけ必要です`);
   }
 
   if (workbook.worksheets.length !== 1) {
-    throw new Error(`XLSX workbook must contain exactly one worksheet named ${worksheetName}`);
+    throw new Error(`XLSX ブックには ${worksheetName} という名前のワークシートが 1 つだけ必要です`);
   }
 
   const worksheet = workbook.worksheets[0];
   if (worksheet.name !== worksheetName) {
-    throw new Error(`XLSX worksheet name must exactly match ${worksheetName}`);
+    throw new Error(`XLSX ワークシート名は ${worksheetName} と完全一致する必要があります`);
   }
 
   const headerRow = worksheet.getRow(1);
@@ -115,7 +115,7 @@ export async function canonicalizeXlsxWorksheet({
   }
 
   if (rowHasExtraColumns(headerRow, headers.length)) {
-    throw new Error(`XLSX worksheet ${worksheetName} contains unsupported extra columns`);
+    throw new Error(`XLSX ワークシート ${worksheetName} には未対応の余分な列があります`);
   }
 
   if (headerValues.some((value, index) => value !== headers[index])) {
@@ -143,7 +143,7 @@ export async function canonicalizeXlsxWorksheet({
     }
 
     if (rowHasExtraColumns(worksheetRow, headers.length)) {
-      throw new Error(`XLSX row ${rowNumber} contains unsupported extra columns`);
+      throw new Error(`XLSX の ${rowNumber} 行目には未対応の余分な列があります`);
     }
 
     rows.push(rowValues);
@@ -158,12 +158,12 @@ export async function canonicalizeXlsxWorksheet({
 
   for (let rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
     if (rows[rowIndex].every((value) => value === "")) {
-      throw new Error(`XLSX row ${rowIndex + 1} must not be empty before the end of worksheet`);
+      throw new Error(`XLSX の ${rowIndex + 1} 行目は、シート末尾より前で空行にできません`);
     }
   }
 
   if (rows.length === 1 && lastDataRowNumber > 1) {
-    throw new Error("XLSX workbook must not contain only empty data rows");
+    throw new Error("XLSX ブックのデータ行をすべて空行にはできません");
   }
 
   return {
@@ -180,12 +180,12 @@ export async function readStrictXlsxWorksheetRows({
   await workbook.xlsx.load(body);
 
   if (workbook.worksheets.length !== 1) {
-    throw new Error(`XLSX workbook must contain exactly one worksheet named ${worksheetName}`);
+    throw new Error(`XLSX ブックには ${worksheetName} という名前のワークシートが 1 つだけ必要です`);
   }
 
   const worksheet = workbook.worksheets[0];
   if (worksheet.name !== worksheetName) {
-    throw new Error(`XLSX worksheet name must exactly match ${worksheetName}`);
+    throw new Error(`XLSX ワークシート名は ${worksheetName} と完全一致する必要があります`);
   }
 
   const headerRow = worksheet.getRow(1);
@@ -199,7 +199,7 @@ export async function readStrictXlsxWorksheetRows({
   }
 
   if (headerValues.length === 0 || headerValues.every((value) => value === "")) {
-    throw new Error("XLSX workbook must include a header row");
+    throw new Error("XLSX ブックにはヘッダー行が必要です");
   }
 
   while (headerValues.length > 0 && headerValues[headerValues.length - 1] === "") {
@@ -239,12 +239,12 @@ export async function readStrictXlsxWorksheetRows({
 
   for (let rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
     if (rows[rowIndex].every((value) => value === "")) {
-      throw new Error(`XLSX row ${rowIndex + 1} must not be empty before the end of worksheet`);
+      throw new Error(`XLSX の ${rowIndex + 1} 行目は、シート末尾より前で空行にできません`);
     }
   }
 
   if (rows.length === 1 && lastDataRowNumber > 1) {
-    throw new Error("XLSX workbook must not contain only empty data rows");
+    throw new Error("XLSX ブックのデータ行をすべて空行にはできません");
   }
 
   return rows.map((row) => {

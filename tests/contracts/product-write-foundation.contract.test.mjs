@@ -148,7 +148,7 @@ test("invalid status is a row business failure instead of route reject", () => {
   });
 
   assert.equal(result.ok, false);
-  assert.match(result.errors[0], /invalid status value/);
+  assert.match(result.errors[0], /status の値が不正です/);
 });
 
 test("variant write input preserves blank SKU clears", () => {
@@ -189,7 +189,7 @@ test("variant price write input rejects blank price changes", () => {
   });
 
   assert.equal(result.ok, false);
-  assert.match(result.errors[0], /price cannot be blank/);
+  assert.match(result.errors[0], /price を変更した場合、空欄にはできません/);
 });
 
 test("variant price write input accepts three-decimal money values", () => {
@@ -552,7 +552,7 @@ test("undo API keeps missing snapshot corruption distinct from retention_expired
   assert.match(service, /const activeUndo = await findActiveProductUndoJob\(/);
   assert.match(service, /if \(activeUndo\) \{\s+return json\(\{\s+jobId: activeUndo\.id,/m);
   assert.match(service, /if \(latestRollbackableWrite\.retentionExpired\) \{\s+return retentionExpiredUndoResponse\(\);/m);
-  assert.match(service, /if \(!snapshotArtifact\) \{\s+return json\(\{ error: "latest rollbackable write is missing snapshot artifact" \}, \{ status: 400 \}\);/m);
+  assert.match(service, /if \(!snapshotArtifact\) \{\s+return json\(\{ error: "取り消しに必要な復元データが見つかりません" \}, \{ status: 400 \}\);/m);
   assert.match(
     service,
     /const activeUndo = await findActiveProductUndoJob[\s\S]*if \(activeUndo\) \{[\s\S]*const latestRollbackableWrite = await readLatestRollbackableWriteOrNull\(shopDomain\);[\s\S]*if \(latestRollbackableWrite\.retentionExpired\) \{\s+return retentionExpiredUndoResponse\(\);/m,

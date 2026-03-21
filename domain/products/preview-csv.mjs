@@ -54,7 +54,7 @@ function parseCsvRows(csvText) {
   }
 
   if (inQuotes) {
-    throw new Error("CSV parsing failed: unclosed quoted field");
+    throw new Error("CSV の解析に失敗しました: 閉じられていない引用符があります");
   }
 
   if (currentCell.length > 0 || currentRow.length > 0) {
@@ -71,7 +71,7 @@ function assertHeader(headerRow) {
     actual.length !== PRODUCT_CORE_SEO_EXPORT_HEADERS.length ||
     actual.some((value, index) => value !== PRODUCT_CORE_SEO_EXPORT_HEADERS[index])
   ) {
-    throw new Error("CSV header must exactly match product-core-seo-v1");
+    throw new Error("CSV ヘッダーは product-core-seo-v1 と完全一致する必要があります");
   }
 }
 
@@ -126,7 +126,7 @@ function rowsEqual(leftRow, rightRow) {
 export function parseProductPreviewCsv(csvText) {
   const rows = parseCsvRows(csvText);
   if (rows.length === 0) {
-    throw new Error("CSV must include a header row");
+    throw new Error("CSV にはヘッダー行が必要です");
   }
 
   assertHeader(rows[0]);
@@ -135,7 +135,7 @@ export function parseProductPreviewCsv(csvText) {
   for (let index = 1; index < rows.length; index += 1) {
     const cells = rows[index];
     if (cells.length !== PRODUCT_CORE_SEO_EXPORT_HEADERS.length) {
-      throw new Error(`CSV row ${index + 1} must contain ${PRODUCT_CORE_SEO_EXPORT_HEADERS.length} columns`);
+      throw new Error(`CSV の ${index + 1} 行目は ${PRODUCT_CORE_SEO_EXPORT_HEADERS.length} 列である必要があります`);
     }
 
     parsedRows.push({
@@ -153,7 +153,7 @@ export function indexRowsByProductId(parsedRows) {
   for (const entry of parsedRows) {
     const productId = entry.row.product_id;
     if (rowsByProductId.has(productId)) {
-      throw new Error(`Duplicate product_id detected: ${productId}`);
+      throw new Error(`product_id が重複しています: ${productId}`);
     }
 
     rowsByProductId.set(productId, entry);
@@ -236,35 +236,35 @@ export function buildPreviewRows({
 
     if (!productId) {
       classification = "error";
-      messages.push("product_id is required");
+      messages.push("product_id は必須です");
     } else if (!baselineEntry) {
       classification = "error";
-      messages.push("product_id was not present in the selected export baseline");
+      messages.push("product_id が選択したエクスポート baseline に存在しません");
     } else if (!currentRow) {
       classification = "error";
-      messages.push("Live Shopify product could not be found");
+      messages.push("Shopify 上の最新の商品が見つかりません");
     } else if (editedEntry.row.updated_at !== baselineEntry.row.updated_at) {
       classification = "error";
-      messages.push("updated_at is read-only and must match the baseline export");
+      messages.push("updated_at は読み取り専用で、baseline export と一致する必要があります");
     } else {
       const stale = !rowsEqual(currentRow, baselineEntry.row);
       const unchanged = changedFields.length === 0;
 
       if (handleAlreadyApplied && stale) {
         classification = "warning";
-        messages.push("Live Shopify product already matches the edited handle");
+        messages.push("Shopify 上の最新の商品は、すでに編集後の handle と一致しています");
       } else if (isHandleChangeRow && !isValidProductHandle(editedEntry.row.handle)) {
         classification = "error";
-        messages.push("handle must match Shopify's letters-numbers-hyphens contract");
+        messages.push("handle は Shopify の letters-numbers-hyphens 契約に従う必要があります");
       } else if (isHandleChangeRow && (!handleRedirect.previousHandle || !handleRedirect.nextHandle)) {
         classification = "error";
-        messages.push("handle changes require both baseline and edited handles");
+        messages.push("handle の変更には baseline と編集後の handle の両方が必要です");
       } else if (isHandleChangeRow && (currentRedirectsByPath.get(handleRedirect.redirectPath)?.length ?? 0) > 0) {
         classification = "error";
-        messages.push("A live redirect already exists for the previous product handle");
+        messages.push("変更前の商品 handle には、すでに最新の redirect が存在します");
       } else if (stale) {
         classification = "warning";
-        messages.push("Live Shopify product changed after the selected export baseline");
+        messages.push("選択したエクスポート baseline 以降に、Shopify 上の最新の商品が変更されました");
       } else if (unchanged) {
         classification = "unchanged";
       }
