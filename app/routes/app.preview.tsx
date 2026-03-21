@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useFetcher, useLoaderData, useSearchParams } from "react-router";
+import { Page, Layout, Card, BlockStack, InlineStack, Text, Button, Select, Badge, Banner, Divider, Box, FormLayout } from "@shopify/polaris";
 import type { LoaderFunctionArgs } from "react-router";
 
 import { loadProductPreviewPage } from "~/app/services/product-previews.server";
@@ -237,222 +238,274 @@ export default function PreviewRoute() {
 
   return (
     <div data-testid="preview-shell">
-      <s-page heading="プレビュー">
-        <s-section heading="対象プロファイル">
-          <div style={{ display: "grid", gap: "0.75rem", maxWidth: "24rem" }}>
-            <label>
-              <span>プロファイル</span>
-              <select
-                onChange={(event) => {
-                  const nextParams = new URLSearchParams(searchParams);
-                  nextParams.set("profile", event.currentTarget.value);
-                  nextParams.delete("previewJobId");
-                  nextParams.delete("jobId");
-                  nextParams.delete("writeJobId");
-                  nextParams.delete("undoJobId");
-                  setSearchParams(nextParams);
-                }}
-                value={selectedProfile}
-              >
-                {PRODUCT_PROFILE_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {getProductProfileLabel(option.value)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <exportFetcher.Form action="/app/product-exports" method="post">
-              <label>
-                <span>形式</span>
-                <select onChange={(event) => setSelectedExportFormat(event.currentTarget.value)} value={selectedExportFormat}>
-                  <option value="csv">csv</option>
-                  <option value="xlsx">xlsx</option>
-                </select>
-              </label>
-              <input name="format" type="hidden" value={selectedExportFormat} />
-              <input name="profile" type="hidden" value={selectedProfile} />
-              <button type="submit">
-                {exportFetcher.state === "submitting" ? "エクスポートを作成しています..." : "エクスポートを作成"}
-              </button>
-            </exportFetcher.Form>
-            {exportFetcher.data?.jobId ? (
-              <s-paragraph>
-                エクスポートジョブ: {exportFetcher.data.jobId} ({getFormatLabel(exportFetcher.data.format ?? selectedExportFormat)})
-              </s-paragraph>
-            ) : null}
-          </div>
-        </s-section>
-        <s-section heading="原本ファイルと編集ファイルのアップロード">
-          <s-paragraph>
-            原本ファイルは、選択したエクスポートと同じ形式のみアップロードできます。原本との一致確認を行うため、Matrixify 互換モードでも原本ファイルが必要です。
-          </s-paragraph>
-          <createFetcher.Form action="/app/product-previews" encType="multipart/form-data" method="post">
-            <div style={{ display: "grid", gap: "0.75rem", maxWidth: "42rem" }}>
-              <label>
-                <span>完了済みエクスポート</span>
-                <select
-                  name="exportJobId"
-                  onChange={(event) => setSelectedExportJobId(event.currentTarget.value)}
-                  value={selectedExportJobId}
-                >
-                  {loadedExports.map((job) => (
-                    <option key={job.id} value={job.id}>
-                      {job.id} ({job.createdAt}, {job.format})
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <input name="profile" type="hidden" value={selectedProfile} />
-              <label>
-                <span>編集レイアウト</span>
-                <select
-                  name="editedLayout"
-                  onChange={(event) => setEditedLayout(event.currentTarget.value)}
-                  value={editedLayout}
-                >
-                  <option value="canonical">{getEditedLayoutLabel("canonical")}</option>
-                  <option value="matrixify">{getEditedLayoutLabel("matrixify")}</option>
-                </select>
-              </label>
-              <label>
-                <span>原本 {getFormatLabel(selectedBaselineFormat)}</span>
-                <input name="sourceFile" required type="file" accept={sourceUploadAccept} />
-              </label>
-              <label>
-                <span>
-                  編集版 {editedLayout === "matrixify" ? "CSV/XLSX (Matrixify 互換サブセット)" : getFormatLabel(selectedBaselineFormat)}
-                </span>
-                <input name="editedFile" required type="file" accept={editedUploadAccept} />
-              </label>
-              <s-paragraph>
-                {editedLayout === "matrixify"
-                  ? "Matrixify 互換モードでは、編集ファイルに Matrixify 互換の CSV または XLSX を使えます。原本にはアプリから出力したファイルを指定してください。"
-                  : "標準レイアウトでは、原本と編集版の両方が選択したエクスポートと同じ形式である必要があります。"}
-              </s-paragraph>
-              <button type="submit">
-                {createFetcher.state === "submitting" ? "アップロードしています..." : "プレビューを作成"}
-              </button>
-            </div>
-          </createFetcher.Form>
-          {createFetcher.data?.jobId ? (
-            <s-paragraph>プレビュージョブ: {createFetcher.data.jobId}</s-paragraph>
-          ) : null}
-          {createFetcher.data?.error ? (
-            <s-paragraph>リクエストエラー: {createFetcher.data.error}</s-paragraph>
-          ) : null}
-        </s-section>
-        <s-section heading="プレビューの状態">
-          <s-paragraph>
-            状態: {getJobStateLabel(activePreview?.jobState ?? createFetcher.data?.state ?? "idle")}
-          </s-paragraph>
-          {activePreview?.lastError ? (
-            <s-paragraph>直近のエラー: {activePreview.lastError}</s-paragraph>
-          ) : null}
-          {activePreview?.summary ? (
-            <div data-testid="preview-summary">
-              <s-paragraph>合計: {activePreview.summary.total}</s-paragraph>
-              <s-paragraph>変更あり: {activePreview.summary.changed}</s-paragraph>
-              <s-paragraph>変更なし: {activePreview.summary.unchanged}</s-paragraph>
-              <s-paragraph>要確認: {activePreview.summary.warning}</s-paragraph>
-              <s-paragraph>エラー: {activePreview.summary.error}</s-paragraph>
-            </div>
-          ) : (
-            <s-paragraph>原本ファイルと編集ファイルを送信するとプレビューを生成できます。</s-paragraph>
-          )}
-        </s-section>
-        <s-section heading="書き込み">
-          <s-paragraph>契約状態: {getEntitlementStateLabel(data.entitlementState)}</s-paragraph>
-          <s-paragraph>ショップオーナー権限: {data.isAccountOwner ? "あり" : "なし"}</s-paragraph>
-          <writeFetcher.Form action="/app/product-writes" method="post">
-            <input name="previewJobId" type="hidden" value={activePreviewJobId ?? ""} />
-            <button disabled={!canConfirm} type="submit">
-              {writeFetcher.state === "submitting" ? "確定して書き込んでいます..." : "確定して書き込む"}
-            </button>
-          </writeFetcher.Form>
-          {!previewHasWritableRows && activePreview?.jobState === "completed" ? (
-            <s-paragraph>このプレビューには書き込み対象の行がありません。</s-paragraph>
-          ) : null}
-          {!data.isAccountOwner ? (
-            <s-paragraph>書き込み確定はショップオーナーのみ実行できます。</s-paragraph>
-          ) : null}
-          {data.entitlementState !== "ACTIVE_PAID" ? (
-            <s-paragraph>書き込みと取り消しには有効な契約が必要です。</s-paragraph>
-          ) : null}
-          {previewAlreadyHasVerifiedWrite ? (
-            <s-paragraph>
-              このプレビューには、すでに検証済みの成功書き込みがあります
-              {selectedPreviewVerifiedWrite?.writeJobId ? ` (${selectedPreviewVerifiedWrite.writeJobId})` : ""}.
-            </s-paragraph>
-          ) : null}
-          {writeFetcher.data?.error ? (
-            <s-paragraph>書き込みエラー: {writeFetcher.data.error}</s-paragraph>
-          ) : null}
-          <s-paragraph>状態: {getJobStateLabel(activeWrite?.jobState ?? writeFetcher.data?.state ?? "idle")}</s-paragraph>
-          {activeWrite?.outcome ? (
-            <s-paragraph>結果: {getOutcomeLabel(activeWrite.outcome)}</s-paragraph>
-          ) : null}
-          {activeWrite?.lastError ? (
-            <s-paragraph>直近のエラー: {activeWrite.lastError}</s-paragraph>
-          ) : null}
-        </s-section>
-        <s-section heading="取り消し">
-          {selectedProfile !== "product-core-seo-v1" ? (
-            <s-paragraph>取り消しは商品基本情報・SEOプロファイルでのみ利用できます。</s-paragraph>
-          ) : latestWrite?.retentionExpired ? (
-            <s-paragraph>最新のロールバック可能な書き戻しは保持期限切れです。</s-paragraph>
-          ) : latestWrite?.writeJobId ? (
-            <s-paragraph>
-              最新のロールバック可能な書き戻し: {latestWrite.writeJobId}
-              {latestWrite.outcome ? ` (${getOutcomeLabel(latestWrite.outcome)})` : ""}
-            </s-paragraph>
-          ) : (
-            <s-paragraph>まだロールバック可能な書き戻しはありません。</s-paragraph>
-          )}
-          {selectedProfile === "product-core-seo-v1" ? (
-            <>
-              <undoFetcher.Form action="/app/product-undos" method="post">
-                <input name="writeJobId" type="hidden" value={latestWrite?.writeJobId ?? ""} />
-                <button disabled={!canUndo} type="submit">
-                  {undoFetcher.state === "submitting" ? "取り消しています..." : "最新のロールバック可能な書き戻しを取り消す"}
-                </button>
-              </undoFetcher.Form>
-              {undoFetcher.data?.error ? (
-                <s-paragraph>取り消しエラー: {undoErrorMessage}</s-paragraph>
-              ) : null}
-              <s-paragraph>状態: {getJobStateLabel(activeUndo?.jobState ?? undoFetcher.data?.state ?? "idle")}</s-paragraph>
-              {activeUndo?.outcome ? (
-                <s-paragraph>結果: {getOutcomeLabel(activeUndo.outcome)}</s-paragraph>
-              ) : null}
-              {activeUndo?.lastError ? (
-                <s-paragraph>直近のエラー: {activeUndo.lastError}</s-paragraph>
-              ) : null}
-            </>
-          ) : null}
-        </s-section>
-        <s-section heading="行ごとの結果">
-          {activePreview?.rows?.length ? (
-            <div>
-              {activePreview.rows.slice(0, 20).map((row) => (
-                <div key={`${row.editedRowNumber}:${row.productId}`} style={{ marginBottom: "0.75rem" }}>
-                  <s-paragraph>
-                    編集 #{row.editedRowNumber} / 原本 #{row.sourceRowNumber ?? "-"} / {row.productId} / {getClassificationLabel(row.classification)}
-                  </s-paragraph>
-                  {row.changedFields.length > 0 ? (
-                    <s-paragraph>
-                      変更項目: {row.changedFields.map((field) => getFieldLabel(field)).join(", ")}
-                    </s-paragraph>
-                  ) : null}
-                  {row.messages.map((message) => (
-                    <s-paragraph key={message}>{message}</s-paragraph>
-                  ))}
+      <Page title="プレビュー">
+        <Layout>
+          <Layout.Section>
+            <Card>
+              <BlockStack gap="400">
+                <Text as="h2" variant="headingMd">対象プロファイル</Text>
+                <div style={{ maxWidth: "24rem" }}>
+                  <FormLayout>
+                    <Select
+                      label="プロファイル"
+                      options={PRODUCT_PROFILE_OPTIONS.map((option) => ({ label: getProductProfileLabel(option.value), value: option.value }))}
+                      onChange={(value: string) => {
+                        const nextParams = new URLSearchParams(searchParams);
+                        nextParams.set("profile", value);
+                        nextParams.delete("previewJobId");
+                        nextParams.delete("jobId");
+                        nextParams.delete("writeJobId");
+                        nextParams.delete("undoJobId");
+                        setSearchParams(nextParams);
+                      }}
+                      value={selectedProfile}
+                    />
+                    <exportFetcher.Form action="/app/product-exports" method="post">
+                      <FormLayout>
+                        <Select
+                          label="形式"
+                          options={[{label: "csv", value: "csv"}, {label: "xlsx", value: "xlsx"}]}
+                          onChange={setSelectedExportFormat}
+                          value={selectedExportFormat}
+                        />
+                        <input name="format" type="hidden" value={selectedExportFormat} />
+                        <input name="profile" type="hidden" value={selectedProfile} />
+                        <Button submit variant="primary" loading={exportFetcher.state === "submitting"}>
+                          エクスポートを作成
+                        </Button>
+                      </FormLayout>
+                    </exportFetcher.Form>
+                    {exportFetcher.data?.jobId ? (
+                      <Text as="p">
+                        エクスポートジョブ: {exportFetcher.data.jobId} ({getFormatLabel(exportFetcher.data.format ?? selectedExportFormat)})
+                      </Text>
+                    ) : null}
+                  </FormLayout>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <s-paragraph>まだプレビュー行はありません。</s-paragraph>
-          )}
-        </s-section>
-      </s-page>
+              </BlockStack>
+            </Card>
+          </Layout.Section>
+          <Layout.Section>
+            <Card>
+              <BlockStack gap="400">
+                <Text as="h2" variant="headingMd">原本ファイルと編集ファイルのアップロード</Text>
+                <Text as="p">
+                  原本ファイルは、選択したエクスポートと同じ形式のみアップロードできます。原本との一致確認を行うため、Matrixify 互換モードでも原本ファイルが必要です。
+                </Text>
+                <createFetcher.Form action="/app/product-previews" encType="multipart/form-data" method="post">
+                  <div style={{ maxWidth: "42rem" }}>
+                    <FormLayout>
+                      <Select
+                        label="完了済みエクスポート"
+                        name="exportJobId"
+                        options={loadedExports.map((job) => ({ label: `${job.id} (${job.createdAt}, ${job.format})`, value: job.id }))}
+                        onChange={setSelectedExportJobId}
+                        value={selectedExportJobId}
+                      />
+                      <input name="profile" type="hidden" value={selectedProfile} />
+                      <Select
+                        label="編集レイアウト"
+                        name="editedLayout"
+                        options={[
+                          { label: getEditedLayoutLabel("canonical"), value: "canonical" },
+                          { label: getEditedLayoutLabel("matrixify"), value: "matrixify" }
+                        ]}
+                        onChange={setEditedLayout}
+                        value={editedLayout}
+                      />
+                      <div>
+                        <Text as="p" fontWeight="medium">原本 {getFormatLabel(selectedBaselineFormat)}</Text>
+                        <Box paddingBlockStart="100">
+                          <input name="sourceFile" required type="file" accept={sourceUploadAccept} />
+                        </Box>
+                      </div>
+                      <div>
+                        <Text as="p" fontWeight="medium">編集版 {editedLayout === "matrixify" ? "CSV/XLSX (Matrixify 互換サブセット)" : getFormatLabel(selectedBaselineFormat)}</Text>
+                        <Box paddingBlockStart="100">
+                          <input name="editedFile" required type="file" accept={editedUploadAccept} />
+                        </Box>
+                      </div>
+                      <Text as="p" tone="subdued">
+                        {editedLayout === "matrixify"
+                          ? "Matrixify 互換モードでは、編集ファイルに Matrixify 互換の CSV または XLSX を使えます。原本にはアプリから出力したファイルを指定してください。"
+                          : "標準レイアウトでは、原本と編集版の両方が選択したエクスポートと同じ形式である必要があります。"}
+                      </Text>
+                      <Button submit variant="primary" loading={createFetcher.state === "submitting"}>
+                        プレビューを作成
+                      </Button>
+                    </FormLayout>
+                  </div>
+                </createFetcher.Form>
+                {createFetcher.data?.jobId ? (
+                  <Text as="p">プレビュージョブ: {createFetcher.data.jobId}</Text>
+                ) : null}
+                {createFetcher.data?.error ? (
+                  <Banner tone="critical"><p>リクエストエラー: {createFetcher.data.error}</p></Banner>
+                ) : null}
+              </BlockStack>
+            </Card>
+          </Layout.Section>
+          <Layout.Section>
+            <Card>
+              <BlockStack gap="400">
+                <Text as="h2" variant="headingMd">プレビューの状態</Text>
+                <BlockStack gap="300">
+                  <InlineStack gap="200" align="start">
+                    <Text as="p" fontWeight="medium">状態:</Text>
+                    <Badge tone={activePreview?.jobState === 'completed' ? 'success' : 'info'}>
+                      {getJobStateLabel(activePreview?.jobState ?? createFetcher.data?.state ?? "idle")}
+                    </Badge>
+                  </InlineStack>
+                  {activePreview?.lastError ? (
+                    <Banner tone="critical"><p>直近のエラー: {activePreview.lastError}</p></Banner>
+                  ) : null}
+                  {activePreview?.summary ? (
+                    <div data-testid="preview-summary">
+                      <BlockStack gap="200">
+                        <Text as="p">合計: {activePreview.summary.total}</Text>
+                        <Text as="p">変更あり: {activePreview.summary.changed}</Text>
+                        <Text as="p">変更なし: {activePreview.summary.unchanged}</Text>
+                        <Text as="p">要確認: {activePreview.summary.warning}</Text>
+                        <Text as="p">エラー: {activePreview.summary.error}</Text>
+                      </BlockStack>
+                    </div>
+                  ) : (
+                    <Text as="p" tone="subdued">原本ファイルと編集ファイルを送信するとプレビューを生成できます。</Text>
+                  )}
+                </BlockStack>
+              </BlockStack>
+            </Card>
+          </Layout.Section>
+          <Layout.Section>
+            <Card>
+              <BlockStack gap="400">
+                <Text as="h2" variant="headingMd">書き込み</Text>
+                <BlockStack gap="300">
+                  <InlineStack gap="400">
+                    <Text as="p">契約状態: {getEntitlementStateLabel(data.entitlementState)}</Text>
+                    <Text as="p">ショップオーナー権限: {data.isAccountOwner ? "あり" : "なし"}</Text>
+                  </InlineStack>
+                  <writeFetcher.Form action="/app/product-writes" method="post">
+                    <input name="previewJobId" type="hidden" value={activePreviewJobId ?? ""} />
+                    <Button submit disabled={!canConfirm} variant="primary" loading={writeFetcher.state === "submitting"}>
+                      確定して書き込む
+                    </Button>
+                  </writeFetcher.Form>
+                  {!previewHasWritableRows && activePreview?.jobState === "completed" ? (
+                    <Text as="p" tone="subdued">このプレビューには書き込み対象の行がありません。</Text>
+                  ) : null}
+                  {!data.isAccountOwner ? (
+                    <Text as="p" tone="subdued">書き込み確定はショップオーナーのみ実行できます。</Text>
+                  ) : null}
+                  {data.entitlementState !== "ACTIVE_PAID" ? (
+                    <Text as="p" tone="subdued">書き込みと取り消しには有効な契約が必要です。</Text>
+                  ) : null}
+                  {previewAlreadyHasVerifiedWrite ? (
+                    <Banner tone="warning">
+                      <p>
+                        このプレビューには、すでに検証済みの成功書き込みがあります
+                        {selectedPreviewVerifiedWrite?.writeJobId ? ` (${selectedPreviewVerifiedWrite.writeJobId})` : ""}.
+                      </p>
+                    </Banner>
+                  ) : null}
+                  {writeFetcher.data?.error ? (
+                    <Banner tone="critical"><p>書き込みエラー: {writeFetcher.data.error}</p></Banner>
+                  ) : null}
+                  <InlineStack gap="200" align="start">
+                    <Text as="p">状態:</Text>
+                    <Badge tone={activeWrite?.jobState === 'completed' ? 'success' : 'info'}>
+                      {getJobStateLabel(activeWrite?.jobState ?? writeFetcher.data?.state ?? "idle")}
+                    </Badge>
+                  </InlineStack>
+                  {activeWrite?.outcome ? (
+                    <Text as="p">結果: {getOutcomeLabel(activeWrite.outcome)}</Text>
+                  ) : null}
+                  {activeWrite?.lastError ? (
+                    <Banner tone="critical"><p>直近のエラー: {activeWrite.lastError}</p></Banner>
+                  ) : null}
+                </BlockStack>
+              </BlockStack>
+            </Card>
+          </Layout.Section>
+          <Layout.Section>
+            <Card>
+              <BlockStack gap="400">
+                <Text as="h2" variant="headingMd">取り消し</Text>
+                <BlockStack gap="300">
+                  {selectedProfile !== "product-core-seo-v1" ? (
+                    <Text as="p" tone="subdued">取り消しは商品基本情報・SEOプロファイルでのみ利用できます。</Text>
+                  ) : latestWrite?.retentionExpired ? (
+                    <Text as="p" tone="subdued">最新のロールバック可能な書き戻しは保持期限切れです。</Text>
+                  ) : latestWrite?.writeJobId ? (
+                    <Text as="p">
+                      最新のロールバック可能な書き戻し: {latestWrite.writeJobId}
+                      {latestWrite.outcome ? ` (${getOutcomeLabel(latestWrite.outcome)})` : ""}
+                    </Text>
+                  ) : (
+                    <Text as="p" tone="subdued">まだロールバック可能な書き戻しはありません。</Text>
+                  )}
+                  {selectedProfile === "product-core-seo-v1" ? (
+                    <BlockStack gap="300">
+                      <undoFetcher.Form action="/app/product-undos" method="post">
+                        <input name="writeJobId" type="hidden" value={latestWrite?.writeJobId ?? ""} />
+                        <Button submit disabled={!canUndo} variant="primary" tone="critical" loading={undoFetcher.state === "submitting"}>
+                          最新のロールバック可能な書き戻しを取り消す
+                        </Button>
+                      </undoFetcher.Form>
+                      {undoFetcher.data?.error ? (
+                        <Banner tone="critical"><p>取り消しエラー: {undoErrorMessage}</p></Banner>
+                      ) : null}
+                      <InlineStack gap="200" align="start">
+                        <Text as="p">状態:</Text>
+                        <Badge tone={activeUndo?.jobState === 'completed' ? 'success' : 'info'}>
+                          {getJobStateLabel(activeUndo?.jobState ?? undoFetcher.data?.state ?? "idle")}
+                        </Badge>
+                      </InlineStack>
+                      {activeUndo?.outcome ? (
+                        <Text as="p">結果: {getOutcomeLabel(activeUndo.outcome)}</Text>
+                      ) : null}
+                      {activeUndo?.lastError ? (
+                        <Banner tone="critical"><p>直近のエラー: {activeUndo.lastError}</p></Banner>
+                      ) : null}
+                    </BlockStack>
+                  ) : null}
+                </BlockStack>
+              </BlockStack>
+            </Card>
+          </Layout.Section>
+          <Layout.Section>
+            <Card>
+              <BlockStack gap="400">
+                <Text as="h2" variant="headingMd">行ごとの結果</Text>
+                {activePreview?.rows?.length ? (
+                  <BlockStack gap="400">
+                    {activePreview.rows.slice(0, 20).map((row, index) => (
+                      <Box key={`${row.editedRowNumber}:${row.productId}`}>
+                        {index > 0 && <Box paddingBlockEnd="400"><Divider /></Box>}
+                        <BlockStack gap="200">
+                          <Text as="p" fontWeight="bold">
+                            編集 #{row.editedRowNumber} / 原本 #{row.sourceRowNumber ?? "-"} / {row.productId} / <Badge>{getClassificationLabel(row.classification)}</Badge>
+                          </Text>
+                          {row.changedFields.length > 0 ? (
+                            <Text as="p" tone="subdued">
+                              変更項目: {row.changedFields.map((field) => getFieldLabel(field)).join(", ")}
+                            </Text>
+                          ) : null}
+                          {row.messages.map((message) => (
+                            <Text as="p" tone="critical" key={message}>{message}</Text>
+                          ))}
+                        </BlockStack>
+                      </Box>
+                    ))}
+                  </BlockStack>
+                ) : (
+                  <Text as="p" tone="subdued">まだプレビュー行はありません。</Text>
+                )}
+              </BlockStack>
+            </Card>
+          </Layout.Section>
+        </Layout>
+      </Page>
     </div>
   );
 }

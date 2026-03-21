@@ -7,6 +7,10 @@ declare namespace JSX {
       React.AnchorHTMLAttributes<HTMLElement>,
       HTMLElement
     >;
+    "ui-nav-menu": React.DetailedHTMLProps<
+      React.HTMLAttributes<HTMLElement>,
+      HTMLElement
+    >;
     "s-page": React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement> & {
       heading?: string;
     };

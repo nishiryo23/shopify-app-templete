@@ -1,4 +1,5 @@
 import { useLoaderData } from "react-router";
+import { Page, Layout, Card, BlockStack, Text, Button, InlineStack, Badge } from "@shopify/polaris";
 import type { LoaderFunctionArgs } from "react-router";
 
 import {
@@ -46,21 +47,36 @@ export default function WelcomeRoute() {
 
   return (
     <div data-testid="welcome-shell">
-      <s-page heading="利用開始">
-        <s-section heading={stateCopy.heading}>
-          <div data-testid={stateCopy.testId}>
-            <s-paragraph>{stateCopy.description}</s-paragraph>
-            <s-paragraph>
-              現在の状態: {entitlementLabel}
-              {entitlement.sourceStatus ? ` / Shopify 状態: ${entitlement.sourceStatus}` : ""}
-            </s-paragraph>
-            <s-paragraph>
-              この画面を開いただけでは契約は有効になりません。
-            </s-paragraph>
-            <a href={stateCopy.actionHref}>{stateCopy.actionLabel}</a>
-          </div>
-        </s-section>
-      </s-page>
+      <Page title="利用開始">
+        <Layout>
+          <Layout.Section>
+            <Card>
+              <BlockStack gap="400">
+                <Text as="h2" variant="headingMd">{stateCopy.heading}</Text>
+                <div data-testid={stateCopy.testId}>
+                  <BlockStack gap="300">
+                    <Text as="p">{stateCopy.description}</Text>
+                    <InlineStack gap="200" align="start">
+                      <Text as="p">現在の状態: {entitlementLabel}</Text>
+                      {entitlement.sourceStatus ? (
+                        <Badge tone="info">{`Shopify 状態: ${entitlement.sourceStatus}`}</Badge>
+                      ) : null}
+                    </InlineStack>
+                    <Text as="p" tone="subdued">
+                      この画面を開いただけでは契約は有効になりません。
+                    </Text>
+                    {stateCopy.actionHref && stateCopy.actionLabel ? (
+                      <InlineStack>
+                        <Button variant="primary" url={stateCopy.actionHref}>{stateCopy.actionLabel}</Button>
+                      </InlineStack>
+                    ) : null}
+                  </BlockStack>
+                </div>
+              </BlockStack>
+            </Card>
+          </Layout.Section>
+        </Layout>
+      </Page>
     </div>
   );
 }

@@ -1,7 +1,10 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { Outlet, useLoaderData, useRouteError } from "react-router";
+import { Link, Outlet, useLoaderData, useRouteError } from "react-router";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
+import { AppProvider as PolarisProvider } from "@shopify/polaris";
+import jaTranslations from "@shopify/polaris/locales/ja.json";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import "@shopify/polaris/build/esm/styles.css";
 
 import { loadEmbeddedAppShell } from "~/app/services/app-shell.server";
 
@@ -12,13 +15,15 @@ export default function AppShell() {
 
   return (
     <AppProvider embedded apiKey={apiKey}>
-      <s-app-nav>
-        <s-link href="/app">ホーム</s-link>
-        <s-link href="/app/preview">プレビュー</s-link>
-        <s-link href="/app/pricing">料金</s-link>
-        <s-link href="/app/welcome">利用開始</s-link>
-      </s-app-nav>
-      <Outlet />
+      <PolarisProvider i18n={jaTranslations}>
+        <ui-nav-menu>
+          <Link to="/app">ホーム</Link>
+          <Link to="/app/preview">プレビュー</Link>
+          <Link to="/app/pricing">料金</Link>
+          <Link to="/app/welcome">利用開始</Link>
+        </ui-nav-menu>
+        <Outlet />
+      </PolarisProvider>
     </AppProvider>
   );
 }
