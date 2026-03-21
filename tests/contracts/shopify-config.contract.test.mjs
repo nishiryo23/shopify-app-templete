@@ -14,6 +14,8 @@ test("standard verification gate includes typecheck and production build", () =>
 
   assert.match(packageJson.scripts.check, /pnpm run typecheck/);
   assert.match(packageJson.scripts.check, /pnpm run build/);
+  assert.equal(packageJson.scripts["dev:worker"], "node --env-file=.env scripts/dev-worker.mjs");
+  assert.equal(packageJson.scripts["dev:web"], "pnpm exec react-router dev");
 });
 
 test("shopify app config whitelists the React Router auth callback", () => {
@@ -40,7 +42,24 @@ test("shopify app config declares app-specific lifecycle webhooks", () => {
     /\[\[webhooks\.subscriptions\]\]\s+compliance_topics = \[\s*"customers\/data_request",\s*"customers\/redact",\s*"shop\/redact"\s*\]\s+uri = "\/webhooks\/compliance"/m,
   );
   assert.match(webConfig, /webhooks_path = "\/webhooks\/app"/);
+  assert.match(webConfig, /dev = "node scripts\/dev-with-worker\.mjs"/);
   assert.doesNotMatch(webConfig, /webhooks_path = "\/webhooks\/app\/uninstalled"/);
+});
+
+test("local development docs wire shopify app dev to the worker-backed job flow", () => {
+  const localDevDoc = readProjectFile("docs/shopify_local_development.md");
+  const readme = readProjectFile("README.md");
+  const workerScript = readProjectFile("scripts/dev-worker.mjs");
+  const devScript = readProjectFile("scripts/dev-with-worker.mjs");
+
+  assert.match(localDevDoc, /`web` と `worker` を同時に起動/);
+  assert.match(localDevDoc, /pnpm run dev:worker/);
+  assert.match(readme, /worker も必要/);
+  assert.match(workerScript, /QUEUE_POLL_INTERVAL_MS: "1000"/);
+  assert.match(workerScript, /pathToFileURL\(process\.argv\[1\] \?\? ""\)\.href/);
+  assert.match(workerScript, /Local worker requires SHOPIFY_APP_URL/);
+  assert.match(devScript, /pnpm", \["run", "dev:worker"\]/);
+  assert.match(devScript, /signal === "SIGINT" \|\| signal === "SIGTERM"/);
 });
 
 test("prisma session storage uses the shared PostgreSQL database", () => {

@@ -24,9 +24,10 @@
 
 ## 運用上の注意
 
-- **`pnpm dev`（`shopify app dev`）で起動する**。`react-router dev` だけでは CLI のトンネルと URL 同期が効かない。
+- **`pnpm dev`（`shopify app dev`）で起動する**。このリポジトリでは `shopify.web.toml` の `dev` が `scripts/dev-with-worker.mjs` を呼び、`web` と `worker` を同時に起動する。`react-router dev` だけでは CLI のトンネルと URL 同期が効かず、export / preview / write の job が `queued` のまま残る。
 - `shopify.app.toml` の **`[build] automatically_update_urls_on_dev = true`** のとき、CLI が Partner 側のアプリ URL / リダイレクト URL を開発用トンネルに合わせて更新する。固定したい場合は `--no-update`（[app dev](https://shopify.dev/docs/api/shopify-cli/app/app-dev)）を参照。
 - `.env` に **`SHOPIFY_APP_URL` を固定で書かない**（トンネルホストはセッションごとに変わる）。`DATABASE_URL` や `SHOPIFY_API_KEY` などは `.env` でよい。
+- worker 単体を再起動したい場合は **`pnpm run dev:worker`** を使う。このスクリプトはローカル用に `AWS_REGION=ap-northeast-1`、`QUEUE_POLL_INTERVAL_MS=1000`、`QUEUE_LEASE_MS=30000`、`S3_ARTIFACT_BUCKET=local-artifacts`、`S3_ARTIFACT_PREFIX=dev` を補い、`HOST` / `APP_URL` / `SHOPIFY_APP_URL` のいずれかからトンネル URL を解決する。
 
 ## まだブラウザが「Example Domain」（example.com）になる場合
 
@@ -34,7 +35,7 @@
 
 1. **このアプリの `appUrl` が example.com のまま**  
    上記の `HOST` / `APP_URL` を読めていない、または `.env` の `SHOPIFY_APP_URL=https://example.com` が残っている。  
-   → `pnpm dev`（`shopify app dev`）で起動し直す。`.env` に `SHOPIFY_APP_URL` を書いている場合は削除するかコメントアウトする。
+   → `pnpm dev`（`shopify app dev`）で起動し直す。`.env` に `SHOPIFY_APP_URL` を書いている場合は削除するかコメントアウトする。worker だけ起動したい場合は、`Using URL:` に出たトンネル URL を `SHOPIFY_APP_URL=... pnpm run dev:worker` で渡す。
 
 2. **Shopify Partners 上のアプリ設定の URL がまだ example.com**（OAuth 完了後にブラウザだけ example.com に飛ぶ）  
    これは **Shopify 側に登録された application URL / redirect URLs** がプレースホルダのままのとき起きる。Node の環境変数だけでは直せない。  

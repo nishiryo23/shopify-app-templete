@@ -25,3 +25,5 @@
 ## ローカル開発（トンネル URL）
 
 `shopify app dev` が渡すトンネル URL を `SHOPIFY_APP_URL` に自動正規化する。詳細は **`docs/shopify_local_development.md`** を参照。
+
+export / preview / write 系をローカルで動かすには worker も必要。`shopify app dev` は `shopify.web.toml` 経由で web と worker を同時起動する。worker だけ再起動したい場合は `pnpm run dev:worker` を使う。

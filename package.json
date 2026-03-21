@@ -44,6 +44,8 @@
     "build": "react-router build",
     "codex:shopify-review-loop": "node scripts/run-codex-shopify-review-loop.mjs",
     "dev": "shopify app dev",
+    "dev:web": "pnpm exec react-router dev",
+    "dev:worker": "node --env-file=.env scripts/dev-worker.mjs",
     "lint": "eslint . --ext .js,.cjs,.mjs,.ts,.tsx,.mts,.cts",
     "prisma:generate": "prisma generate",
     "prisma:migrate:deploy": "prisma migrate deploy",
