@@ -435,7 +435,6 @@ export function waitForShutdownOrTimeout({
       const timer = setTimeout(() => {
         resolve(undefined);
       }, milliseconds);
-      timer.unref?.();
 
       shutdownPromise.then(
         (value) => {
