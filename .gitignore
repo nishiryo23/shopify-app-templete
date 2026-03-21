@@ -14,3 +14,8 @@ playwright/.auth/
 
 .DS_Store
 *.log
+
+# Local env (secrets). Use `.env.example` as template.
+.env
+.env.local
+.env.*.local
