@@ -5,12 +5,13 @@
 ## 最初に読む順番
 
 1. `docs/template_scope.md`
-2. `docs/codex_harness_bootstrap.md`
-3. `.agent/PLANS.md`
-4. `tickets/README.md`
-5. 対象 ticket
-6. 関連 `adr/*.md`（`adr/archive/` は参照のみ）
-7. 必要なら `.agents/skills/*/SKILL.md`
+2. `docs/platform-truth-index.md`
+3. `docs/codex_harness_bootstrap.md`
+4. `.agent/PLANS.md`
+5. `tickets/README.md`
+6. 対象 ticket
+7. 関連 `adr/*.md`（`adr/archive/` は参照のみ）
+8. 必要なら `.agents/skills/*/SKILL.md`
 
 ## Codex への基本ルール
 

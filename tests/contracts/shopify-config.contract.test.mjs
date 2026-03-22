@@ -18,6 +18,13 @@ test("standard verification gate includes typecheck and production build", () =>
   assert.equal(packageJson.scripts["dev:web"], "pnpm exec react-router dev");
 });
 
+test("pre-release verification gate runs full check and smoke tests", () => {
+  const packageJson = JSON.parse(readProjectFile("package.json"));
+
+  assert.match(packageJson.scripts["verify:pre-release"], /pnpm run check/);
+  assert.match(packageJson.scripts["verify:pre-release"], /pnpm run test:smoke/);
+});
+
 test("shopify app config whitelists the React Router auth callback", () => {
   const config = readProjectFile("shopify.app.toml");
 

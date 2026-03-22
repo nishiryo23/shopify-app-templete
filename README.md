@@ -26,6 +26,13 @@ Codex / エージェント向けの **チケット制・ADR・契約テスト・
 2. `.env` を [.env.example](.env.example) からコピーし、`DATABASE_URL` と暗号化キーを設定。
 3. `pnpm install && pnpm run setup && pnpm check`
 
+## 検証ゲート
+
+- **日常（CI / ローカル）:** `pnpm check` — lint, contracts, ADR discipline, typecheck, build, smoke 一覧確認。
+- **提出前:** `pnpm run verify:pre-release` — 上記 + Playwright smoke 実走。URL / 認証情報が必要。
+
+提出時は [docs/release-gate-matrix.md](docs/release-gate-matrix.md) を確認し、[docs/reviewer-packet.md](docs/reviewer-packet.md) の evidence を更新すること。正本ファイルの一覧は [docs/platform-truth-index.md](docs/platform-truth-index.md) を参照。
+
 ## Runtime notes
 
 - `SHOP_TOKEN_ENCRYPTION_KEY`: offline token 暗号化用の base64（32 byte）。未設定時は開発環境で legacy fallback する場合がある。
