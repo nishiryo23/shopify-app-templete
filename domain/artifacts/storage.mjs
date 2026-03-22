@@ -2,7 +2,7 @@ import { createReadStream } from "node:fs";
 import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
-import { GetObjectCommand, PutObjectCommand, DeleteObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
 import { sha256Hex } from "../provenance/signing.mjs";
 
@@ -153,6 +153,20 @@ export function createMemoryArtifactStorage({ bucket = "memory-artifacts" } = {}
       return typeof key === "string" ? record?.body ?? null : record;
     },
 
+    async head(key) {
+      const normalizedObjectKey = resolveObjectKey(key);
+      const record = objects.get(normalizedObjectKey) ?? null;
+
+      if (!record) {
+        return null;
+      }
+
+      return {
+        ...record.descriptor,
+        sizeBytes: record.body.byteLength,
+      };
+    },
+
     async delete(key) {
       return objects.delete(resolveObjectKey(key));
     },
@@ -240,6 +254,33 @@ export function createFilesystemArtifactStorage({ baseDir, bucket = "local-artif
             sizeBytes: fileStats.size,
             visibility: "private",
           },
+        };
+      } catch (error) {
+        if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+          return null;
+        }
+
+        throw error;
+      }
+    },
+
+    async head(key) {
+      const normalizedObjectKey = resolveObjectKey(key);
+      const filePath = resolveFilesystemPath(resolvedRootDir, normalizedObjectKey);
+
+      try {
+        const fileStats = await stat(filePath);
+        const storedDescriptor = descriptors.get(normalizedObjectKey);
+
+        return {
+          bucket: storedDescriptor?.bucket ?? bucket,
+          checksumSha256: storedDescriptor?.checksumSha256 ?? null,
+          contentType: storedDescriptor?.contentType ?? "application/octet-stream",
+          key: normalizedObjectKey,
+          metadata: storedDescriptor?.metadata ?? null,
+          objectKey: normalizedObjectKey,
+          sizeBytes: fileStats.size,
+          visibility: "private",
         };
       } catch (error) {
         if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
@@ -380,6 +421,37 @@ export function createS3ArtifactStorage({
         };
       } catch (error) {
         if (error && typeof error === "object" && "name" in error && error.name === "NoSuchKey") {
+          return null;
+        }
+
+        throw error;
+      }
+    },
+
+    async head(key) {
+      const normalizedObjectKey = resolveObjectKey(key);
+
+      try {
+        const response = await client.send(new HeadObjectCommand({
+          Bucket: bucket,
+          Key: normalizedObjectKey,
+        }));
+
+        return {
+          bucket,
+          checksumSha256: null,
+          contentType: response.ContentType ?? "application/octet-stream",
+          key: normalizedObjectKey,
+          metadata: decodeMetadata(response.Metadata),
+          objectKey: normalizedObjectKey,
+          sizeBytes: Number(response.ContentLength ?? 0),
+          visibility: "private",
+        };
+      } catch (error) {
+        if (
+          error && typeof error === "object" && "name" in error
+          && (error.name === "NoSuchKey" || error.name === "NotFound")
+        ) {
           return null;
         }
 

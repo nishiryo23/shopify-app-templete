@@ -2,18 +2,17 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  buildFixPrompt,
-  buildReviewPrompt,
-  formatIterationSummary,
+  buildLoopPrompt,
+  formatLoopSummary,
+  LOOP_OUTPUT_SCHEMA,
   parseStructuredResponse,
-  shouldContinueLoop,
 } from "../../scripts/lib/codex-review-loop.mjs";
 
-test("buildFixPrompt includes prior findings and single-pass constraint", () => {
-  const prompt = buildFixPrompt({
-    iteration: 2,
+test("buildLoopPrompt requires autonomous iteration through clean or blocked", () => {
+  const prompt = buildLoopPrompt({
     maxIterations: 5,
-    priorReview: {
+    lastIteration: 2,
+    lastReview: {
       status: "findings",
       summary: "Two review findings remain.",
       findings: [
@@ -27,50 +26,53 @@ test("buildFixPrompt includes prior findings and single-pass constraint", () => 
     },
   });
 
-  assert.match(prompt, /Use \$shopify-review-fix for exactly one remediation pass/);
+  assert.match(prompt, /Use \$shopify-review-loop/);
+  assert.match(prompt, /Do not stop after one remediation pass/);
+  assert.match(prompt, /Only after remediation review is clean, run \$shopify-app-readiness-review/);
   assert.match(prompt, /Missing auth guard/);
-  assert.match(prompt, /Do not mix unrelated changes into this pass/);
+  assert.match(prompt, /hard safety limit of 5 total iterations/);
+  assert.doesNotMatch(prompt, /exactly one remediation pass/);
+  assert.doesNotMatch(prompt, /Stop after this single remediation pass/);
 });
 
-test("buildReviewPrompt targets current uncommitted diff in read-only mode", () => {
-  const prompt = buildReviewPrompt({ iteration: 1, maxIterations: 3 });
-
-  assert.match(prompt, /Review the current uncommitted changes/);
-  assert.match(prompt, /Do not modify any files/);
-  assert.match(prompt, /status "blocked"/);
+test("LOOP_OUTPUT_SCHEMA fixes final loop status vocabulary", () => {
+  assert.equal(LOOP_OUTPUT_SCHEMA.properties.phase.const, "loop");
+  assert.deepEqual(LOOP_OUTPUT_SCHEMA.properties.status.enum, ["complete", "blocked"]);
+  assert.deepEqual(LOOP_OUTPUT_SCHEMA.properties.blockedReason.anyOf[1].enum, [
+    "iteration_limit",
+    "fix_blocked",
+    "review_blocked",
+    "readiness_blocked",
+    "permission_blocked",
+    "evidence_missing",
+    "unrelated_diff",
+    "spec_conflict",
+  ]);
 });
 
 test("parseStructuredResponse returns parsed JSON", () => {
-  const parsed = parseStructuredResponse('{"phase":"review","status":"clean"}', "review");
-  assert.equal(parsed.phase, "review");
-  assert.equal(parsed.status, "clean");
+  const parsed = parseStructuredResponse('{"phase":"loop","status":"complete"}', "loop");
+  assert.equal(parsed.phase, "loop");
+  assert.equal(parsed.status, "complete");
 });
 
 test("parseStructuredResponse throws for invalid JSON", () => {
   assert.throws(
-    () => parseStructuredResponse("not-json", "review"),
-    /review response was not valid JSON/,
+    () => parseStructuredResponse("not-json", "loop"),
+    /loop response was not valid JSON/,
   );
 });
 
-test("shouldContinueLoop only continues on findings", () => {
-  assert.equal(shouldContinueLoop({ status: "findings" }), true);
-  assert.equal(shouldContinueLoop({ status: "clean" }), false);
-  assert.equal(shouldContinueLoop({ status: "blocked" }), false);
-});
-
-test("formatIterationSummary summarizes fix and review statuses", () => {
-  const summary = formatIterationSummary({
-    iteration: 3,
-    fixResult: { status: "completed", rootCause: "missing webhook validation" },
-    reviewResult: {
-      status: "findings",
-      findings: [{ severity: "medium", title: "x", file: "y", recommendation: "z" }],
-    },
+test("formatLoopSummary summarizes final loop state", () => {
+  const summary = formatLoopSummary({
+    status: "blocked",
+    blockedReason: "iteration_limit",
+    iterations: [
+      { iteration: 1 },
+      { iteration: 2 },
+      { iteration: 3 },
+    ],
   });
 
-  assert.equal(
-    summary,
-    "Iteration 3 | fix: completed (missing webhook validation) | review: findings (1 findings)",
-  );
+  assert.equal(summary, "Loop status: blocked, blockedReason: iteration_limit | iterations: 3");
 });

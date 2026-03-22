@@ -8,16 +8,16 @@ import { pathToFileURL } from "node:url";
 import { Codex } from "@openai/codex-sdk";
 
 import {
-  buildFixPrompt,
   buildReviewPrompt,
-  FIX_OUTPUT_SCHEMA,
-  formatIterationSummary,
+  buildLoopPrompt,
+  formatLoopSummary,
+  LOOP_OUTPUT_SCHEMA,
   parseStructuredResponse,
   REVIEW_OUTPUT_SCHEMA,
-  shouldContinueLoop,
 } from "./lib/codex-review-loop.mjs";
 
 const DEFAULT_STATE_FILE = ".codex-shopify-review-loop-state.json";
+const STATE_SCHEMA_VERSION = 2;
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
@@ -25,7 +25,7 @@ async function main() {
   const stateFilePath = path.resolve(workingDirectory, options.stateFile);
 
   const codex = new Codex();
-  const fixThread =
+  const loopThread =
     options.threadId == null
       ? codex.startThread({
           workingDirectory,
@@ -47,83 +47,55 @@ async function main() {
         });
 
   const persistedState = await loadLoopState(stateFilePath);
-  let priorReview = resolvePriorReview({
+  const priorState = resolveLoopState({
     persistedState,
     threadId: options.threadId,
   });
 
-  for (let iteration = 1; iteration <= options.maxIterations; iteration += 1) {
-    console.log(`\n[fix ${iteration}/${options.maxIterations}] starting`);
+  console.log(`\n[loop] starting autonomous run (max iterations: ${options.maxIterations})`);
 
-    const fixTurn = await fixThread.run(
-      buildFixPrompt({
-        iteration,
-        maxIterations: options.maxIterations,
-        priorReview,
-      }),
-      { outputSchema: FIX_OUTPUT_SCHEMA },
-    );
-    const fixResult = parseStructuredResponse(fixTurn.finalResponse, "fix");
+  const loopTurn = await loopThread.run(
+    buildLoopPrompt({
+      maxIterations: options.maxIterations,
+      lastIteration: priorState?.lastIteration ?? 0,
+      lastReview: priorState?.lastReview ?? null,
+    }),
+    { outputSchema: LOOP_OUTPUT_SCHEMA },
+  );
+  const loopResult = parseStructuredResponse(loopTurn.finalResponse, "loop");
+  const finalLoopResult =
+    loopResult.status === "complete"
+      ? await runExternalReviewGate({
+          codex,
+          loopResult,
+          maxIterations: options.maxIterations,
+          model: options.model,
+          reviewSandbox: options.reviewSandbox,
+          skipGitRepoCheck: options.skipGitRepoCheck,
+          workingDirectory,
+        })
+      : loopResult;
 
-    console.log(JSON.stringify(fixResult, null, 2));
+  console.log(JSON.stringify(finalLoopResult, null, 2));
+  console.log(`\n${formatLoopSummary(finalLoopResult)}`);
 
-    if (fixResult.status === "blocked") {
-      await saveLoopState(stateFilePath, {
-        fixThreadId: fixThread.id ?? options.threadId ?? null,
-        priorReview,
-      });
-      console.error("\nFix phase blocked.");
-      printFixThreadId(fixThread);
-      process.exitCode = 1;
-      return;
-    }
+  await saveLoopState(stateFilePath, {
+    schemaVersion: STATE_SCHEMA_VERSION,
+    loopThreadId: loopThread.id ?? options.threadId ?? null,
+    lastIteration: getLastIteration(finalLoopResult),
+    lastReview: getLastReview(finalLoopResult),
+    lastLoopResult: finalLoopResult,
+  });
 
-    console.log(`\n[review ${iteration}/${options.maxIterations}] starting`);
-
-    const reviewThread = codex.startThread({
-      workingDirectory,
-      sandboxMode: options.reviewSandbox,
-      approvalPolicy: "never",
-      networkAccessEnabled: false,
-      webSearchMode: "disabled",
-      model: options.model,
-      skipGitRepoCheck: options.skipGitRepoCheck,
-    });
-    const reviewTurn = await reviewThread.run(
-      buildReviewPrompt({
-        iteration,
-        maxIterations: options.maxIterations,
-      }),
-      { outputSchema: REVIEW_OUTPUT_SCHEMA },
-    );
-    const reviewResult = parseStructuredResponse(reviewTurn.finalResponse, "review");
-
-    console.log(JSON.stringify(reviewResult, null, 2));
-    console.log(`\n${formatIterationSummary({ iteration, fixResult, reviewResult })}`);
-    await saveLoopState(stateFilePath, {
-      fixThreadId: fixThread.id ?? options.threadId ?? null,
-      priorReview: reviewResult,
-    });
-
-    if (reviewResult.status === "blocked") {
-      console.error("\nReview phase blocked.");
-      printFixThreadId(fixThread);
-      process.exitCode = 1;
-      return;
-    }
-
-    if (!shouldContinueLoop(reviewResult)) {
-      console.log("\nReview returned clean. Stopping.");
-      printFixThreadId(fixThread);
-      return;
-    }
-
-    priorReview = reviewResult;
+  if (finalLoopResult.status === "blocked") {
+    console.error("\nLoop blocked.");
+    printLoopThreadId(loopThread);
+    process.exitCode = 1;
+    return;
   }
 
-  console.error(`\nReached max iterations (${options.maxIterations}) without a clean review.`);
-  printFixThreadId(fixThread);
-  process.exitCode = 1;
+  console.log("\nLoop completed clean.");
+  printLoopThreadId(loopThread);
 }
 
 function parseArgs(argv) {
@@ -210,19 +182,123 @@ async function loadLoopState(stateFilePath) {
 }
 
 function resolvePriorReview({ persistedState, threadId }) {
-  if (!threadId || !persistedState || persistedState.fixThreadId !== threadId) {
+  const loopState = resolveLoopState({ persistedState, threadId });
+  return loopState?.lastReview ?? null;
+}
+
+async function runExternalReviewGate({
+  codex,
+  loopResult,
+  maxIterations,
+  model,
+  reviewSandbox,
+  skipGitRepoCheck,
+  workingDirectory,
+}) {
+  const reviewThread = codex.startThread({
+    workingDirectory,
+    sandboxMode: reviewSandbox,
+    approvalPolicy: "never",
+    networkAccessEnabled: false,
+    webSearchMode: "disabled",
+    model,
+    skipGitRepoCheck,
+  });
+  const reviewTurn = await reviewThread.run(
+    buildReviewPrompt({
+      iteration: getLastIteration(loopResult),
+      maxIterations,
+    }),
+    { outputSchema: REVIEW_OUTPUT_SCHEMA },
+  );
+  const reviewResult = parseStructuredResponse(reviewTurn.finalResponse, "review");
+
+  if (reviewResult.status === "clean") {
+    return {
+      ...loopResult,
+      finalReview: reviewResult,
+    };
+  }
+
+  return {
+    ...loopResult,
+    status: "blocked",
+    summary: `External read-only review gate failed: ${reviewResult.summary}`,
+    finalReview: reviewResult,
+    blockedReason: "review_blocked",
+    nextAction: getExternalReviewNextAction(reviewResult),
+  };
+}
+
+function resolveLoopState({ persistedState, threadId }) {
+  if (!threadId || !persistedState) {
     return null;
   }
 
-  return persistedState.priorReview ?? null;
+  const migratedState = migrateLoopState(persistedState);
+  if (migratedState == null || migratedState.loopThreadId !== threadId) {
+    return null;
+  }
+
+  return migratedState;
+}
+
+function migrateLoopState(persistedState) {
+  if (persistedState == null || typeof persistedState !== "object") {
+    return null;
+  }
+
+  if (persistedState.schemaVersion === STATE_SCHEMA_VERSION) {
+    return persistedState;
+  }
+
+  if ("fixThreadId" in persistedState || "priorReview" in persistedState) {
+    return {
+      schemaVersion: STATE_SCHEMA_VERSION,
+      loopThreadId: persistedState.fixThreadId ?? null,
+      lastIteration: 0,
+      lastReview: persistedState.priorReview ?? null,
+      lastLoopResult: null,
+    };
+  }
+
+  return null;
 }
 
 async function saveLoopState(stateFilePath, state) {
   await fs.writeFile(stateFilePath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
 }
 
-function printFixThreadId(fixThread) {
-  console.log(`Fix thread id: ${fixThread.id ?? "unknown"}`);
+function printLoopThreadId(loopThread) {
+  console.log(`Loop thread id: ${loopThread.id ?? "unknown"}`);
+}
+
+function getLastIteration(loopResult) {
+  if (!Array.isArray(loopResult?.iterations) || loopResult.iterations.length === 0) {
+    return 0;
+  }
+
+  return loopResult.iterations[loopResult.iterations.length - 1].iteration;
+}
+
+function getLastReview(loopResult) {
+  if (loopResult?.finalReview == null) {
+    return null;
+  }
+
+  return {
+    phase: "review",
+    status: loopResult.finalReview.status,
+    findings: loopResult.finalReview.findings,
+  };
+}
+
+function getExternalReviewNextAction(reviewResult) {
+  if (reviewResult.status === "findings" && Array.isArray(reviewResult.findings) && reviewResult.findings.length > 0) {
+    return reviewResult.findings[0].recommendation;
+  }
+
+  return reviewResult.stopReason || reviewResult.summary;
 }
 
 function requireValue(argv, index, flag) {
@@ -262,13 +338,13 @@ function printHelp() {
 
 Options:
   --cwd <path>                Working directory to review and edit
-  --max-iterations <n>        Maximum fix/review cycles (default: 5)
+  --max-iterations <n>        Maximum autonomous loop iterations (default: 5)
   --model <name>              Codex model name
-  --thread-id <id>            Resume an existing fix thread
+  --thread-id <id>            Resume an existing loop thread
   --approval-policy <mode>    never | on-request | on-failure | untrusted
-  --fix-sandbox <mode>        read-only | workspace-write | danger-full-access
-  --review-sandbox <mode>     read-only | workspace-write | danger-full-access
-  --state-file <path>         Persist last review state for resume (default: ${DEFAULT_STATE_FILE})
+  --fix-sandbox <mode>        Sandbox for the autonomous loop thread
+  --review-sandbox <mode>     Deprecated, accepted for compatibility and ignored
+  --state-file <path>         Persist loop resume state (default: ${DEFAULT_STATE_FILE})
   --skip-git-repo-check       Allow non-git working directories
   --help                      Show this help
 `);
@@ -277,8 +353,11 @@ Options:
 export {
   DEFAULT_STATE_FILE,
   loadLoopState,
+  migrateLoopState,
   parseArgs,
   resolvePriorReview,
+  resolveLoopState,
+  runExternalReviewGate,
   saveLoopState,
 };
 

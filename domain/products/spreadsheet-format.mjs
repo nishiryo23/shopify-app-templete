@@ -1,6 +1,7 @@
 import path from "node:path";
 import { createReadStream } from "node:fs";
 
+import { getProductDownloadContentType } from "./download-contract.mjs";
 import { canonicalizeCsvSpreadsheet, parseCsvRows } from "../spreadsheets/csv.mjs";
 import { buildXlsxBufferFromRows, buildXlsxFileFromCsvStream, canonicalizeXlsxWorksheet } from "../spreadsheets/xlsx.mjs";
 import {
@@ -29,11 +30,6 @@ import { canonicalizeMatrixifyProductSpreadsheet } from "./matrixify-preview.mjs
 
 export const PRODUCT_SPREADSHEET_LAYOUT_CANONICAL = "canonical";
 export const PRODUCT_SPREADSHEET_LAYOUT_MATRIXIFY = "matrixify";
-
-const PRODUCT_EXPORT_FORMAT_CONTENT_TYPES = Object.freeze({
-  [PRODUCT_EXPORT_FORMAT]: "text/csv; charset=utf-8",
-  [PRODUCT_EXPORT_XLSX_FORMAT]: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-});
 
 const PRODUCT_EXPORT_FILE_NAMES = Object.freeze({
   edited: {
@@ -81,7 +77,7 @@ export function getProductExportHeaders(profile) {
 }
 
 export function getProductSpreadsheetContentType(format = PRODUCT_EXPORT_FORMAT) {
-  return PRODUCT_EXPORT_FORMAT_CONTENT_TYPES[format] ?? PRODUCT_EXPORT_FORMAT_CONTENT_TYPES[PRODUCT_EXPORT_FORMAT];
+  return getProductDownloadContentType(format);
 }
 
 export function getProductSpreadsheetFileName({ format = PRODUCT_EXPORT_FORMAT, kind }) {

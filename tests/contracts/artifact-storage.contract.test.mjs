@@ -22,8 +22,10 @@ test("memory artifact storage is private by default", async () => {
 
   assert.equal(stored.visibility, "private");
   assert.equal((await storage.get("jobs/job-1/result.txt")).toString("utf8"), "hello");
+  assert.equal((await storage.head("jobs/job-1/result.txt")).sizeBytes, 5);
   assert.equal(await storage.delete("jobs/job-1/result.txt"), true);
   assert.equal(await storage.get("jobs/job-1/result.txt"), null);
+  assert.equal(await storage.head("jobs/job-1/result.txt"), null);
 });
 
 test("filesystem artifact storage rejects public artifacts", async () => {
@@ -108,6 +110,7 @@ test("filesystem artifact storage preserves descriptor metadata on structured re
   assert.equal(stored.descriptor.contentType, "text/csv");
   assert.deepEqual(stored.descriptor.metadata, { source: "preview" });
   assert.equal(stored.descriptor.key, "jobs/job-1/result.csv");
+  assert.equal((await storage.head(descriptor)).sizeBytes, Buffer.byteLength("artifact"));
 
   await rm(baseDir, { force: true, recursive: true });
 });
@@ -134,6 +137,16 @@ test("S3 artifact storage preserves descriptor metadata on structured reads", as
           };
         }
 
+        if (command.constructor.name === "HeadObjectCommand") {
+          return {
+            ContentLength: 8,
+            ContentType: "text/csv",
+            Metadata: {
+              codex_metadata_json: JSON.stringify({ source: "export" }),
+            },
+          };
+        }
+
         return {};
       },
     },
@@ -150,6 +163,10 @@ test("S3 artifact storage preserves descriptor metadata on structured reads", as
   assert.equal(commands[0].input.Metadata.codex_metadata_json, JSON.stringify({ source: "export" }));
   assert.equal(stored.body.toString("utf8"), "artifact");
   assert.deepEqual(stored.descriptor.metadata, { source: "export" });
+  const headed = await storage.head(descriptor);
+  assert.equal(commands[2].constructor.name, "HeadObjectCommand");
+  assert.equal(headed.sizeBytes, 8);
+  assert.deepEqual(headed.metadata, { source: "export" });
 });
 
 test("artifact catalog upserts metadata without extending default retention on update", async () => {

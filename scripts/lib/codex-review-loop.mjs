@@ -1,40 +1,121 @@
-export const FIX_OUTPUT_SCHEMA = {
+const LOOP_OUTPUT_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  properties: {
-    phase: { type: "string", const: "fix" },
-    status: { type: "string", enum: ["completed", "blocked"] },
-    rootCause: { type: "string" },
-    diffScope: { type: "string" },
-    summary: { type: "string" },
-    touchedFiles: {
-      type: "array",
-      items: { type: "string" },
-    },
-    testsRun: {
-      type: "array",
-      items: { type: "string" },
-    },
-    shopifyDocs: {
-      type: "array",
-      items: { type: "string" },
-    },
-    stopReason: { type: "string" },
-  },
   required: [
     "phase",
     "status",
-    "rootCause",
-    "diffScope",
     "summary",
-    "touchedFiles",
-    "testsRun",
-    "shopifyDocs",
-    "stopReason",
+    "iterations",
+    "finalRemediation",
+    "finalReview",
+    "finalReadiness",
+    "blockedReason",
+    "nextAction",
   ],
+  properties: {
+    phase: { type: "string", const: "loop" },
+    status: { type: "string", enum: ["complete", "blocked"] },
+    summary: { type: "string" },
+    iterations: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "iteration",
+          "rootCause",
+          "fixStatus",
+          "reviewStatus",
+          "readinessStatus",
+          "summary",
+        ],
+        properties: {
+          iteration: { type: "integer", minimum: 1 },
+          rootCause: { type: "string" },
+          fixStatus: { type: "string", enum: ["completed", "blocked"] },
+          reviewStatus: { type: "string", enum: ["clean", "findings", "blocked"] },
+          readinessStatus: {
+            type: "string",
+            enum: ["clean", "gaps", "skipped", "blocked"],
+          },
+          summary: { type: "string" },
+        },
+      },
+    },
+    finalRemediation: {
+      type: "object",
+      additionalProperties: false,
+      required: [
+        "status",
+        "rootCause",
+        "repoEvidence",
+        "shopifyDocsEvidence",
+        "validationEvidence",
+        "residualRisk",
+      ],
+      properties: {
+        status: { type: "string", enum: ["pass", "blocked"] },
+        rootCause: { type: "string" },
+        repoEvidence: { type: "array", items: { type: "string" } },
+        shopifyDocsEvidence: { type: "array", items: { type: "string" } },
+        validationEvidence: { type: "array", items: { type: "string" } },
+        residualRisk: { type: "array", items: { type: "string" } },
+      },
+    },
+    finalReview: {
+      type: "object",
+      additionalProperties: false,
+      required: ["status", "findings"],
+      properties: {
+        status: { type: "string", enum: ["clean", "findings", "blocked"] },
+        findings: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["severity", "title", "file", "recommendation"],
+            properties: {
+              severity: { type: "string", enum: ["high", "medium", "low"] },
+              title: { type: "string" },
+              file: { type: "string" },
+              recommendation: { type: "string" },
+            },
+          },
+        },
+      },
+    },
+    finalReadiness: {
+      type: "object",
+      additionalProperties: false,
+      required: ["status", "gaps"],
+      properties: {
+        status: { type: "string", enum: ["clean", "gaps", "skipped", "blocked"] },
+        gaps: { type: "array", items: { type: "string" } },
+      },
+    },
+    blockedReason: {
+      anyOf: [
+        { type: "null" },
+        {
+          type: "string",
+          enum: [
+            "iteration_limit",
+            "fix_blocked",
+            "review_blocked",
+            "readiness_blocked",
+            "permission_blocked",
+            "evidence_missing",
+            "unrelated_diff",
+            "spec_conflict",
+          ],
+        },
+      ],
+    },
+    nextAction: { type: "string" },
+  },
 };
 
-export const REVIEW_OUTPUT_SCHEMA = {
+const REVIEW_OUTPUT_SCHEMA = {
   type: "object",
   additionalProperties: false,
   properties: {
@@ -46,13 +127,13 @@ export const REVIEW_OUTPUT_SCHEMA = {
       items: {
         type: "object",
         additionalProperties: false,
+        required: ["severity", "title", "file", "recommendation"],
         properties: {
           severity: { type: "string", enum: ["high", "medium", "low"] },
           title: { type: "string" },
           file: { type: "string" },
           recommendation: { type: "string" },
         },
-        required: ["severity", "title", "file", "recommendation"],
       },
     },
     stopReason: { type: "string" },
@@ -60,43 +141,23 @@ export const REVIEW_OUTPUT_SCHEMA = {
   required: ["phase", "status", "summary", "findings", "stopReason"],
 };
 
-export function parseStructuredResponse(finalResponse, label) {
+function parseStructuredResponse(rawResponse, phase) {
   try {
-    return JSON.parse(finalResponse);
+    return JSON.parse(rawResponse);
   } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    throw new Error(`${label} response was not valid JSON: ${reason}`);
+    throw new Error(
+      `${phase} response was not valid JSON: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
   }
 }
 
-export function buildFixPrompt({ iteration, maxIterations, priorReview }) {
-  const reviewContext = formatPriorReview(priorReview);
-
-  return [
-    "Use $shopify-review-fix for exactly one remediation pass.",
-    "",
-    `This is iteration ${iteration} of ${maxIterations} in an externally controlled loop.`,
-    "Constraints:",
-    "- Apply the next root-cause-level remediation needed for Shopify App Store review readiness.",
-    "- Keep the fix scope broad enough to address that root cause across related code, config, docs, tests, listing metadata, and submission artifacts when needed.",
-    "- Do not mix unrelated changes into this pass.",
-    "- Use Shopify.dev as the source of truth for Shopify-specific judgments.",
-    "- Run project-appropriate validation after making changes.",
-    "- Stop after this single remediation pass and return the structured summary only.",
-    "",
-    reviewContext,
-    "",
-    "If the previous external review had findings, address those findings first.",
-    "If the previous external review was clean or absent, inspect the current repository state and choose the highest-priority unresolved root cause.",
-    'Return JSON matching the provided schema with phase="fix".',
-  ].join("\n");
-}
-
-export function buildReviewPrompt({ iteration, maxIterations }) {
+function buildReviewPrompt({ iteration, maxIterations }) {
   return [
     "Review the current uncommitted changes in this git repository.",
     "",
-    `This is the external review gate after remediation iteration ${iteration} of ${maxIterations}.`,
+    `This is the external read-only review gate after autonomous loop iteration ${iteration} of ${maxIterations}.`,
     "Review only the current uncommitted diff.",
     "Do not modify any files.",
     "Focus on:",
@@ -114,48 +175,41 @@ export function buildReviewPrompt({ iteration, maxIterations }) {
   ].join("\n");
 }
 
-export function shouldContinueLoop(reviewResult) {
-  return reviewResult.status === "findings";
-}
-
-export function formatIterationSummary({ iteration, fixResult, reviewResult }) {
-  const findingsSummary =
-    reviewResult.findings.length === 0
-      ? "0 findings"
-      : `${reviewResult.findings.length} findings`;
-
+function buildLoopPrompt({ maxIterations, lastIteration = 0, lastReview = null }) {
   return [
-    `Iteration ${iteration}`,
-    `fix: ${fixResult.status} (${fixResult.rootCause})`,
-    `review: ${reviewResult.status} (${findingsSummary})`,
-  ].join(" | ");
-}
-
-function formatPriorReview(priorReview) {
-  if (!priorReview) {
-    return "Previous external review: none.";
-  }
-
-  if (priorReview.status === "clean") {
-    return `Previous external review: clean. Summary: ${priorReview.summary}`;
-  }
-
-  if (priorReview.status === "blocked") {
-    return [
-      "Previous external review was blocked.",
-      `Blocker: ${priorReview.stopReason || priorReview.summary}`,
-    ].join("\n");
-  }
-
-  const findings = priorReview.findings
-    .map((finding, index) => {
-      return `${index + 1}. [${finding.severity}] ${finding.title} | ${finding.file} | ${finding.recommendation}`;
-    })
-    .join("\n");
-
-  return [
-    "Previous external review findings:",
-    findings,
-    `Summary: ${priorReview.summary}`,
+    "Use $shopify-review-loop.",
+    "Run an autonomous remediation loop inside this single run.",
+    "Do not stop after one remediation pass, and do not return intermediate continue/stop judgments as the final result.",
+    `Keep iterating until Shopify app review is clean and readiness is clean, or until you are truly blocked, with a hard safety limit of ${maxIterations} total iterations.`,
+    "Each iteration must stay on exactly one root cause.",
+    "Within the loop, use this sequence:",
+    "1. $shopify-review-fix to remediate one root cause and collect evidence.",
+    "2. $shopify-app-review to review the current diff in read-only mode.",
+    "3. Only after remediation review is clean, run $shopify-app-readiness-review.",
+    "If remediation review returns findings, continue to the next iteration in the same run.",
+    "If you hit a real blocker, return status blocked with a specific blockedReason.",
+    "Use the shared evidence vocabulary from the Shopify review skills.",
+    "Apply Shopify official docs as the source of truth for Shopify-specific validity checks.",
+    "Enforce pnpm check or a documented alternative gate before returning complete.",
+    'Return exactly one final JSON object with phase "loop" that matches the provided schema.',
+    `The previous completed iteration count for this thread is ${lastIteration}.`,
+    lastReview == null
+      ? "There is no prior persisted review context."
+      : `Prior persisted review context: ${JSON.stringify(lastReview)}`,
   ].join("\n");
 }
+
+function formatLoopSummary(loopResult) {
+  const blockedReason =
+    loopResult.blockedReason == null ? "none" : `, blockedReason: ${loopResult.blockedReason}`;
+  return `Loop status: ${loopResult.status}${blockedReason} | iterations: ${loopResult.iterations.length}`;
+}
+
+export {
+  buildReviewPrompt,
+  buildLoopPrompt,
+  formatLoopSummary,
+  LOOP_OUTPUT_SCHEMA,
+  parseStructuredResponse,
+  REVIEW_OUTPUT_SCHEMA,
+};

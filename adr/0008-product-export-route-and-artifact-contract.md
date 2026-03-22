@@ -12,6 +12,7 @@
 ## Decision
 - embedded app からの export request は `POST /app/product-exports` で受ける。
 - route は `authenticate.admin(request)` で shop を確定し、business logic は service 層に寄せる。
+- merchant-facing download 導線は、auth 済み action が短寿命 download URL を発行し、その URL を new-tab の document request で開く方式を正本とする。preview UI は session token 付き `POST /app/product-exports` で `intent=download-source-link` を送り、server 側で ownership / artifact readability を確認したうえで `downloadToken` 付き URL を返す。manual shop input や cookie-only fallback は追加しない。
 - export profile は launch scope の product-domain profiles を受け、列順は各 profile の canonical header を正本にする。
 - export format は `csv | xlsx` を受ける。active export dedupe は DB の active unique index を正本にし、service 層は duplicate enqueue 後に既存 active job を lookup して返す。terminal へ遷移済みの latest job は accepted response に使わず、active job が見えないまま再 enqueue も取れなければ enqueue failure として扱う。対象は `shopDomain + kind=product.export + dedupeKey=product-export:{profile}:{format}`。
 - manifest は新しい DB table ではなく private artifact として保存する。`Artifact.metadata` には lookup に必要な要約だけを入れ、row fingerprint 群の正本は manifest artifact payload に置く。
@@ -30,6 +31,9 @@
 - repeated POST に対しては既存 active job を返せるが、正本は DB active unique index なので route/service contract test と migration truth の両方が重要になる。
 - offline session 不在で無意味な再試行を避けられる。
 - local development でも export UI と queue worker の分断に気づきやすくなり、download link が出ない原因を job 状態から素直に追える。
+- export source download の URL 発行失敗は action JSON の `error` として preview 画面に表示できる。
+- actual source artifact download の失敗は new-tab response として merchant に露出し、hidden iframe の silent failure を避けられる。
+- source artifact download は tab 内で workbook/csv 全量を `blob()` せず、document response をそのまま stream できる。
 - 長時間 export や rolling deploy 中でも stale lease による重複実行と state 未確定を起こしにくくなり、大きい catalog でも worker memory を export サイズに比例して膨らませにくい。
 - variants / inventory / media などは `product-core-seo-v1` を壊さず、後続 ticket で profile/version を追加する前提になる。
 

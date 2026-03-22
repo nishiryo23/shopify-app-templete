@@ -1202,6 +1202,7 @@ test("preview route and page delegate to the shared services", () => {
   const routeFile = readProjectFile("app/routes/app.product-previews.ts");
   const pageFile = readProjectFile("app/routes/app.preview.tsx");
   const copyFile = readProjectFile("app/utils/admin-copy.ts");
+  const downloadFile = readProjectFile("app/utils/product-export-download.mjs");
   const workerBootstrap = readProjectFile("workers/bootstrap.mjs");
 
   assert.match(routeFile, /createProductPreview/);
@@ -1213,6 +1214,18 @@ test("preview route and page delegate to the shared services", () => {
   assert.match(pageFile, /編集レイアウト/);
   assert.match(pageFile, /Matrixify 互換モード/);
   assert.match(pageFile, /リクエストエラー:/);
+  assert.match(pageFile, /intent", "download-source-link"/);
+  assert.match(pageFile, /startProductExportDocumentDownload/);
+  assert.match(pageFile, /useAppBridge/);
+  assert.match(pageFile, /shopify\.idToken\(\)/);
+  assert.match(pageFile, /method: "POST"/);
+  assert.match(pageFile, /downloadUrl/);
+  assert.match(pageFile, /Authorization: `Bearer \$\{idToken\}`/);
+  assert.doesNotMatch(pageFile, /response\.blob\(\)/);
+  assert.match(pageFile, /原本ダウンロードエラー:/);
+  assert.match(downloadFile, /application\/json/);
+  assert.match(downloadFile, /X-Shopify-Retry-Invalid-Session-Request/);
+  assert.match(downloadFile, /_blank/);
   assert.match(workerBootstrap, /PRODUCT_PREVIEW_KIND/);
 });
 

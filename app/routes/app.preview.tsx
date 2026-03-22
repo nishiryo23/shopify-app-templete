@@ -1,9 +1,14 @@
 import { useEffect, useState } from "react";
 import { useFetcher, useLoaderData, useSearchParams } from "react-router";
-import { Page, Layout, Card, BlockStack, InlineStack, Text, Button, Select, Badge, Banner, Divider, Box, FormLayout, Link } from "@shopify/polaris";
+import { useAppBridge } from "@shopify/app-bridge-react";
+import { Page, Layout, Card, BlockStack, InlineStack, Text, Button, Select, Badge, Banner, Divider, Box, FormLayout } from "@shopify/polaris";
 import type { LoaderFunctionArgs } from "react-router";
 
 import { loadProductPreviewPage } from "~/app/services/product-previews.server";
+import {
+  extractProductExportDownloadError,
+  startProductExportDocumentDownload,
+} from "~/app/utils/product-export-download.mjs";
 import {
   getClassificationLabel,
   getEditedLayoutLabel,
@@ -71,6 +76,7 @@ type PreviewLoaderData = {
 };
 
 export default function PreviewRoute() {
+  const shopify = useAppBridge();
   const data = useLoaderData<typeof loader>() as PreviewLoaderData;
   const exportFetcher = useFetcher<{
     error?: string;
@@ -115,6 +121,8 @@ export default function PreviewRoute() {
   const [selectedExportJobId, setSelectedExportJobId] = useState(loadedExports[0]?.id ?? "");
   const [selectedExportFormat, setSelectedExportFormat] = useState("csv");
   const [editedLayout, setEditedLayout] = useState("canonical");
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [isDownloadingSource, setIsDownloadingSource] = useState(false);
   const latestWrite = selectedLoaderData?.latestWrite ?? null;
   const activePreview = selectedLoaderData?.preview ?? null;
   const activeWrite = selectedLoaderData?.write ?? null;
@@ -157,6 +165,10 @@ export default function PreviewRoute() {
 
     setSelectedExportJobId(loadedExports[0]?.id ?? "");
   }, [loadedExports, selectedExportJobId]);
+
+  useEffect(() => {
+    setDownloadError(null);
+  }, [selectedExportJobId]);
 
   useEffect(() => {
     if (!createFetcher.data?.jobId) {
@@ -244,6 +256,54 @@ export default function PreviewRoute() {
     selectedProfile,
   ]);
 
+  async function handleSourceDownload() {
+    if (!selectedExport) {
+      return;
+    }
+
+    const pendingDownload = startProductExportDocumentDownload({});
+    setIsDownloadingSource(true);
+    setDownloadError(null);
+
+    try {
+      const idToken = await shopify.idToken();
+      const formData = new FormData();
+      formData.set("intent", "download-source-link");
+      formData.set("jobId", selectedExport.id);
+      const response = await fetch(
+        "/app/product-exports",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${idToken}`,
+          },
+          body: formData,
+        },
+      );
+
+      if (!response.ok) {
+        pendingDownload.close();
+        setDownloadError(await extractProductExportDownloadError(response));
+        return;
+      }
+
+      const payload = await response.json() as { downloadUrl?: string };
+
+      if (!payload.downloadUrl) {
+        pendingDownload.close();
+        setDownloadError("原本ファイルのダウンロードに失敗しました。");
+        return;
+      }
+
+      pendingDownload.navigate(payload.downloadUrl);
+    } catch {
+      pendingDownload.close();
+      setDownloadError("原本ファイルのダウンロードに失敗しました。");
+    } finally {
+      setIsDownloadingSource(false);
+    }
+  }
+
   return (
     <div data-testid="preview-shell">
       <Page title="プレビュー">
@@ -312,11 +372,14 @@ export default function PreviewRoute() {
                       />
                       {selectedExportJobId && (
                         <InlineStack gap="200" align="start">
-                          <Link url={`/app/product-exports?jobId=${selectedExportJobId}`} target="_blank">
+                          <Button onClick={handleSourceDownload} loading={isDownloadingSource}>
                             原本ファイルをダウンロード
-                          </Link>
+                          </Button>
                         </InlineStack>
                       )}
+                      {downloadError ? (
+                        <Banner tone="critical"><p>原本ダウンロードエラー: {downloadError}</p></Banner>
+                      ) : null}
                       <input name="profile" type="hidden" value={selectedProfile} />
                       <Select
                         label="編集レイアウト"

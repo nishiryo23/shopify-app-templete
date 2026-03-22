@@ -1035,15 +1035,30 @@ test("product export route delegates to shared service boundary", () => {
   assert.doesNotMatch(routeFile, /~\/domain\//);
   assert.match(serviceFile, /enqueueOrFindActiveProductExportJob/);
   assert.match(serviceFile, /loadProductExportDownload/);
+  assert.match(serviceFile, /download-source-link/);
+  assert.match(serviceFile, /issueProductExportDownloadToken/);
+  assert.match(serviceFile, /verifyProductExportDownloadToken/);
   assert.match(domainFile, /return findActiveProductExportJob\(\{/);
 });
 
 test("product export download verifies shop ownership and returns attachment disposition", () => {
   const serviceFile = readProjectFile("app/services/product-exports.server.ts");
+  const actionIntentIndex = serviceFile.indexOf('intent === "download-source-link"');
+  const tokenIndex = serviceFile.indexOf("const downloadToken = issueProductExportDownloadToken({");
+  const verifyTokenIndex = serviceFile.indexOf("const payload = verifyProductExportDownloadToken(downloadToken);");
+  const getCallIndex = serviceFile.indexOf("const record = await artifactStorage.get(result.sourceArtifact.objectKey);");
 
   assert.match(serviceFile, /authenticateAndBootstrapShop/);
   assert.match(serviceFile, /shopDomain.*authContext\.session\.shop/);
+  assert.match(serviceFile, /artifactStorage\.head\(result\.sourceArtifact\.objectKey\)/);
+  assert.match(serviceFile, /downloadToken = url\.searchParams\.get\("downloadToken"\)/);
+  assert.equal(actionIntentIndex > -1, true);
+  assert.equal(tokenIndex > -1, true);
+  assert.equal(verifyTokenIndex > -1, true);
+  assert.equal(getCallIndex > -1, true);
+  assert.equal(verifyTokenIndex < getCallIndex, true);
   assert.match(serviceFile, /Content-Disposition.*attachment/);
+  assert.match(serviceFile, /Content-Length/);
   assert.match(serviceFile, /state:\s*["']completed["']/);
   assert.match(serviceFile, /PRODUCT_EXPORT_SOURCE_ARTIFACT_KIND/);
 });
@@ -1061,6 +1076,10 @@ test("product export plan and ADR capture profile artifact and offline-session t
   assert.match(adr, /duplicate enqueue 後に既存 active job を lookup/);
   assert.match(adr, /maxAttempts: 1/);
   assert.match(adr, /cursor page ごとに lease を確認/);
+  assert.match(adr, /短寿命 download URL/);
+  assert.match(adr, /auth 済み action/);
+  assert.match(adr, /downloadToken/);
+  assert.match(adr, /new-tab/);
 });
 
 test("product export row mapping normalizes tags into a single CSV cell", () => {
