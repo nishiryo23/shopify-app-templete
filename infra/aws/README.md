@@ -52,7 +52,6 @@
 - `DATABASE_URL`
 - `SHOPIFY_API_SECRET`
 - `SHOP_TOKEN_ENCRYPTION_KEY`
-- `PROVENANCE_SIGNING_KEY`
 - `TELEMETRY_PSEUDONYM_KEY` (`web` / `worker` のみ)
 
 secret は ECS task definition の `secrets.valueFrom` で注入する。GitHub Actions は secret 値を扱わず、ARN または名前だけを input として渡す。
@@ -66,12 +65,12 @@ secret は ECS task definition の `secrets.valueFrom` で注入する。GitHub 
 ## Storage and crypto
 - artifact truth は `private S3 + SSE-KMS`
 - public bucket と public URL は前提にしない
-- `SHOP_TOKEN_ENCRYPTION_KEY` と `PROVENANCE_SIGNING_KEY` は別 secret にする
+- ドメインで manifest 署名などを追加する場合は `PROVENANCE_SIGNING_KEY` を別 secret として足す（テンプレ既定の ECS 定義には含めない）
 - `TELEMETRY_PSEUDONYM_KEY` は `web` / `worker` のみ必須とし、`migrate` task には注入しない
 
 ## Observability contract
 - CloudWatch Logs retention は 7 日
-- EMF namespace は `ShopifyMatri/Operations`
+- EMF namespace は `ShopifyAppTemplate/Operations`（fork 時にアプリ名へ差し替え）
 - alarm / scheduler cadence / retention policy は `infra/aws/observability-contract.json` に固定する
 - webhook raw payload / HMAC は ingress から最大 7 日で redact し、未処理 residue には metadata だけを残す
 - retention sweep は `Asia/Tokyo` 03:00 に日次実行、stuck-job sweep は 5 分ごとに実行する

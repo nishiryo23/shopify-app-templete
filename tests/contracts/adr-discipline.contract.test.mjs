@@ -8,6 +8,7 @@ import {
   pathRequiresAdr,
   validateAdrChangeRequirement,
   validateAdrChangeRequirementBySet,
+  validateChangedPlanFiles,
   validatePlanContent,
 } from "../../scripts/check-adr-discipline.mjs";
 
@@ -135,6 +136,13 @@ test("plan ADR metadata parser reads required flag and ADR number", () => {
   assert.deepEqual(
     parseAdrMetadata(`## ADR impact\n- ADR required: no\n- ADR: none\n- Why: no design truth changes\n`),
     { adr: "none", adrRequired: "no", why: "no design truth changes" },
+  );
+});
+
+test("validateChangedPlanFiles skips deleted or missing plan files", async () => {
+  assert.deepEqual(
+    await validateChangedPlanFiles(["plans/__nonexistent_plan_for_adr_discipline_skip__.md"]),
+    [],
   );
 });
 

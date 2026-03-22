@@ -1,7 +1,7 @@
-import { runProductPreview } from "~/app/services/products.server";
+import { loadHealthCheck } from "~/app/services/health.server";
 
-void runProductPreview;
+void loadHealthCheck;
 
-export async function loader(runProductPreview) {
-  return runProductPreview();
+export async function loader(loadHealthCheck) {
+  return loadHealthCheck();
 }

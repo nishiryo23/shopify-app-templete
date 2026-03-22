@@ -1,3 +1,3 @@
-import * as productsService from "~/app/services/products.server";
+import * as productsService from "~/app/services/health.server";
 
-export const loader = productsService.runProductPreview;
+export const loader = productsService.loadHealthCheck;

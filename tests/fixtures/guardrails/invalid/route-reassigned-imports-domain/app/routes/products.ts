@@ -1,5 +1,5 @@
 let target;
-target = "~/domain/products/write.server";
+target = "~/domain/billing/entitlement-state.mjs";
 
 export async function action() {
   return import(target);

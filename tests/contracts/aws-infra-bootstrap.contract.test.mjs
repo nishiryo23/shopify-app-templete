@@ -13,9 +13,7 @@ import {
 import {
   createPrismaJobQueue,
 } from "../../domain/jobs/prisma-job-queue.mjs";
-import {
-  PRODUCT_EXPORT_KIND,
-} from "../../domain/products/export-profile.mjs";
+import { WEBHOOK_SHOP_REDACT_KIND } from "../../domain/webhooks/compliance-jobs.mjs";
 import {
   buildWorkerId,
   cleanupCompletedRedactJob,
@@ -42,14 +40,12 @@ function readProjectFile(relativePath) {
 const fixtureReplacements = Object.freeze({
   AWS_REGION: "ap-northeast-1",
   DATABASE_URL_SECRET_ARN: "arn:aws:secretsmanager:ap-northeast-1:123:secret:database",
-  IMAGE_URI: "123.dkr.ecr.ap-northeast-1.amazonaws.com/shopify-matri:test",
-  LOG_GROUP: "/ecs/shopify-matri",
+  IMAGE_URI: "123.dkr.ecr.ap-northeast-1.amazonaws.com/shopify-app-template:test",
+  LOG_GROUP: "/ecs/shopify-app-template",
   LOG_LEVEL: "info",
-  PROVENANCE_SIGNING_KEY_SECRET_ARN:
-    "arn:aws:secretsmanager:ap-northeast-1:123:secret:provenance",
   QUEUE_LEASE_MS: "300000",
   QUEUE_POLL_INTERVAL_MS: "30000",
-  S3_ARTIFACT_BUCKET: "matri-artifacts",
+  S3_ARTIFACT_BUCKET: "template-artifacts",
   S3_ARTIFACT_PREFIX: "artifacts",
   SCOPES: "read_products,write_products",
   SHOPIFY_API_KEY: "test-api-key",
@@ -61,7 +57,7 @@ const fixtureReplacements = Object.freeze({
     "arn:aws:secretsmanager:ap-northeast-1:123:secret:shop-token",
   TASK_EXECUTION_ROLE_ARN: "arn:aws:iam::123:role/ecsTaskExecution",
   TASK_ROLE_ARN: "arn:aws:iam::123:role/ecsTask",
-  TASK_FAMILY: "shopify-matri-web",
+  TASK_FAMILY: "shopify-app-template-web",
 });
 
 test("aws bootstrap docs record required resources and existing service assumptions", () => {
@@ -129,10 +125,6 @@ test("web template requires port mappings and secret valueFrom entries", () => {
   assert.match(template, /"name": "DATABASE_URL", "valueFrom": "__DATABASE_URL_SECRET_ARN__"/);
   assert.match(
     template,
-    /"name": "PROVENANCE_SIGNING_KEY",\s+"valueFrom": "__PROVENANCE_SIGNING_KEY_SECRET_ARN__"/,
-  );
-  assert.match(
-    template,
     /"name": "TELEMETRY_PSEUDONYM_KEY",\s+"valueFrom": "__TELEMETRY_PSEUDONYM_KEY_SECRET_ARN__"/,
   );
 });
@@ -168,19 +160,18 @@ test("render script fills placeholders and writes valid JSON", async () => {
   assert.equal(rendered.containerDefinitions[0].portMappings[0].containerPort, 3000);
   assert.equal(
     rendered.containerDefinitions[0].secrets.map((entry) => entry.name).join(","),
-    "DATABASE_URL,SHOPIFY_API_SECRET,SHOP_TOKEN_ENCRYPTION_KEY,PROVENANCE_SIGNING_KEY,TELEMETRY_PSEUDONYM_KEY",
+    "DATABASE_URL,SHOPIFY_API_SECRET,SHOP_TOKEN_ENCRYPTION_KEY,TELEMETRY_PSEUDONYM_KEY",
   );
 });
 
 test("observability contract fixes alarm metrics and scheduler cadence", () => {
   const contract = JSON.parse(readProjectFile("infra/aws/observability-contract.json"));
 
-  assert.equal(contract.namespace, "ShopifyMatri/Operations");
+  assert.equal(contract.namespace, "ShopifyAppTemplate/Operations");
   assert.equal(contract.logRetentionDays, 7);
   assert.equal(contract.webhookPayloadRetentionDays, 7);
   assert.equal(contract.jobAttemptRetentionDays, 30);
-  assert.equal(contract.artifactRetentionDays["product.preview.edited-upload"], 7);
-  assert.equal(contract.artifactRetentionDays["product.write.result"], 90);
+  assert.deepEqual(contract.artifactRetentionDays, {});
   assert.deepEqual(contract.scheduler.retentionSweep, {
     deadLetterRetryCooldownMinutes: 30,
     dedupeKey: "system:retention-sweep:{JST calendar date}",
@@ -727,11 +718,10 @@ test("worker prioritizes due system sweep jobs ahead of ordinary backlog", async
     artifactStorage: {},
     env: {
       AWS_REGION: "ap-northeast-1",
-      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/matri",
-      PROVENANCE_SIGNING_KEY: Buffer.alloc(32, 1).toString("base64"),
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/template",
       QUEUE_LEASE_MS: "300000",
       QUEUE_POLL_INTERVAL_MS: "30000",
-      S3_ARTIFACT_BUCKET: "matri-artifacts",
+      S3_ARTIFACT_BUCKET: "template-artifacts",
       S3_ARTIFACT_PREFIX: "artifacts",
       SCOPES: "read_products,write_products",
       SHOPIFY_API_KEY: "test-api-key",
@@ -838,12 +828,11 @@ test("bootstrap worker emits the retention failure counter when the sweep job fa
     artifactStorage: {},
     env: {
       AWS_REGION: "ap-northeast-1",
-      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/matri",
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/template",
       NODE_ENV: "production",
-      PROVENANCE_SIGNING_KEY: Buffer.alloc(32, 1).toString("base64"),
       QUEUE_LEASE_MS: "300000",
       QUEUE_POLL_INTERVAL_MS: "30000",
-      S3_ARTIFACT_BUCKET: "matri-artifacts",
+      S3_ARTIFACT_BUCKET: "template-artifacts",
       S3_ARTIFACT_PREFIX: "artifacts",
       SCOPES: "read_products,write_products",
       SHOPIFY_API_KEY: "test-api-key",
@@ -935,7 +924,7 @@ test("worker validation fails fast in production when required secrets are missi
         NODE_ENV: "production",
         QUEUE_LEASE_MS: "300000",
         QUEUE_POLL_INTERVAL_MS: "30000",
-        S3_ARTIFACT_BUCKET: "matri-artifacts",
+        S3_ARTIFACT_BUCKET: "template-artifacts",
         S3_ARTIFACT_PREFIX: "artifacts",
         SCOPES: "read_products,write_products",
         SHOPIFY_API_KEY: "test-api-key",
@@ -945,37 +934,15 @@ test("worker validation fails fast in production when required secrets are missi
   );
 });
 
-test("worker validation fails fast outside production when provenance signing key is missing", () => {
-  assert.throws(
-    () =>
-      validateWorkerEnvironment({
-        AWS_REGION: "ap-northeast-1",
-        DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/matri",
-        QUEUE_LEASE_MS: "300000",
-        QUEUE_POLL_INTERVAL_MS: "30000",
-        S3_ARTIFACT_BUCKET: "matri-artifacts",
-        S3_ARTIFACT_PREFIX: "artifacts",
-        SCOPES: "read_products,write_products",
-        SHOPIFY_API_KEY: "test-api-key",
-        SHOPIFY_API_SECRET: "secret",
-        SHOPIFY_APP_URL: "https://example.com",
-        SHOP_TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 2).toString("base64"),
-        TELEMETRY_PSEUDONYM_KEY: Buffer.alloc(32, 3).toString("base64"),
-      }),
-    /Missing required worker secrets: PROVENANCE_SIGNING_KEY/,
-  );
-});
-
 test("worker validation fails fast outside production when Shopify API secret is missing", () => {
   assert.throws(
     () =>
       validateWorkerEnvironment({
         AWS_REGION: "ap-northeast-1",
-        DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/matri",
-        PROVENANCE_SIGNING_KEY: Buffer.alloc(32, 1).toString("base64"),
+        DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/template",
         QUEUE_LEASE_MS: "300000",
         QUEUE_POLL_INTERVAL_MS: "30000",
-        S3_ARTIFACT_BUCKET: "matri-artifacts",
+        S3_ARTIFACT_BUCKET: "template-artifacts",
         S3_ARTIFACT_PREFIX: "artifacts",
         SCOPES: "read_products,write_products",
         SHOPIFY_API_KEY: "test-api-key",
@@ -992,11 +959,10 @@ test("worker validation fails fast outside production when offline session encry
     () =>
       validateWorkerEnvironment({
         AWS_REGION: "ap-northeast-1",
-        DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/matri",
-        PROVENANCE_SIGNING_KEY: Buffer.alloc(32, 1).toString("base64"),
+        DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/template",
         QUEUE_LEASE_MS: "300000",
         QUEUE_POLL_INTERVAL_MS: "30000",
-        S3_ARTIFACT_BUCKET: "matri-artifacts",
+        S3_ARTIFACT_BUCKET: "template-artifacts",
         S3_ARTIFACT_PREFIX: "artifacts",
         SCOPES: "read_products,write_products",
         SHOPIFY_API_KEY: "test-api-key",
@@ -1013,12 +979,11 @@ test("worker validation fails fast when telemetry pseudonym key is missing", () 
     () =>
       validateWorkerEnvironment({
         AWS_REGION: "ap-northeast-1",
-        DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/matri",
+        DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/template",
         NODE_ENV: "production",
-        PROVENANCE_SIGNING_KEY: Buffer.alloc(32, 1).toString("base64"),
         QUEUE_LEASE_MS: "300000",
         QUEUE_POLL_INTERVAL_MS: "30000",
-        S3_ARTIFACT_BUCKET: "matri-artifacts",
+        S3_ARTIFACT_BUCKET: "template-artifacts",
         S3_ARTIFACT_PREFIX: "artifacts",
         SCOPES: "read_products,write_products",
         SHOPIFY_API_KEY: "test-api-key",
@@ -1033,11 +998,10 @@ test("worker validation fails fast when telemetry pseudonym key is missing", () 
 test("worker validation allows telemetry pseudonym key to be omitted outside production", () => {
   const config = validateWorkerEnvironment({
     AWS_REGION: "ap-northeast-1",
-    DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/matri",
-    PROVENANCE_SIGNING_KEY: Buffer.alloc(32, 1).toString("base64"),
+    DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/template",
     QUEUE_LEASE_MS: "300000",
     QUEUE_POLL_INTERVAL_MS: "30000",
-    S3_ARTIFACT_BUCKET: "matri-artifacts",
+    S3_ARTIFACT_BUCKET: "template-artifacts",
     S3_ARTIFACT_PREFIX: "artifacts",
     SCOPES: "read_products,write_products",
     SHOPIFY_API_KEY: "test-api-key",
@@ -1049,38 +1013,15 @@ test("worker validation allows telemetry pseudonym key to be omitted outside pro
   assert.equal(config.awsRegion, "ap-northeast-1");
 });
 
-test("worker validation fails fast when provenance signing key is not 32-byte base64", () => {
-  assert.throws(
-    () =>
-      validateWorkerEnvironment({
-        AWS_REGION: "ap-northeast-1",
-        DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/matri",
-        PROVENANCE_SIGNING_KEY: "invalid",
-        QUEUE_LEASE_MS: "300000",
-        QUEUE_POLL_INTERVAL_MS: "30000",
-        S3_ARTIFACT_BUCKET: "matri-artifacts",
-        S3_ARTIFACT_PREFIX: "artifacts",
-        SCOPES: "read_products,write_products",
-        SHOPIFY_API_KEY: "test-api-key",
-        SHOPIFY_API_SECRET: "secret",
-        SHOPIFY_APP_URL: "https://example.com",
-        SHOP_TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString("base64"),
-        TELEMETRY_PSEUDONYM_KEY: Buffer.alloc(32, 8).toString("base64"),
-      }),
-    /PROVENANCE_SIGNING_KEY must decode to 32 bytes/,
-  );
-});
-
 test("worker validation fails fast when shop token encryption key is not 32-byte base64", () => {
   assert.throws(
     () =>
       validateWorkerEnvironment({
         AWS_REGION: "ap-northeast-1",
-        DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/matri",
-        PROVENANCE_SIGNING_KEY: Buffer.alloc(32, 9).toString("base64"),
+        DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/template",
         QUEUE_LEASE_MS: "300000",
         QUEUE_POLL_INTERVAL_MS: "30000",
-        S3_ARTIFACT_BUCKET: "matri-artifacts",
+        S3_ARTIFACT_BUCKET: "template-artifacts",
         S3_ARTIFACT_PREFIX: "artifacts",
         SCOPES: "read_products,write_products",
         SHOPIFY_API_KEY: "test-api-key",
@@ -1096,13 +1037,12 @@ test("worker validation fails fast when shop token encryption key is not 32-byte
 test("worker validation accepts a fully configured production environment", () => {
   const config = validateWorkerEnvironment({
     AWS_REGION: "ap-northeast-1",
-    DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/matri",
+    DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/template",
     LOG_LEVEL: "info",
     NODE_ENV: "production",
-    PROVENANCE_SIGNING_KEY: Buffer.alloc(32, 1).toString("base64"),
     QUEUE_LEASE_MS: "300000",
     QUEUE_POLL_INTERVAL_MS: "30000",
-    S3_ARTIFACT_BUCKET: "matri-artifacts",
+    S3_ARTIFACT_BUCKET: "template-artifacts",
     S3_ARTIFACT_PREFIX: "artifacts",
     SCOPES: "read_products,write_products",
     SHOPIFY_API_KEY: "test-api-key",
@@ -1123,11 +1063,10 @@ test("worker validation rejects a one-millisecond lease that cannot heartbeat be
     () =>
       validateWorkerEnvironment({
         AWS_REGION: "ap-northeast-1",
-        DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/matri",
-        PROVENANCE_SIGNING_KEY: Buffer.alloc(32, 1).toString("base64"),
+        DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/template",
         QUEUE_LEASE_MS: "1",
         QUEUE_POLL_INTERVAL_MS: "30000",
-        S3_ARTIFACT_BUCKET: "matri-artifacts",
+        S3_ARTIFACT_BUCKET: "template-artifacts",
         S3_ARTIFACT_PREFIX: "artifacts",
         SCOPES: "read_products,write_products",
         SHOPIFY_API_KEY: "test-api-key",
@@ -1409,11 +1348,10 @@ test("worker drains the active job before disconnecting prisma on shutdown", asy
     artifactStorage: {},
     env: {
       AWS_REGION: "ap-northeast-1",
-      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/matri",
-      PROVENANCE_SIGNING_KEY: Buffer.alloc(32, 1).toString("base64"),
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/template",
       QUEUE_LEASE_MS: "300000",
       QUEUE_POLL_INTERVAL_MS: "30000",
-      S3_ARTIFACT_BUCKET: "matri-artifacts",
+      S3_ARTIFACT_BUCKET: "template-artifacts",
       S3_ARTIFACT_PREFIX: "artifacts",
       SCOPES: "read_products,write_products",
       SHOPIFY_API_KEY: "test-api-key",
@@ -1491,11 +1429,10 @@ test("worker releases a newly leased job instead of starting it after shutdown i
     artifactStorage: {},
     env: {
       AWS_REGION: "ap-northeast-1",
-      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/matri",
-      PROVENANCE_SIGNING_KEY: Buffer.alloc(32, 1).toString("base64"),
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/template",
       QUEUE_LEASE_MS: "300000",
       QUEUE_POLL_INTERVAL_MS: "30000",
-      S3_ARTIFACT_BUCKET: "matri-artifacts",
+      S3_ARTIFACT_BUCKET: "template-artifacts",
       S3_ARTIFACT_PREFIX: "artifacts",
       SCOPES: "read_products,write_products",
       SHOPIFY_API_KEY: "test-api-key",
@@ -1568,11 +1505,10 @@ test("worker passes configured queueLeaseMs to system stuck-job sweep handlers",
     artifactStorage: {},
     env: {
       AWS_REGION: "ap-northeast-1",
-      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/matri",
-      PROVENANCE_SIGNING_KEY: Buffer.alloc(32, 1).toString("base64"),
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/template",
       QUEUE_LEASE_MS: "420000",
       QUEUE_POLL_INTERVAL_MS: "30000",
-      S3_ARTIFACT_BUCKET: "matri-artifacts",
+      S3_ARTIFACT_BUCKET: "template-artifacts",
       S3_ARTIFACT_PREFIX: "artifacts",
       SCOPES: "read_products,write_products",
       SHOPIFY_API_KEY: "test-api-key",
@@ -1640,11 +1576,10 @@ test("worker keeps draining ordinary jobs when scheduled system job enqueue fail
     artifactStorage: {},
     env: {
       AWS_REGION: "ap-northeast-1",
-      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/matri",
-      PROVENANCE_SIGNING_KEY: Buffer.alloc(32, 1).toString("base64"),
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/template",
       QUEUE_LEASE_MS: "300000",
       QUEUE_POLL_INTERVAL_MS: "30000",
-      S3_ARTIFACT_BUCKET: "matri-artifacts",
+      S3_ARTIFACT_BUCKET: "template-artifacts",
       S3_ARTIFACT_PREFIX: "artifacts",
       SCOPES: "read_products,write_products",
       SHOPIFY_API_KEY: "test-api-key",
@@ -1680,7 +1615,7 @@ test("worker keeps draining ordinary jobs when scheduled system job enqueue fail
         leased = true;
         return {
           id: "job-export-1",
-          kind: PRODUCT_EXPORT_KIND,
+          kind: WEBHOOK_SHOP_REDACT_KIND,
           payload: {},
           shopDomain: "test-shop.myshopify.com",
         };
@@ -1732,11 +1667,10 @@ test("worker does not downgrade a successful export into fail() when complete() 
       artifactStorage: {},
       env: {
         AWS_REGION: "ap-northeast-1",
-        DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/matri",
-        PROVENANCE_SIGNING_KEY: Buffer.alloc(32, 1).toString("base64"),
+        DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/template",
         QUEUE_LEASE_MS: "300000",
         QUEUE_POLL_INTERVAL_MS: "30000",
-        S3_ARTIFACT_BUCKET: "matri-artifacts",
+        S3_ARTIFACT_BUCKET: "template-artifacts",
         S3_ARTIFACT_PREFIX: "artifacts",
         SCOPES: "read_products,write_products",
         SHOPIFY_API_KEY: "test-api-key",
@@ -1813,7 +1747,7 @@ test("development artifact storage uses a temp directory instead of the reposito
   const factory = readProjectFile("domain/artifacts/factory.mjs");
 
   assert.match(factory, /import os from "node:os"/);
-  assert.match(factory, /path\.join\(os\.tmpdir\(\), "shopify-matri-artifacts"\)/);
+  assert.match(factory, /path\.join\(os\.tmpdir\(\), "shopify-app-template-artifacts"\)/);
   assert.doesNotMatch(factory, /process\.cwd\(\), "\.artifacts"/);
 });
 

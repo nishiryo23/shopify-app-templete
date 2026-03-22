@@ -1,5 +1,5 @@
-import { runProductPreview } from "~/app/services/products.server";
+import { loadHealthCheck } from "~/app/services/health.server";
 
-const loadProducts = async () => runProductPreview();
+const loadProducts = async () => loadHealthCheck();
 
 export { loadProducts as loader };

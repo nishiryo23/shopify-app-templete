@@ -1,5 +1,5 @@
 const targets = {
-  domain: "~/domain/products/write.server",
+  domain: "~/domain/billing/entitlement-state.mjs",
 };
 
 export async function action() {

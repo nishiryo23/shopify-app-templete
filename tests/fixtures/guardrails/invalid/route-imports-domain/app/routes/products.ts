@@ -1,5 +1,5 @@
-import { writeProducts } from "~/domain/products/write.server";
+import { mapSubscriptionStatusToEntitlement } from "~/domain/billing/entitlement-state.mjs";
 
 export async function action() {
-  return writeProducts();
+  return mapSubscriptionStatusToEntitlement("ACTIVE");
 }

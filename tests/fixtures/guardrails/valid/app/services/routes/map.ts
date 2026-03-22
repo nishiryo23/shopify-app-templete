@@ -1,5 +1,5 @@
-import { writeProducts } from "~/domain/products/write.server";
+import { mapSubscriptionStatusToEntitlement } from "~/domain/billing/entitlement-state.mjs";
 
 export function buildRouteMap() {
-  return writeProducts;
+  return mapSubscriptionStatusToEntitlement;
 }

@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 
-export const TELEMETRY_NAMESPACE = "ShopifyMatri/Operations";
+export const TELEMETRY_NAMESPACE = "ShopifyAppTemplate/Operations";
 export const TELEMETRY_PSEUDONYM_KEY_ENV = "TELEMETRY_PSEUDONYM_KEY";
 
 export const TELEMETRY_METRICS = Object.freeze({

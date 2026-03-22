@@ -1,7 +1,7 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "cd244641ebe064e6289ab0911615f683"
-name = "商品インポート/エクスポート"
+client_id = "00000000000000000000000000000000"
+name = "Shopify App Template"
 application_url = "https://example.com"
 embedded = true
 

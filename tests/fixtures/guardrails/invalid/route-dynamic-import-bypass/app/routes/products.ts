@@ -1,4 +1,4 @@
-const delegatedTarget = "~/app/services/products.server";
+const delegatedTarget = "~/app/services/health.server";
 const warmupImport = import(delegatedTarget);
 
 export const loader = async () => import("./helper");

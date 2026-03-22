@@ -3,19 +3,20 @@
 ## Goal
 worker の非本番 runtime contract を起動時 validation と実行時挙動で一致させ、許可された fallback は維持し、成功不能な設定は起動前に fail-fast する。
 
-## Root cause
+## Root cause（履歴）
+
 - worker storage は `SHOP_TOKEN_ENCRYPTION_KEY` 未設定時の fallback 契約を `findSessionsByShop` にしか反映しておらず、offline `storeSession` では暗号鍵必須のままになっている
-- worker env validation は `PROVENANCE_SIGNING_KEY` 未設定の非本番起動を許しており、実行不能な `product.export` job を lease できてしまう
 
 ## Scope
+
 - `workers/offline-admin.mjs`
 - `workers/bootstrap.mjs`
-- `tests/contracts/product-export.contract.test.mjs`
 - `tests/contracts/aws-infra-bootstrap.contract.test.mjs`
 
 ## Constraints
+
 - `SHOP_TOKEN_ENCRYPTION_KEY` 未設定時の後方互換 fallback は app 側 storage と揃える
-- `PROVENANCE_SIGNING_KEY` は全環境で fail-fast にする
+- テンプレでは `PROVENANCE_SIGNING_KEY` は worker 必須にしない（ドメイン追加時に ECS / validation を拡張する）
 - root cause を直接叩く test を追加する
 
 ## Steps

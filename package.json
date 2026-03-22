@@ -1,5 +1,5 @@
 {
-  "name": "shopify-matri-harness",
+  "name": "shopify-app-harness-template",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@9.12.2",
@@ -17,7 +17,6 @@
     "@shopify/polaris": "^13.0.0",
     "@shopify/shopify-app-react-router": "^1.1.0",
     "@shopify/shopify-app-session-storage-prisma": "^8.0.0",
-    "exceljs": "^4.4.0",
     "isbot": "^5.1.31",
     "prisma": "^6.16.3",
     "react": "^18.3.1",
@@ -52,7 +51,7 @@
     "setup": "pnpm run prisma:generate && pnpm run prisma:migrate:deploy",
     "shopify": "shopify",
     "start": "react-router-serve ./build/server/index.js",
-    "test:contracts": "node --test --test-concurrency=4 tests/contracts/*.test.mjs",
+    "test:contracts": "pnpm run prisma:generate && node --test --test-concurrency=4 tests/contracts/*.test.mjs",
     "test:smoke": "node scripts/validate-smoke-env.mjs && playwright test",
     "test:smoke:list": "playwright test --list",
     "typecheck": "react-router typegen && tsc --noEmit",

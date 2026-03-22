@@ -12,7 +12,7 @@ encrypted offline session rollout 中でも offline token を legacy `Session` r
 - `app/services/shop-session-storage.server.ts`
 - `adr/0002-embedded-auth-and-token-exchange.md`
 - `tests/contracts/shopify-config.contract.test.mjs`
-- `tests/contracts/product-export.contract.test.mjs`
+- `tests/contracts/shop-bootstrap.contract.test.mjs`
 
 ## Constraints
 - managed install + token exchange は維持する

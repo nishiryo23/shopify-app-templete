@@ -1,5 +1,5 @@
 const targets = {
-  service: "~/app/services/products.server",
+  service: "~/app/services/health.server",
 };
 
 export async function loader() {

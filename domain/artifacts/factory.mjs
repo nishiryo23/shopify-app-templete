@@ -18,7 +18,7 @@ export function createArtifactStorageFromEnv({
   }
 
   return createFilesystemArtifactStorage({
-    baseDir: path.join(os.tmpdir(), "shopify-matri-artifacts"),
+    baseDir: path.join(os.tmpdir(), "shopify-app-template-artifacts"),
     bucket: env.S3_ARTIFACT_BUCKET || "local-artifacts",
   });
 }

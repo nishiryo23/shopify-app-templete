@@ -1,87 +1,9 @@
-# Shopify Review Promotions
+# Shopify review promotions（ハーネス用メモ）
 
-- Date: 2026-03-11
-- App / Repo: `shopify_matri`
-- `/review` evidence: architecture guardrail / smoke helper / webhook ingress contract に対する一連の修正後、最新 `/review` で別 root cause は残るが、以下 4 root cause は再指摘されなかった
-- `/review` result: `finding removed`
-- Finding removed:
-  - smoke helper の trailing slash false failure
-  - webhook ingress の missing topic / shop domain accepted
-  - guardrail の string / comparison false positive
-  - guardrail の exported binding / member-qualified request call false negative
-- Promoted invariant:
-  - smoke helper は reviewer URL と direct app URL の表記ゆれを吸収する
-  - webhook ingress は識別不能な delivery を成功扱いにしない
-  - guardrail の制御フロー判定は adapter 記法を business logic と混同しない
-  - guardrail は handler export と request call の別記法を等価に扱う
-- Updated pattern:
-  - `shopify-review-guard/references/pattern-catalog.md` の 4 パターン追加
-- Related tests:
-  - [smoke-helper.contract.test.mjs](/Users/nishimuraryousuke/project/shopify_matri/tests/contracts/smoke-helper.contract.test.mjs)
-  - [webhook-ingress.contract.test.mjs](/Users/nishimuraryousuke/project/shopify_matri/tests/contracts/webhook-ingress.contract.test.mjs)
-  - [check-architecture-guardrails.mjs](/Users/nishimuraryousuke/project/shopify_matri/scripts/check-architecture-guardrails.mjs)
-  - [tests/fixtures/guardrails](/Users/nishimuraryousuke/project/shopify_matri/tests/fixtures/guardrails)
-- Notes:
-  - 最新 `/review` で unresolved の root cause は昇格していない
-  - unresolved: dynamic import promise chain bypass / `new URL(...)` 経由の direct Admin API access
+このファイルは **AWS infra bootstrap に対する review** やデプロイ運用で繰り返し確認する不変条件を短く残す。アプリ固有の審査対応ではなく、テンプレート／CI のガードレール向け。
 
-- Date: 2026-03-12
-- App / Repo: `shopify_matri`
-- `/review` evidence: architecture guardrail の declaration file / webhook index route / typed handler assignment / axios alias chain / whitespace variance に対する一連の修正後、最新 `shopify_reviewer` が `No Shopify-specific findings.` を返した
-- `/review` result: `finding removed`
-- Finding removed:
-  - `*.d.ts` を route source と誤判定する false positive
-  - `webhooks._index` / `webhooks/index` を webhook endpoint と誤判定する false negative
-  - typed loader/action assignment の handler 未検査
-  - destructured / chained / typed axios alias の direct Admin API access 見逃し
-  - `url.href` と whitespace 変種の `as` / `satisfies` による parser bypass
-- Promoted invariant:
-  - guardrail は declaration file と non-endpoint index route を executable endpoint と混同しない
-  - guardrail は handler export / typed assignment / alias chain / static URL member access を同義として正規化する
-- Updated pattern:
-  - `shopify-review-guard/references/pattern-catalog.md` の pattern 13 更新
-  - `shopify-review-guard/references/pattern-catalog.md` の pattern 15 追加
-- Related tests:
-  - [architecture-guardrails.contract.test.mjs](/Users/nishimuraryousuke/project/shopify_matri/tests/contracts/architecture-guardrails.contract.test.mjs)
-  - [check-architecture-guardrails.mjs](/Users/nishimuraryousuke/project/shopify_matri/scripts/check-architecture-guardrails.mjs)
-  - [tests/fixtures/guardrails](/Users/nishimuraryousuke/project/shopify_matri/tests/fixtures/guardrails)
-- Notes:
-  - 最新 reviewer で unresolved の architecture guardrail root cause は残っていない
-  - App Store readiness 全体の blocked 項目（`shopify.app.toml`、review metadata）は別論点なので昇格していない
+## Deploy / ECS
 
-- Date: 2026-03-13
-- App / Repo: `shopify_matri`
-- `/review` evidence: embedded shell / webhook dedupe に対する review のうち、Shopify docs・ADR-0004・contract 修正を踏まえて webhook dedupe の root cause を修正後、最新 `/review` が `既存動作を壊すと断定できる不具合は見つかりませんでした。` を返した
-- `/review` result: `finding removed`
-- Finding removed:
-  - delivery key が `X-Shopify-Name` を `X-Shopify-Webhook-Id` より優先し、同名 subscription の別 webhook delivery を duplicate 扱いする
-- Promoted invariant:
-  - webhook dedupe は webhook id を subscription 名より優先する
-- Updated pattern:
-  - `shopify-review-guard/references/pattern-catalog.md` の pattern 18 追加
-- Related tests:
-  - [webhook-ingress.contract.test.mjs](/Users/nishimuraryousuke/project/shopify_matri/tests/contracts/webhook-ingress.contract.test.mjs)
-- Notes:
-  - Polaris shell 指摘は Shopify docs と依存実装に照らして root cause と採用していないため昇格していない
-  - 最新 `/review` で webhook dedupe root cause の再指摘はない
-
-- Date: 2026-03-13
-- App / Repo: `shopify_matri`
-- `/review` evidence: AWS infra bootstrap に対する review で migration exit code 未確認 / ECS rollout 未待機 / optional Shopify deploy の CLI・Partners token 不足 / Docker build context への host state 混入 / required app config 未検証 / worker shutdown 遅延を順に修正後、最新 `/review` が `AWS bootstrap 用の skeleton と検証もこのパッチの範囲では整合しています。` を返した
-- `/review` result: `finding removed`
-- Finding removed:
-  - migration one-off task failure を成功扱いする
-  - ECS service rollout failure を成功扱いする
-  - optional `shopify app deploy` が clean runner で実行不能
-  - Docker build context に host `node_modules` や local Shopify CLI state が混入する
-  - required app config 未設定でも壊れた ECS task を render / register できる
-  - worker shutdown が poll interval 分だけ遅延する
-- Promoted invariant:
-  - deploy workflow は task render 前に required app config を fail-fast し、migration task の `exitCode` と service rollout の `services-stable` まで確認する
-  - optional な `shopify app deploy` 経路は CI 単体で完結させ、Shopify CLI と `SHOPIFY_CLI_PARTNERS_TOKEN` を workflow 側で明示する
-  - Docker build context には host dependency と local Shopify CLI state を含めない
-- Related tests:
-  - [aws-infra-bootstrap.contract.test.mjs](/Users/nishimuraryousuke/project/shopify_matri/tests/contracts/aws-infra-bootstrap.contract.test.mjs)
-- Notes:
-  - 最新 `/review` の範囲では unresolved の AWS bootstrap root cause は残っていない
-  - `@shopify/cli` version pinning や deploy 後 smoke は改善余地として残るが、この promotion では昇格していない
+- **migration task の `exitCode` と service rollout の `services-stable`** をセットで見る。片方だけ成功でもロールアウトは未完扱いにする。
+- **SHOPIFY_CLI_PARTNERS_TOKEN** など、ローカル専用シークレットを CI のレンダリングやビルドコンテキストに混ぜない。
+- **host dependency と local Shopify CLI state**（`~/.shopify` 等）は Docker build context に入れない。クリーンランナー前提の optional deploy path でも同様。

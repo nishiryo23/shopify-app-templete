@@ -67,10 +67,6 @@ on:
         description: Secrets Manager ARN for SHOP_TOKEN_ENCRYPTION_KEY
         required: true
         type: string
-      provenance_signing_key_secret_arn:
-        description: Secrets Manager ARN for PROVENANCE_SIGNING_KEY
-        required: true
-        type: string
       telemetry_pseudonym_key_secret_arn:
         description: Secrets Manager ARN for TELEMETRY_PSEUDONYM_KEY
         required: true
@@ -108,9 +104,8 @@ jobs:
       DATABASE_URL_SECRET_ARN: ${{ inputs.database_url_secret_arn }}
       SHOPIFY_API_SECRET_ARN: ${{ inputs.shopify_api_secret_arn }}
       SHOP_TOKEN_ENCRYPTION_KEY_SECRET_ARN: ${{ inputs.shop_token_encryption_key_secret_arn }}
-      PROVENANCE_SIGNING_KEY_SECRET_ARN: ${{ inputs.provenance_signing_key_secret_arn }}
       TELEMETRY_PSEUDONYM_KEY_SECRET_ARN: ${{ inputs.telemetry_pseudonym_key_secret_arn }}
-      LOG_GROUP: /ecs/shopify-matri
+      LOG_GROUP: /ecs/shopify-app-template
       SHOPIFY_API_KEY: ${{ vars.SHOPIFY_API_KEY }}
       SHOPIFY_APP_URL: ${{ vars.SHOPIFY_APP_URL }}
       SCOPES: ${{ vars.SCOPES }}
@@ -174,7 +169,6 @@ jobs:
             DATABASE_URL_SECRET_ARN="${DATABASE_URL_SECRET_ARN}"
             SHOPIFY_API_SECRET_ARN="${SHOPIFY_API_SECRET_ARN}"
             SHOP_TOKEN_ENCRYPTION_KEY_SECRET_ARN="${SHOP_TOKEN_ENCRYPTION_KEY_SECRET_ARN}"
-            PROVENANCE_SIGNING_KEY_SECRET_ARN="${PROVENANCE_SIGNING_KEY_SECRET_ARN}"
             TELEMETRY_PSEUDONYM_KEY_SECRET_ARN="${TELEMETRY_PSEUDONYM_KEY_SECRET_ARN}"
           )
           node scripts/render-aws-task-definition.mjs \

@@ -24,7 +24,7 @@
 
 ## 運用上の注意
 
-- **`pnpm dev`（`shopify app dev`）で起動する**。このリポジトリでは `shopify.web.toml` の `dev` が `scripts/dev-with-worker.mjs` を呼び、`web` と `worker` を同時に起動する。`react-router dev` だけでは CLI のトンネルと URL 同期が効かず、export / preview / write の job が `queued` のまま残る。
+- **`pnpm dev`（`shopify app dev`）で起動する**。このリポジトリでは `shopify.web.toml` の `dev` が `scripts/dev-with-worker.mjs` を呼び、`web` と `worker` を同時に起動する。`react-router dev` だけでは CLI のトンネルと URL 同期が効かず、バックグラウンドの job が `queued` のまま残る。
 - `shopify.app.toml` の **`[build] automatically_update_urls_on_dev = true`** のとき、CLI が Partner 側のアプリ URL / リダイレクト URL を開発用トンネルに合わせて更新する。固定したい場合は `--no-update`（[app dev](https://shopify.dev/docs/api/shopify-cli/app/app-dev)）を参照。
 - `.env` に **`SHOPIFY_APP_URL` を固定で書かない**（トンネルホストはセッションごとに変わる）。`DATABASE_URL` や `SHOPIFY_API_KEY` などは `.env` でよい。
 - worker 単体を再起動したい場合は **`pnpm run dev:worker`** を使う。このスクリプトはローカル用に `AWS_REGION=ap-northeast-1`、`QUEUE_POLL_INTERVAL_MS=1000`、`QUEUE_LEASE_MS=30000`、`S3_ARTIFACT_BUCKET=local-artifacts`、`S3_ARTIFACT_PREFIX=dev` を補い、`HOST` / `APP_URL` / `SHOPIFY_APP_URL` のいずれかからトンネル URL を解決する。

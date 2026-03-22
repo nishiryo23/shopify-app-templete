@@ -8,8 +8,6 @@ import { applyShopifyDevAppUrl } from "../scripts/shopify-dev-app-url.mjs";
 applyShopifyDevAppUrl();
 import { createArtifactStorageFromEnv } from "../domain/artifacts/factory.mjs";
 import { createPrismaJobQueue } from "../domain/jobs/prisma-job-queue.mjs";
-import { PRODUCT_EXPORT_KIND } from "../domain/products/export-profile.mjs";
-import { PRODUCT_PREVIEW_KIND } from "../domain/products/preview-profile.mjs";
 import { createTelemetry } from "../domain/telemetry/index.mjs";
 import {
   addDaysToJstDate,
@@ -24,15 +22,7 @@ import {
   SYSTEM_RETENTION_SWEEP_KIND,
   SYSTEM_STUCK_JOB_SWEEP_KIND,
 } from "../domain/system-jobs.mjs";
-import {
-  PRODUCT_UNDO_KIND,
-  PRODUCT_WRITE_KIND,
-} from "../domain/products/write-profile.mjs";
 import { WEBHOOK_SHOP_REDACT_KIND } from "../domain/webhooks/compliance-jobs.mjs";
-import { runProductExportJob } from "./product-export.mjs";
-import { runProductUndoJob } from "./product-undo.mjs";
-import { runProductPreviewJob } from "./product-preview.mjs";
-import { runProductWriteJob } from "./product-write.mjs";
 import { runWebhookShopRedactJob } from "./webhook-compliance.mjs";
 import {
   runSystemRetentionSweepJob,
@@ -42,7 +32,6 @@ import { TELEMETRY_METRICS } from "../domain/telemetry/emf.mjs";
 
 const ALWAYS_REQUIRED_WORKER_SECRETS = Object.freeze([
   "DATABASE_URL",
-  "PROVENANCE_SIGNING_KEY",
   "SHOPIFY_API_SECRET",
   "SHOP_TOKEN_ENCRYPTION_KEY",
 ]);
@@ -70,10 +59,6 @@ const PRIORITIZED_SYSTEM_JOB_KINDS = Object.freeze([
   SYSTEM_STUCK_JOB_SWEEP_KIND,
 ]);
 const ORDINARY_WORKER_JOB_KINDS = Object.freeze([
-  PRODUCT_EXPORT_KIND,
-  PRODUCT_PREVIEW_KIND,
-  PRODUCT_WRITE_KIND,
-  PRODUCT_UNDO_KIND,
   WEBHOOK_SHOP_REDACT_KIND,
 ]);
 
@@ -113,7 +98,6 @@ export function validateWorkerEnvironment(env = process.env) {
     }
   }
 
-  parseBase64Secret(env.PROVENANCE_SIGNING_KEY, "PROVENANCE_SIGNING_KEY");
   parseBase64Secret(env.SHOP_TOKEN_ENCRYPTION_KEY, "SHOP_TOKEN_ENCRYPTION_KEY");
   if (env.TELEMETRY_PSEUDONYM_KEY) {
     parseBase64Secret(env.TELEMETRY_PSEUDONYM_KEY, "TELEMETRY_PSEUDONYM_KEY");
@@ -463,7 +447,7 @@ export async function runJobWithLeaseHeartbeat({
   logger = console,
   nowFn = Date.now,
   prisma,
-  runJob = runProductExportJob,
+  runJob = runWorkerJob,
   sleep = delay,
   workerId,
 } = {}) {
@@ -833,19 +817,7 @@ export async function runWorkerJob(args = {}) {
     return runSystemRetentionSweepJob(args);
   }
 
-  if (args.job?.kind === PRODUCT_UNDO_KIND) {
-    return runProductUndoJob(args);
-  }
-
-  if (args.job?.kind === PRODUCT_WRITE_KIND) {
-    return runProductWriteJob(args);
-  }
-
-  if (args.job?.kind === PRODUCT_PREVIEW_KIND) {
-    return runProductPreviewJob(args);
-  }
-
-  return runProductExportJob(args);
+  throw new Error(`unsupported worker job kind: ${args.job?.kind ?? "unknown"}`);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {

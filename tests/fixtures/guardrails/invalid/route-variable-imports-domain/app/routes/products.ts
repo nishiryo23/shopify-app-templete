@@ -1,4 +1,4 @@
-const target = "~/domain/products/write.server";
+const target = "~/domain/billing/entitlement-state.mjs";
 
 export async function action() {
   return import(target);

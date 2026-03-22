@@ -286,15 +286,15 @@ test("job queue enqueues once per dedupe key", async () => {
   const queue = createPrismaJobQueue(prisma);
 
   const first = await queue.enqueue({
-    dedupeKey: "products:1",
-    kind: "product.write",
-    payload: { productId: "gid://shopify/Product/1" },
+    dedupeKey: "example:1",
+    kind: "webhook.shop-redact",
+    payload: { deliveryKey: "example-delivery-key" },
     shopDomain: "example.myshopify.com",
   });
   const duplicate = await queue.enqueue({
-    dedupeKey: "products:1",
-    kind: "product.write",
-    payload: { productId: "gid://shopify/Product/1" },
+    dedupeKey: "example:1",
+    kind: "webhook.shop-redact",
+    payload: { deliveryKey: "example-delivery-key" },
     shopDomain: "example.myshopify.com",
   });
 
@@ -305,10 +305,10 @@ test("job queue enqueues once per dedupe key", async () => {
 test("job queue allows re-enqueue after a terminal job with the same dedupe key", async () => {
   const prisma = createQueuePrismaDouble([
     {
-      dedupeKey: "products:1",
+      dedupeKey: "example:1",
       id: "job-completed",
-      kind: "product.write",
-      payload: { productId: "gid://shopify/Product/1" },
+      kind: "webhook.shop-redact",
+      payload: { deliveryKey: "example-delivery-key" },
       shopDomain: "example.myshopify.com",
       state: "completed",
     },
@@ -316,9 +316,9 @@ test("job queue allows re-enqueue after a terminal job with the same dedupe key"
   const queue = createPrismaJobQueue(prisma);
 
   const rerun = await queue.enqueue({
-    dedupeKey: "products:1",
-    kind: "product.write",
-    payload: { productId: "gid://shopify/Product/1" },
+    dedupeKey: "example:1",
+    kind: "webhook.shop-redact",
+    payload: { deliveryKey: "example-delivery-key" },
     shopDomain: "example.myshopify.com",
   });
 
@@ -330,20 +330,20 @@ test("job queue enforces single leased writer per shop", async () => {
   const prisma = createQueuePrismaDouble([
     {
       id: "job-a",
-      kind: "product.write",
+      kind: "webhook.shop-redact",
       payload: { id: 1 },
       shopDomain: "a.myshopify.com",
     },
     {
       id: "job-b",
-      kind: "product.write",
+      kind: "webhook.shop-redact",
       payload: { id: 2 },
       shopDomain: "a.myshopify.com",
       createdAt: new Date("2026-03-13T00:00:01.000Z"),
     },
     {
       id: "job-c",
-      kind: "product.write",
+      kind: "webhook.shop-redact",
       payload: { id: 3 },
       shopDomain: "b.myshopify.com",
       createdAt: new Date("2026-03-13T00:00:02.000Z"),
@@ -403,7 +403,7 @@ test("expired lease is reclaimable by another worker", async () => {
     {
       attempts: 1,
       id: "job-a",
-      kind: "product.write",
+      kind: "webhook.shop-redact",
       leaseExpiresAt: new Date("2026-03-13T02:59:00.000Z"),
       leasedAt: new Date("2026-03-13T02:55:00.000Z"),
       leasedBy: "worker-1",
@@ -427,7 +427,7 @@ test("heartbeat extends the shop lease and attempt only while the lease is still
     {
       attempts: 1,
       id: "job-a",
-      kind: "product.write",
+      kind: "webhook.shop-redact",
       leaseExpiresAt: new Date("2026-03-13T03:01:00.000Z"),
       leaseToken: "lease-active",
       leasedAt: new Date("2026-03-13T02:55:00.000Z"),
@@ -438,7 +438,7 @@ test("heartbeat extends the shop lease and attempt only while the lease is still
     },
     {
       id: "job-b",
-      kind: "product.write",
+      kind: "webhook.shop-redact",
       payload: { id: 2 },
       shopDomain: "a.myshopify.com",
       state: "queued",
@@ -483,7 +483,7 @@ test("heartbeat cannot revive an expired lease", async () => {
     {
       attempts: 1,
       id: "job-a",
-      kind: "product.write",
+      kind: "webhook.shop-redact",
       leaseExpiresAt: new Date("2026-03-13T03:59:00.000Z"),
       leaseToken: "lease-expired",
       leasedAt: new Date("2026-03-13T03:55:00.000Z"),
@@ -531,7 +531,7 @@ test("stale worker cannot complete a re-leased job", async () => {
     {
       attempts: 1,
       id: "job-a",
-      kind: "product.write",
+      kind: "webhook.shop-redact",
       leaseExpiresAt: new Date("2026-03-13T03:59:00.000Z"),
       leaseToken: "lease-old",
       leasedAt: new Date("2026-03-13T03:55:00.000Z"),
@@ -570,7 +570,7 @@ test("stale worker cannot fail a re-leased job", async () => {
     {
       attempts: 1,
       id: "job-a",
-      kind: "product.write",
+      kind: "webhook.shop-redact",
       leaseExpiresAt: new Date("2026-03-13T04:59:00.000Z"),
       leaseToken: "lease-old",
       leasedAt: new Date("2026-03-13T04:55:00.000Z"),
@@ -609,7 +609,7 @@ test("worker can release an unstarted leased job back to queued during shutdown 
     {
       attempts: 1,
       id: "job-a",
-      kind: "product.write",
+      kind: "webhook.shop-redact",
       leaseExpiresAt: new Date("2026-03-13T05:31:00.000Z"),
       leaseToken: "lease-active",
       leasedAt: new Date("2026-03-13T05:29:00.000Z"),
@@ -657,7 +657,7 @@ test("expired worker cannot complete after its lease timed out even without re-l
     {
       attempts: 1,
       id: "job-a",
-      kind: "product.write",
+      kind: "webhook.shop-redact",
       leaseExpiresAt: new Date("2026-03-13T06:00:00.000Z"),
       leaseToken: "lease-expired",
       leasedAt: new Date("2026-03-13T05:55:00.000Z"),
@@ -688,7 +688,7 @@ test("expired worker cannot fail after its lease timed out even without re-lease
     {
       attempts: 1,
       id: "job-a",
-      kind: "product.write",
+      kind: "webhook.shop-redact",
       leaseExpiresAt: new Date("2026-03-13T07:00:00.000Z"),
       leaseToken: "lease-expired",
       leasedAt: new Date("2026-03-13T06:55:00.000Z"),
@@ -758,7 +758,7 @@ test("stuck-job sweep recovers stale leases with CAS checks", async () => {
     {
       attempts: 1,
       id: "job-a",
-      kind: "product.write",
+      kind: "webhook.shop-redact",
       leaseExpiresAt: new Date("2026-03-17T09:20:00.000Z"),
       leaseToken: "stale-lease-token",
       leasedAt: new Date("2026-03-17T09:10:00.000Z"),
@@ -802,7 +802,7 @@ test("stuck-job sweep still recovers a stale job after the shop lease row moved 
     {
       attempts: 1,
       id: "job-a",
-      kind: "product.write",
+      kind: "webhook.shop-redact",
       leaseExpiresAt: new Date("2026-03-17T09:20:00.000Z"),
       leaseToken: "stale-lease-token",
       leasedAt: new Date("2026-03-17T09:10:00.000Z"),
@@ -814,7 +814,7 @@ test("stuck-job sweep still recovers a stale job after the shop lease row moved 
     {
       attempts: 1,
       id: "job-b",
-      kind: "product.write",
+      kind: "webhook.shop-redact",
       leaseExpiresAt: new Date("2026-03-17T09:40:00.000Z"),
       leaseToken: "active-lease-token",
       leasedAt: new Date("2026-03-17T09:30:00.000Z"),

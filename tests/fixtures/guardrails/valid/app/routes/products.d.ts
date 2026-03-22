@@ -1,3 +1,3 @@
-import type { ProductRecord } from "~/domain/products/types";
+import type { JobState } from "@prisma/client";
 
-export type ProductsRouteLoaderData = ProductRecord;
+export type DemoRouteLoaderData = JobState;

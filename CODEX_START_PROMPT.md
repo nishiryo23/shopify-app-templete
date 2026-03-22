@@ -3,7 +3,7 @@
 このフォルダをプロジェクトルートとして読み込んでください。作業は次の順で進めます。
 
 1. `AGENTS.md` を最初に読む。
-2. `docs/shopify_app_requirements_definition_complete.md`、`docs/shopify_app_technical_spec_complete.md`、`docs/codex_harness_bootstrap.md` を読む。
+2. `docs/template_scope.md`、`docs/codex_harness_bootstrap.md` を読む。
 3. `tickets/README.md` を読み、**harness tickets から順番に**進める。
 4. 対象 ticket を開き、関連する ADR と skill を確認する。
 5. 非自明な変更の前に `.agent/PLANS.md` をテンプレとして `plans/<ticket-id>.md` を作る。
@@ -11,13 +11,15 @@
 7. 実装後は、差分要約、実行した検証、ADR への追記、未解決事項、次の ticket を示す。
 
 ## このセッションで守ること
+
 - **1 セッション 1 ticket**
 - harness tickets を先に完了する
-- launch GA は **Product Domain Parity MVP**
+- テンプレは **最小プラットフォーム**（ドメイン機能は ticket で追加）
 - Orders / Customers / Discounts は scope 外
 - ticket に明示がない限り `shopify.app.toml`、scope、billing truth、webhook policy、privacy/delete contract を変えない
 
 ## 最初にやること
+
 - `tickets/harness/H-001-harness-bootstrap.md` を読む
 - `plans/H-001.md` を作る
 - `H-001` だけを実装する

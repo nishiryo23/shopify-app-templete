@@ -3,7 +3,7 @@ import { Page, Layout, Card, BlockStack, Text } from "@shopify/polaris";
 export default function AppIndexRoute() {
   return (
     <div data-testid="app-shell">
-      <Page title="Shopify Matri">
+      <Page title="Shopify App">
         <Layout>
           <Layout.Section>
             <Card>

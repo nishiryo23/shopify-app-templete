@@ -1,19 +1,9 @@
 {
-  "namespace": "ShopifyMatri/Operations",
+  "namespace": "ShopifyAppTemplate/Operations",
   "logRetentionDays": 7,
   "webhookPayloadRetentionDays": 7,
   "jobAttemptRetentionDays": 30,
-  "artifactRetentionDays": {
-    "product.preview.edited-upload": 7,
-    "product.export.source": 90,
-    "product.export.manifest": 90,
-    "product.preview.result": 90,
-    "product.write.result": 90,
-    "product.write.snapshot": 90,
-    "product.write.error": 90,
-    "product.undo.result": 90,
-    "product.undo.error": 90
-  },
+  "artifactRetentionDays": {},
   "scheduler": {
     "retentionSweep": {
       "kind": "system.retention-sweep",

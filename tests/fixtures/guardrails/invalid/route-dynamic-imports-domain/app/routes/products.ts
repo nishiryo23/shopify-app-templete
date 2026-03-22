@@ -1,3 +1,3 @@
 export async function action() {
-  return import("~/domain/products/write.server");
+  return import("~/domain/billing/entitlement-state.mjs");
 }

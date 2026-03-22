@@ -286,7 +286,6 @@ test("queue, artifact, and provenance crypto foundations stay separated by respo
   const artifactStorage = readProjectFile("domain/artifacts/storage.mjs");
   const signing = readProjectFile("domain/provenance/signing.mjs");
   const sessionCrypto = readProjectFile("app/services/session-crypto.server.ts");
-  const readme = readProjectFile("README.md");
 
   assert.match(queue, /await ensureJobLeaseRow\(tx, candidate\.shopDomain\)/);
   assert.match(queue, /leaseToken: job\.leaseToken/);
@@ -302,6 +301,7 @@ test("queue, artifact, and provenance crypto foundations stay separated by respo
   assert.match(signing, /PROVENANCE_SIGNING_KEY is required for provenance signing/);
   assert.doesNotMatch(signing, /SHOP_TOKEN_ENCRYPTION_KEY is required for encrypted offline session storage/);
   assert.match(sessionCrypto, /SHOP_TOKEN_ENCRYPTION_KEY is required for encrypted offline session storage/);
-  assert.match(readme, /PROVENANCE_SIGNING_KEY/);
-  assert.match(readme, /未設定のまま署名が必要な処理を呼ぶと fail-fast/);
+  const envExample = readFileSync(path.join(rootDir, ".env.example"), "utf8");
+  assert.match(envExample, /PROVENANCE_SIGNING_KEY/);
+  assert.match(envExample, /domain\/provenance/);
 });

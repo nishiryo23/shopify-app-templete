@@ -42,7 +42,7 @@ async function deleteArtifactsWithBackup({
       if (storedObject != null) {
         const body = Buffer.isBuffer(storedObject) ? storedObject : storedObject.body;
         if (body != null) {
-          backupDirPath ??= await mkdtemp(path.join(os.tmpdir(), "shopify-matri-shop-redact-"));
+          backupDirPath ??= await mkdtemp(path.join(os.tmpdir(), "shopify-app-template-shop-redact-"));
           const backupFilePath = path.join(backupDirPath, `${deletedArtifacts.length}-${artifact.id}.bin`);
           await writeFile(backupFilePath, body);
           deletedArtifacts.push({

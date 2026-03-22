@@ -44,7 +44,7 @@ test("telemetry helper emits EMF metrics with the fixed namespace and dimensions
   });
 
   telemetry.emitCounterMetric({
-    jobKind: "product.write",
+    jobKind: "webhook.shop-redact",
     metricName: TELEMETRY_METRICS.LEASE_LOST_JOBS,
     value: 3,
   });
@@ -52,7 +52,7 @@ test("telemetry helper emits EMF metrics with the fixed namespace and dimensions
     deliveryKey: "[\"example.myshopify.com\",\"app/uninstalled\",\"evt-1\",\"default\"]",
     event: "job.lease_lost",
     jobId: "job-1",
-    jobKind: "product.write",
+    jobKind: "webhook.shop-redact",
     level: "error",
     shopDomain: "example.myshopify.com",
     workerId: "worker-1",
@@ -65,13 +65,13 @@ test("telemetry helper emits EMF metrics with the fixed namespace and dimensions
   );
   assert.equal(sink.lines[0].Environment, "production");
   assert.equal(sink.lines[0].Service, "worker");
-  assert.equal(sink.lines[0].JobKind, "product.write");
+  assert.equal(sink.lines[0].JobKind, "webhook.shop-redact");
   assert.equal(sink.lines[0].LeaseLostJobs, 3);
   assert.equal("shopDomain" in sink.lines[0], false);
 
   assert.equal(sink.lines[1].event, "job.lease_lost");
-  assert.equal(sink.lines[1].jobKind, "product.write");
-  assert.equal(sink.lines[1].kind, "product.write");
+  assert.equal(sink.lines[1].jobKind, "webhook.shop-redact");
+  assert.equal(sink.lines[1].kind, "webhook.shop-redact");
   assert.equal("deliveryKey" in sink.lines[1], false);
   assert.equal("shopDomain" in sink.lines[1], false);
   assert.equal(
@@ -110,36 +110,22 @@ test("telemetry helper does not leak free-form error messages into errorCode", (
   });
 
   telemetry.emitEvent({
-    error: new Error("gid://shopify/Product/123 leaked in message"),
+    error: new Error("sensitive shop identifier leaked in message"),
     event: "job.failed",
     jobId: "job-1",
-    jobKind: "product.write",
+    jobKind: "webhook.shop-redact",
     shopDomain: "example.myshopify.com",
   });
 
   assert.equal(sink.lines[0].errorCode, "Error");
-  assert.equal(JSON.stringify(sink.lines[0]).includes("gid://shopify/Product/123"), false);
+  assert.equal(JSON.stringify(sink.lines[0]).includes("sensitive shop identifier"), false);
 });
 
-test("artifact retention defaults resolve to the launch retention policy", () => {
+test("artifact retention map is empty until domain kinds are added", () => {
   const now = new Date("2026-03-17T00:00:00.000Z");
 
-  assert.equal(ARTIFACT_RETENTION_DAYS["product.preview.edited-upload"], 7);
-  assert.equal(ARTIFACT_RETENTION_DAYS["product.write.result"], 90);
-  assert.equal(
-    resolveArtifactRetentionUntil({
-      kind: "product.preview.edited-upload",
-      now,
-    }).toISOString(),
-    "2026-03-24T00:00:00.000Z",
-  );
-  assert.equal(
-    resolveArtifactRetentionUntil({
-      kind: "product.write.snapshot",
-      now,
-    }).toISOString(),
-    "2026-06-15T00:00:00.000Z",
-  );
+  assert.deepEqual(ARTIFACT_RETENTION_DAYS, {});
+  assert.equal(resolveArtifactRetentionUntil({ kind: "example.kind", now }), null);
 });
 
 test("webhook payload redaction cutoff uses the actual sweep execution time", () => {
@@ -535,7 +521,7 @@ test("stuck-job sweep emits dead-letter telemetry when stale recovery exhausts r
         async findMany() {
           return [{
             id: "stale-job-dead-letter",
-            kind: "product.write",
+            kind: "webhook.shop-redact",
             shopDomain: "example.myshopify.com",
           }];
         },
@@ -558,7 +544,7 @@ test("stuck-job sweep emits dead-letter telemetry when stale recovery exhausts r
   assert.equal(metrics[2].value, 1);
   assert.equal(events[0].event, "job.dead_lettered");
   assert.equal(events[0].fields.jobId, "stale-job-dead-letter");
-  assert.equal(events[0].fields.jobKind, "product.write");
+  assert.equal(events[0].fields.jobKind, "webhook.shop-redact");
   assert.equal(events[0].fields.shopDomain, "example.myshopify.com");
   assert.equal(events[1].event, "system.stuck_job_sweep.completed");
 });
@@ -590,7 +576,7 @@ test("stuck-job sweep uses provided telemetry to pseudonymize dead-letter events
         async findMany() {
           return [{
             id: "stale-job-dead-letter",
-            kind: "product.write",
+            kind: "webhook.shop-redact",
             shopDomain: "example.myshopify.com",
           }];
         },
@@ -603,7 +589,7 @@ test("stuck-job sweep uses provided telemetry to pseudonymize dead-letter events
   assert.equal(sink.lines[0].DeadLetteredJobs, 1);
   assert.equal(sink.lines[1].event, "job.dead_lettered");
   assert.equal(sink.lines[1].jobId, "stale-job-dead-letter");
-  assert.equal(sink.lines[1].jobKind, "product.write");
+  assert.equal(sink.lines[1].jobKind, "webhook.shop-redact");
   assert.equal("shopDomain" in sink.lines[1], false);
   assert.equal(
     sink.lines[1].shopHash,

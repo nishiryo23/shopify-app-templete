@@ -145,7 +145,15 @@ async function validateChangedPlanFiles(changedFiles) {
 
   for (const relativePath of planFiles) {
     const absolutePath = path.join(projectRoot, relativePath);
-    const content = await fs.readFile(absolutePath, "utf8");
+    let content;
+    try {
+      content = await fs.readFile(absolutePath, "utf8");
+    } catch (error) {
+      if (error && error.code === "ENOENT") {
+        continue;
+      }
+      throw error;
+    }
 
     if (relativePath === ".agent/PLANS.md") {
       if (!/- ADR required: yes\|no/.test(content)) {

@@ -6,7 +6,7 @@ Codex が迷いやすい境界を lint / check script で固定する。
 ## Read first
 - `AGENTS.md`
 - `docs/shopify_app_technical_spec_complete.md`
-- `.agents/skills/product-domain-parity/SKILL.md`
+- `.agents/skills/domain-feature-stub/SKILL.md`
 
 ## Scope
 - `pnpm check` の整備

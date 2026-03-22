@@ -5,7 +5,7 @@ Product Domain Parity MVP を支える保存・暗号化・非同期基盤を作
 
 ## Read first
 - `docs/shopify_app_technical_spec_complete.md`
-- `.agents/skills/product-domain-parity/SKILL.md`
+- `.agents/skills/domain-feature-stub/SKILL.md`
 
 ## Scope
 - Prisma models

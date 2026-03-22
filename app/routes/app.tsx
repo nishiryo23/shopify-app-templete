@@ -18,7 +18,6 @@ export default function AppShell() {
       <PolarisProvider i18n={jaTranslations}>
         <ui-nav-menu>
           <Link to="/app">ホーム</Link>
-          <Link to="/app/preview">プレビュー</Link>
           <Link to="/app/pricing">料金</Link>
           <Link to="/app/welcome">利用開始</Link>
         </ui-nav-menu>

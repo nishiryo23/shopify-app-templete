@@ -1,3 +1,3 @@
-import { runProductPreview } from "~/app/services/products.server";
+import { loadHealthCheck } from "~/app/services/health.server";
 
-export { runProductPreview as action };
+export { loadHealthCheck as action };
