@@ -1230,6 +1230,8 @@ test("preview page keeps reloading until a newly started export appears in the b
 
   assert.match(pageFile, /const loadedExports = selectedLoaderData\?\.exports \?\? \[\]/);
   assert.match(pageFile, /const activeExportJobId = exportFetcher\.data\?\.profile === selectedProfile/);
+  assert.match(pageFile, /const params = new URLSearchParams\(searchParams\);/);
+  assert.match(pageFile, /params\.delete\("jobId"\);/);
   assert.match(pageFile, /const exportVisible = !activeExportJobId \|\| loadedExports\.some\(\(job\) => job\.id === activeExportJobId\)/);
   assert.match(pageFile, /if \(!activeExportJobId && !activePreviewJobId && !activeWriteJobId && !activeUndoJobId\)/);
   assert.match(pageFile, /if \(loadedExports\.some\(\(job\) => job\.id === selectedExportJobId\)\)/);

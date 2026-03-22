@@ -197,16 +197,23 @@ export default function PreviewRoute() {
       return;
     }
 
-    const params = new URLSearchParams();
+    const params = new URLSearchParams(searchParams);
     params.set("profile", selectedProfile);
+    params.delete("jobId");
     if (activePreviewJobId) {
       params.set("previewJobId", activePreviewJobId);
+    } else {
+      params.delete("previewJobId");
     }
     if (activeWriteJobId) {
       params.set("writeJobId", activeWriteJobId);
+    } else {
+      params.delete("writeJobId");
     }
     if (activeUndoJobId) {
       params.set("undoJobId", activeUndoJobId);
+    } else {
+      params.delete("undoJobId");
     }
 
     const load = () => detailFetcher.load(`/app/preview?${params.toString()}`);
@@ -233,6 +240,7 @@ export default function PreviewRoute() {
     activeWrite?.jobState,
     activeWriteJobId,
     loadedExports,
+    searchParams,
     selectedProfile,
   ]);
 
