@@ -1,0 +1,3 @@
+- **Scope truth:** granted scopes は `currentAppInstallation.accessScopes` query で取得する。webhook payload を truth にしない（詳細は ADR-0002）。
+- **Webhook:** app-specific / HTTPS only。運用を単純化し、public app 審査と整合させるため（詳細は ADR-0004）。
+- **`/auth/login`:** ショップドメイン入力は開発・手動確認向けの補助経路。本番利用の主経路は **managed install** または **Admin からの埋め込み起動**（ADR-0002 と整合）。

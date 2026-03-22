@@ -1,3 +1,14 @@
+---
+doc_type: runbook
+authority: supporting
+truth_sources:
+  - docs/platform-truth-index.md
+  - shopify.web.toml
+  - scripts/dev-with-worker.mjs
+  - scripts/dev-worker.mjs
+  - tests/contracts/shopify-dev-app-url.contract.test.mjs
+---
+
 # ローカル開発: Shopify CLI とトンネル URL
 
 ## 目的

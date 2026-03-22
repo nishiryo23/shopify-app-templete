@@ -1,3 +1,15 @@
+---
+doc_type: spec_summary
+authority: supporting
+truth_sources:
+  - docs/platform-truth-index.md
+  - docs/template_scope.md
+  - adr/0001-repo-truth-and-codex-harness.md
+  - adr/0002-embedded-auth-and-token-exchange.md
+  - adr/0003-managed-pricing-as-billing-source-of-truth.md
+  - adr/0004-app-specific-https-webhooks-only.md
+---
+
 # Shopify アプリ要件定義（テンプレート）
 
 本リポジトリは **ハーネス＋最小プラットフォーム** のテンプレートである。詳細要件は fork 先で ticket を起点に追記する。

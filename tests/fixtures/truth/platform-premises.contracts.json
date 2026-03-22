@@ -1,0 +1,7 @@
+{
+  "related_contracts": [
+    "tests/contracts/shop-bootstrap.contract.test.mjs",
+    "tests/contracts/shopify-config.contract.test.mjs",
+    "tests/contracts/auth-login-route.contract.test.mjs"
+  ]
+}

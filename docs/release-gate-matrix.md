@@ -1,3 +1,12 @@
+---
+doc_type: review_artifact
+authority: supporting
+truth_sources:
+  - docs/platform-truth-index.md
+  - package.json
+  - docs/reviewer-packet.md
+---
+
 # Release Gate Matrix
 
 ## Purpose

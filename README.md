@@ -5,6 +5,7 @@ Codex / エージェント向けの **チケット制・ADR・契約テスト・
 ## Main files
 
 - [AGENTS.md](AGENTS.md)
+- [docs/platform-truth-index.md](docs/platform-truth-index.md)（docs 探索の入口・プラットフォーム統合索引）
 - [docs/template_scope.md](docs/template_scope.md)
 - [docs/codex_harness_bootstrap.md](docs/codex_harness_bootstrap.md)
 - [CODEX_START_PROMPT.md](CODEX_START_PROMPT.md)
@@ -17,8 +18,9 @@ Codex / エージェント向けの **チケット制・ADR・契約テスト・
 
 1. [CODEX_START_PROMPT.md](CODEX_START_PROMPT.md)
 2. [AGENTS.md](AGENTS.md)
-3. [docs/template_scope.md](docs/template_scope.md)
-4. [tickets/README.md](tickets/README.md)
+3. [docs/platform-truth-index.md](docs/platform-truth-index.md)（docs 探索の入口）
+4. [docs/template_scope.md](docs/template_scope.md)
+5. [tickets/README.md](tickets/README.md)
 
 ## Fork 時
 

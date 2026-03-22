@@ -1,3 +1,13 @@
+---
+doc_type: harness
+authority: supporting
+truth_sources:
+  - docs/platform-truth-index.md
+  - AGENTS.md
+  - docs/template_scope.md
+  - .agent/PLANS.md
+---
+
 # Codexハーネス導入ガイド（テンプレート版）
 
 ## 1. 目的

@@ -1,3 +1,12 @@
+---
+doc_type: review_artifact
+authority: supporting
+truth_sources:
+  - docs/platform-truth-index.md
+  - docs/app-review-metadata.md
+  - docs/release-gate-matrix.md
+---
+
 # Reviewer Packet
 
 ## Purpose

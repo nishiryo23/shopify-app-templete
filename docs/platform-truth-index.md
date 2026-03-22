@@ -1,6 +1,39 @@
+---
+doc_type: index
+authority: documentation_index
+truth_sources:
+  - tests/fixtures/truth/platform-premises.md
+  - tests/fixtures/truth/platform-premises.contracts.json
+  - tests/contracts/platform-premises-doc-parity.contract.test.mjs
+  - adr/0002-embedded-auth-and-token-exchange.md
+  - adr/0003-managed-pricing-as-billing-source-of-truth.md
+  - adr/0004-app-specific-https-webhooks-only.md
+  - adr/0007-db-queue-artifact-and-provenance-crypto-truth.md
+  - adr/0018-webhook-inbox-raw-payload-retention-boundary.md
+---
+
 # プラットフォーム統合の正本索引
 
-このテンプレートで **Shopify プラットフォーム統合** を担う主要ファイルと ADR の一覧。新機能を追加するときの起点として参照する。
+エージェントが **Shopify プラットフォーム統合** の実装ファイルと ADR を辿るときの入口とする。ノルマティブな前提文は `tests/fixtures/truth/platform-premises.md` と本書の「プラットフォーム前提」節が一致し、`platform-premises-doc-parity` 契約テストで検証される。
+
+## docs 内ファイル一覧
+
+| ファイル | 説明 |
+| --- | --- |
+| app-review-metadata.md | App Store 提出用 review metadata の正本フィールド |
+| codex-sdk-review-loop.md | Codex SDK による shopify review ループ実行メモ |
+| codex_harness_bootstrap.md | Codex ハーネス導入と ticket 駆動のガイド |
+| dev-store-smoke-checklist.md | dev store / reviewer 向け smoke チェックリスト |
+| platform-truth-index.md | 本ファイル。プラットフォーム統合の索引と前提 |
+| release-gate-matrix.md | 提出前・日常ゲートの matrix |
+| reviewer-packet.md | reviewer と dev store dry-run 用パケット |
+| shopify-review-promotions.md | infra / CI の review 向け不変条件メモ |
+| shopify_app_requirements_definition_complete.md | テンプレ要件のエントリ（スコープ・参照） |
+| shopify_app_technical_spec_complete.md | 技術仕様の短い要約と検証ゲート |
+| shopify_local_development.md | Shopify CLI・トンネル URL・ローカル worker |
+| template_scope.md | テンプレに含むもの／含めないもの |
+
+新規 `docs/*.md` を追加するときは **フロントマター付与と本表の 1 行を同一コミット**で更新する。種別（`doc_type`）は各ファイルの YAML フロントマターを正とする。本表と `docs/*.md` の集合一致は `platform-premises-doc-parity` 契約で検証される。
 
 ## 認証・セッション・埋め込み
 
@@ -67,8 +100,8 @@
 
 ## プラットフォーム前提（テンプレ利用者向け）
 
-- **Scope truth:** granted scopes は `currentAppInstallation.accessScopes` query で取得する（webhook payload を truth にしない）。
-- **Webhook:** app-specific / HTTPS only。運用を単純化し、public app 審査と整合させるため。
-- **`/auth/login`:** ショップドメイン入力は開発・手動確認向けの補助経路。本番利用の主経路は **managed install** または **Admin からの埋め込み起動**。
+- **Scope truth:** granted scopes は `currentAppInstallation.accessScopes` query で取得する。webhook payload を truth にしない（詳細は ADR-0002）。
+- **Webhook:** app-specific / HTTPS only。運用を単純化し、public app 審査と整合させるため（詳細は ADR-0004）。
+- **`/auth/login`:** ショップドメイン入力は開発・手動確認向けの補助経路。本番利用の主経路は **managed install** または **Admin からの埋め込み起動**（ADR-0002 と整合）。
 
 詳細は各 ADR を参照。

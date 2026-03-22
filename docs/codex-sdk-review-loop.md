@@ -1,3 +1,12 @@
+---
+doc_type: harness
+authority: supporting
+truth_sources:
+  - docs/platform-truth-index.md
+  - scripts/run-codex-shopify-review-loop.mjs
+  - package.json
+---
+
 # Codex SDK review loop
 
 `$shopify-review-fix` の remediation pass と、uncommitted diff に対する external review gate を Node.js で交互に回すためのメモ。

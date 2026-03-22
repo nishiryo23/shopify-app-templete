@@ -1,3 +1,12 @@
+---
+doc_type: promotion
+authority: supporting
+truth_sources:
+  - docs/platform-truth-index.md
+  - .github/workflows/deploy.yml
+  - codex/rules/default.rules
+---
+
 # Shopify review promotions（ハーネス用メモ）
 
 このファイルは **AWS infra bootstrap に対する review** やデプロイ運用で繰り返し確認する不変条件を短く残す。アプリ固有の審査対応ではなく、テンプレート／CI のガードレール向け。

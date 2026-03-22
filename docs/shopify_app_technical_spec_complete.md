@@ -1,6 +1,20 @@
+---
+doc_type: spec_summary
+authority: supporting
+truth_sources:
+  - docs/platform-truth-index.md
+  - tests/fixtures/truth/platform-premises.md
+  - tests/fixtures/truth/platform-premises.contracts.json
+  - docs/template_scope.md
+  - adr/0001-repo-truth-and-codex-harness.md
+  - adr/0002-embedded-auth-and-token-exchange.md
+  - adr/0003-managed-pricing-as-billing-source-of-truth.md
+  - adr/0004-app-specific-https-webhooks-only.md
+---
+
 # Shopify アプリ技術仕様（テンプレート要約）
 
-本ファイルは **App Store 審査・運用で参照される repo 内リンク** を維持するための短い正本である。詳細なドメイン仕様はテンプレに含めない。スコープは [template_scope.md](template_scope.md)。
+本ファイルは **App Store 審査・運用で参照する repo 内リンクの要約** である。ノルマティブなプラットフォーム前提の機械的正本は `tests/fixtures/truth/platform-premises.md` と `platform-premises-doc-parity` 契約テスト、主要ファイル索引は [platform-truth-index.md](platform-truth-index.md) とする。詳細なドメイン仕様はテンプレに含めない。スコープは [template_scope.md](template_scope.md)。
 
 ## 正本索引
 
@@ -19,7 +33,7 @@
 
 - **Scope truth:** granted scopes は `currentAppInstallation.accessScopes` query で取得する。webhook payload を truth にしない（詳細は ADR-0002）。
 - **Webhook:** app-specific / HTTPS only。運用を単純化し、public app 審査と整合させるため（詳細は ADR-0004）。
-- **`/auth/login`:** ショップドメイン入力は **開発・手動確認向けの補助経路**。本番利用の主経路は **managed install** または **Admin からの埋め込み起動**（ADR-0002 と整合）。
+- **`/auth/login`:** ショップドメイン入力は開発・手動確認向けの補助経路。本番利用の主経路は **managed install** または **Admin からの埋め込み起動**（ADR-0002 と整合）。
 
 ## 検証ゲート
 

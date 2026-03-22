@@ -1,3 +1,12 @@
+---
+doc_type: checklist
+authority: supporting
+truth_sources:
+  - docs/platform-truth-index.md
+  - docs/release-gate-matrix.md
+  - playwright.config.mjs
+---
+
 # Dev Store Smoke Checklist
 
 ## Purpose

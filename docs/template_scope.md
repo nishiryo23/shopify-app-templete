@@ -1,3 +1,14 @@
+---
+doc_type: scope
+authority: supporting
+truth_sources:
+  - docs/platform-truth-index.md
+  - tests/fixtures/truth/platform-premises.md
+  - tests/fixtures/truth/platform-premises.contracts.json
+  - adr/0002-embedded-auth-and-token-exchange.md
+  - adr/0004-app-specific-https-webhooks-only.md
+---
+
 # テンプレートのスコープ
 
 ## 含まれるもの
@@ -10,9 +21,9 @@
 
 ## プラットフォーム前提
 
-- **Scope truth:** granted scopes は `currentAppInstallation.accessScopes` query で取得する（詳細は [ADR-0002](../adr/0002-embedded-auth-and-token-exchange.md)）。
-- **Webhook:** app-specific / HTTPS only。運用を単純化し、public app 審査と整合させるため（詳細は [ADR-0004](../adr/0004-app-specific-https-webhooks-only.md)）。
-- **`/auth/login`:** ショップドメイン入力は開発・手動確認向けの補助経路。主経路は managed install / 埋め込み起動。
+- **Scope truth:** granted scopes は `currentAppInstallation.accessScopes` query で取得する。webhook payload を truth にしない（詳細は ADR-0002）。
+- **Webhook:** app-specific / HTTPS only。運用を単純化し、public app 審査と整合させるため（詳細は ADR-0004）。
+- **`/auth/login`:** ショップドメイン入力は開発・手動確認向けの補助経路。本番利用の主経路は **managed install** または **Admin からの埋め込み起動**（ADR-0002 と整合）。
 
 正本ファイルの一覧は [platform-truth-index.md](platform-truth-index.md) を参照。
 

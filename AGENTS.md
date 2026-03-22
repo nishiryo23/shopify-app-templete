@@ -5,7 +5,7 @@
 ## 最初に読む順番
 
 1. `docs/template_scope.md`
-2. `docs/platform-truth-index.md`
+2. `docs/platform-truth-index.md`（**docs 探索の入口**。索引・プラットフォーム前提の同期は本ファイルから）
 3. `docs/codex_harness_bootstrap.md`
 4. `.agent/PLANS.md`
 5. `tickets/README.md`
