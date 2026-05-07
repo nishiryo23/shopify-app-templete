@@ -5,7 +5,7 @@ Managed App Pricing の hosted flow を前提に、`currentAppInstallation` を 
 
 ## Read first
 - `tickets/platform/P-003-entitlement-refresh-pricing-gate-and-state-mapping.md`
-- `docs/shopify_app_technical_spec_complete.md`
+- `docs/platform-truth-index.md`
 - `adr/0003-managed-pricing-as-billing-source-of-truth.md`
 - `.agents/skills/billing-entitlement/SKILL.md`
 - `app/routes/app.pricing.tsx`

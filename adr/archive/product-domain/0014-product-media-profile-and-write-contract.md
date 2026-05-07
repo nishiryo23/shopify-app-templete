@@ -44,5 +44,5 @@ media は product に紐づく image リソースであり、product core fields
 
 ## References
 - `tickets/product-domain/PD-007-media-staged-uploads.md`
-- `docs/shopify_app_technical_spec_complete.md` (Section 4.4)
+- `docs/platform-truth-index.md`
 - `adr/0005-product-domain-parity-mvp-boundary.md`

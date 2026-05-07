@@ -4,8 +4,8 @@
 `shopify.app.toml` に追加した compliance webhook subscription を、既存の infra-only deploy 運用を壊さずに Shopify CLI deploy 経路から反映できるようにする。
 
 ## Read first
-- `docs/shopify_app_requirements_definition_complete.md`
-- `docs/shopify_app_technical_spec_complete.md`
+- `docs/template_scope.md`
+- `docs/platform-truth-index.md`
 - `adr/0004-app-specific-https-webhooks-only.md`
 - `adr/0019-app-review-metadata-and-reviewer-packet-truth.md`
 - `/Users/nishimuraryousuke/.codex/skills/shopify-review-loop/references/loop-procedure.md`

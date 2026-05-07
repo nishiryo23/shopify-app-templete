@@ -5,7 +5,7 @@ Product Domain Parity MVP の write/verify/undo を支える永続化基盤を�
 
 ## Read first
 - `tickets/platform/P-005-db-queue-artifact-crypto-foundation.md`
-- `docs/shopify_app_technical_spec_complete.md`
+- `docs/platform-truth-index.md`
 - `adr/0006-aws-as-launch-infrastructure.md`
 - `adr/0021-harness-template-scope.md`
 - `.agents/skills/adr-discipline/SKILL.md`

@@ -5,7 +5,7 @@ Repo 内の Codex ハーネスを Product Domain Parity MVP 前提で整える�
 
 ## Read first
 - `AGENTS.md`
-- `docs/codex_harness_bootstrap.md`
+- `CODEX_START_PROMPT.md`
 - `.agent/PLANS.md`
 - `.agents/skills/harness-bootstrap/SKILL.md`
 - `.agents/skills/adr-discipline/SKILL.md`

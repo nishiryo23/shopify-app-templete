@@ -3,12 +3,13 @@
 このフォルダをプロジェクトルートとして読み込んでください。作業は次の順で進めます。
 
 1. `AGENTS.md` を最初に読む。
-2. `docs/template_scope.md`、`docs/codex_harness_bootstrap.md` を読む。
-3. `tickets/README.md` を読み、**harness tickets から順番に**進める。
-4. 対象 ticket を開き、関連する ADR と skill を確認する。
-5. 非自明な変更の前に `.agent/PLANS.md` をテンプレとして `plans/<ticket-id>.md` を作る。
-6. ticket に設計判断が含まれるなら、実装前に `adr/NNNN-short-title.md` を追加または更新する。
-7. 実装後は、差分要約、実行した検証、ADR への追記、未解決事項、次の ticket を示す。
+2. `docs/template_scope.md` を読む。
+3. `docs/platform-truth-index.md` を読む。
+4. `tickets/README.md` を読み、**harness tickets から順番に**進める。
+5. 対象 ticket を開き、関連する ADR と skill を確認する。
+6. 非自明な変更の前に `.agent/PLANS.md` をテンプレとして `plans/<ticket-id>.md` を作る。
+7. ticket に設計判断が含まれるなら、実装前に `adr/NNNN-short-title.md` を追加または更新する。
+8. 実装後は、差分要約、実行した検証、ADR への追記、未解決事項、次の ticket を示す。
 
 ## このセッションで守ること
 

@@ -22,18 +22,31 @@ truth_sources:
 | --- | --- |
 | app-review-metadata.md | App Store 提出用 review metadata の正本フィールド |
 | codex-sdk-review-loop.md | Codex SDK による shopify review ループ実行メモ |
-| codex_harness_bootstrap.md | Codex ハーネス導入と ticket 駆動のガイド |
 | dev-store-smoke-checklist.md | dev store / reviewer 向け smoke チェックリスト |
 | platform-truth-index.md | 本ファイル。プラットフォーム統合の索引と前提 |
 | release-gate-matrix.md | 提出前・日常ゲートの matrix |
 | reviewer-packet.md | reviewer と dev store dry-run 用パケット |
-| shopify-review-promotions.md | infra / CI の review 向け不変条件メモ |
-| shopify_app_requirements_definition_complete.md | テンプレ要件のエントリ（スコープ・参照） |
-| shopify_app_technical_spec_complete.md | 技術仕様の短い要約と検証ゲート |
 | shopify_local_development.md | Shopify CLI・トンネル URL・ローカル worker |
 | template_scope.md | テンプレに含むもの／含めないもの |
 
 新規 `docs/*.md` を追加するときは **フロントマター付与と本表の 1 行を同一コミット**で更新する。種別（`doc_type`）は各ファイルの YAML フロントマターを正とする。本表と `docs/*.md` の集合一致は `platform-premises-doc-parity` 契約で検証される。
+
+## 入口の使い分け
+
+- **プラットフォーム統合の正本入口:** 本ファイル。auth / billing / webhook / worker / retention の実装ファイルと ADR をここから辿る。
+- **テンプレ scope の正本:** `docs/template_scope.md`。テンプレに含めるもの / 含めないもの、主要 ADR の入口を固定する。
+- **開始導線 / harness first:** `CODEX_START_PROMPT.md` と `AGENTS.md`。Codex の起動順と ticket 順序は docs の要約ではなくこちらを正本にする。
+
+## Review / Submission
+
+App Store 審査・提出前ゲートの repo 内正本は次に固定する。
+
+- `docs/app-review-metadata.md` — support email / submission contact / privacy policy URL の正本
+- `docs/reviewer-packet.md` — reviewer と dev store dry-run で共有する経路の正本
+- `docs/release-gate-matrix.md` — submission 前の readiness gate の正本
+- `docs/dev-store-smoke-checklist.md` — reviewer path と一致する smoke 手順の正本
+
+提出前の詳細手順は `docs/release-gate-matrix.md` を起点に辿る。
 
 ## 認証・セッション・埋め込み
 

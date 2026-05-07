@@ -4,7 +4,7 @@
 embedded app shell と session-token based request auth を実装する。
 
 ## Read first
-- `docs/shopify_app_technical_spec_complete.md`
+- `docs/platform-truth-index.md`
 - `.agents/skills/shopify-lifecycle/SKILL.md`
 
 ## Scope

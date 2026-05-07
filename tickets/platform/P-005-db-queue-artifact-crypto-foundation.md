@@ -4,7 +4,7 @@
 Product Domain Parity MVP を支える保存・暗号化・非同期基盤を作る。
 
 ## Read first
-- `docs/shopify_app_technical_spec_complete.md`
+- `docs/platform-truth-index.md`
 - `.agents/skills/domain-feature-stub/SKILL.md`
 
 ## Scope

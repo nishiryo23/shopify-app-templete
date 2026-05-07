@@ -4,8 +4,8 @@
 `shop/redact` 実行中に現在の compliance job と lease を消してしまい、worker finalization が失敗する問題を修正する。
 
 ## Read first
-- `docs/shopify_app_requirements_definition_complete.md`
-- `docs/shopify_app_technical_spec_complete.md`
+- `docs/template_scope.md`
+- `docs/platform-truth-index.md`
 - `adr/0004-app-specific-https-webhooks-only.md`
 - `adr/0018-webhook-inbox-raw-payload-retention-boundary.md`
 - `/Users/nishimuraryousuke/.codex/skills/shopify-review-loop/references/loop-procedure.md`

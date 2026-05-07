@@ -43,5 +43,5 @@ product metafields は product core fields と別の row identity と write muta
 
 ## References
 - `tickets/product-domain/PD-008-product-metafields-and-seo.md`
-- `docs/shopify_app_technical_spec_complete.md` (Section 4.5)
+- `docs/platform-truth-index.md`
 - `adr/0005-product-domain-parity-mvp-boundary.md`

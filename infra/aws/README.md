@@ -113,3 +113,9 @@ secret は ECS task definition の `secrets.valueFrom` で注入する。GitHub 
 - Service provisioning IaC
 - Route 53 / DNS cutover
 - S3 adapter の本格実装
+
+## Review / deploy invariants
+
+- migration task の `exitCode` と service rollout の `services-stable` をセットで確認し、片方だけ成功でもロールアウト完了扱いにしない
+- `SHOPIFY_CLI_PARTNERS_TOKEN` などのローカル専用シークレットを CI のレンダリングや build context に混ぜない
+- host 依存や local Shopify CLI state（`~/.shopify` 等）を Docker build context に入れない

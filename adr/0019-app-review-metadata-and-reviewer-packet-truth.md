@@ -23,7 +23,7 @@ review metadata と reviewer path の source-of-truth が repo に揃い、revie
   - reviewer packet 不在の状態が続き、smoke checklist と提出手順の整合も固定できないため不採用
 
 ## References
-- `docs/shopify_app_technical_spec_complete.md`
+- `docs/release-gate-matrix.md`
 - `tickets/operability/O-002-app-review-readiness-and-release-gate.md`
 - `docs/dev-store-smoke-checklist.md`
 - `https://shopify.dev/docs/apps/launch/app-store-review/submit-app-for-review`

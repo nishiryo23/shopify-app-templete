@@ -5,7 +5,7 @@ App Store review readiness の truth を repo に置き、review metadata / revi
 
 ## Read first
 - `tickets/operability/O-002-app-review-readiness-and-release-gate.md`
-- `docs/shopify_app_technical_spec_complete.md`
+- `docs/release-gate-matrix.md`
 - `.agents/skills/app-review-readiness/SKILL.md`
 - `docs/dev-store-smoke-checklist.md`
 - `tests/contracts/shopify-config.contract.test.mjs`

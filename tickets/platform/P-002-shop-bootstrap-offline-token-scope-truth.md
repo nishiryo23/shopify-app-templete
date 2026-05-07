@@ -4,7 +4,7 @@
 install/reinstall 後に shop state と offline token と granted scopes truth を確立する。
 
 ## Read first
-- `docs/shopify_app_technical_spec_complete.md`
+- `docs/platform-truth-index.md`
 - `.agents/skills/shopify-lifecycle/SKILL.md`
 
 ## Scope

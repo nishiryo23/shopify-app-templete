@@ -27,6 +27,13 @@ truth_sources:
 
 正本ファイルの一覧は [platform-truth-index.md](platform-truth-index.md) を参照。
 
+## 主要 ADR
+
+- [0001-repo-truth-and-codex-harness](../adr/0001-repo-truth-and-codex-harness.md) — repo-local truth と Codex ハーネス
+- [0002-embedded-auth-and-token-exchange](../adr/0002-embedded-auth-and-token-exchange.md) — 埋め込み認証と token exchange
+- [0003-managed-pricing-as-billing-source-of-truth](../adr/0003-managed-pricing-as-billing-source-of-truth.md) — Managed Pricing を billing truth に置く
+- [0004-app-specific-https-webhooks-only](../adr/0004-app-specific-https-webhooks-only.md) — app-specific / HTTPS only の webhook 方針
+
 ## 意図的に含めないもの
 
 - 商品バルク・プレビュー・エクスポート等のドメイン機能（旧 Product Domain Parity MVP は [adr/archive/product-domain/](adr/archive/product-domain/) に退避）

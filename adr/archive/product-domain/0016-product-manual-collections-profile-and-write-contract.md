@@ -40,5 +40,5 @@ collections は product core や variants と異なり、membership add/remove �
 
 ## References
 - `tickets/product-domain/PD-009-manual-collections-membership.md`
-- `docs/shopify_app_technical_spec_complete.md` (Section 4.6)
+- `docs/platform-truth-index.md`
 - `adr/0005-product-domain-parity-mvp-boundary.md`

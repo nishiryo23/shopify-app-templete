@@ -42,5 +42,5 @@
 
 ## References
 - `tickets/platform/P-005-db-queue-artifact-crypto-foundation.md`
-- `docs/shopify_app_technical_spec_complete.md`
+- `docs/platform-truth-index.md`
 - `adr/0006-aws-as-launch-infrastructure.md`

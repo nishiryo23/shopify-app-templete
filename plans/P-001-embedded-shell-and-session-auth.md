@@ -5,7 +5,7 @@
 
 ## Read first
 - `tickets/platform/P-001-embedded-shell-and-session-auth.md`
-- `docs/shopify_app_technical_spec_complete.md`
+- `docs/platform-truth-index.md`
 - `.agents/skills/shopify-lifecycle/SKILL.md`
 - `adr/0002-embedded-auth-and-token-exchange.md`
 - Shopify React Router template

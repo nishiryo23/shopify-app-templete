@@ -44,4 +44,4 @@
 - `tickets/product-domain/PD-002-upload-provenance-preview-engine.md`
 - `adr/0007-db-queue-artifact-and-provenance-crypto-truth.md`
 - `adr/0008-product-export-route-and-artifact-contract.md`
-- `docs/shopify_app_technical_spec_complete.md`
+- `docs/platform-truth-index.md`

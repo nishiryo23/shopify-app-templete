@@ -7,7 +7,7 @@ Shopify webhook inbox の重複排除を `X-Shopify-Event-Id` 基準へ修正し
 - `tickets/platform/P-004-webhooks-uninstall-redact-lifecycle.md`
 - `adr/0004-app-specific-https-webhooks-only.md`
 - `.agents/skills/webhook-safety/SKILL.md`
-- `docs/shopify_app_technical_spec_complete.md`
+- `docs/platform-truth-index.md`
 - `domain/webhooks/inbox-contract.mjs`
 - `tests/contracts/webhook-ingress.contract.test.mjs`
 

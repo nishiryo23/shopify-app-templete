@@ -48,4 +48,4 @@
 ## References
 - `tickets/product-domain/PD-001-product-export-foundation.md`
 - `adr/0007-db-queue-artifact-and-provenance-crypto-truth.md`
-- `docs/shopify_app_technical_spec_complete.md`
+- `docs/platform-truth-index.md`

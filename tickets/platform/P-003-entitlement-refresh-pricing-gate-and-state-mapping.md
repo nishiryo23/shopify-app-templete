@@ -4,7 +4,7 @@
 Managed Pricing の hosted flow と entitlement state machine を実装する。
 
 ## Read first
-- `docs/shopify_app_technical_spec_complete.md`
+- `docs/platform-truth-index.md`
 - `.agents/skills/billing-entitlement/SKILL.md`
 
 ## Scope

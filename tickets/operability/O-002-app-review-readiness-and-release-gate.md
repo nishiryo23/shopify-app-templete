@@ -4,7 +4,9 @@
 public app review と launch gate を完成させる。
 
 ## Read first
-- `docs/shopify_app_technical_spec_complete.md`
+- `docs/app-review-metadata.md`
+- `docs/release-gate-matrix.md`
+- `docs/reviewer-packet.md`
 - `.agents/skills/app-review-readiness/SKILL.md`
 
 ## Scope

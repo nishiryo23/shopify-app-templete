@@ -4,7 +4,7 @@
 launch-critical path を早い段階で smoke できる土台を作る。
 
 ## Read first
-- `docs/codex_harness_bootstrap.md`
+- `CODEX_START_PROMPT.md`
 - `.agents/skills/app-review-readiness/SKILL.md`
 
 ## Scope

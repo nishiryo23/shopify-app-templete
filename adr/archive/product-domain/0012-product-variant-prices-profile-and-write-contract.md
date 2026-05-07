@@ -37,4 +37,4 @@
 ## References
 - `tickets/product-domain/PD-005-prices-and-compare-at.md`
 - `adr/0011-product-variants-profile-and-write-contract.md`
-- `docs/shopify_app_technical_spec_complete.md`
+- `docs/platform-truth-index.md`

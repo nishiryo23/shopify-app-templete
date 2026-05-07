@@ -6,7 +6,7 @@
 
 1. `docs/template_scope.md`
 2. `docs/platform-truth-index.md`（**docs 探索の入口**。索引・プラットフォーム前提の同期は本ファイルから）
-3. `docs/codex_harness_bootstrap.md`
+3. `CODEX_START_PROMPT.md`（開始導線の要約。ここまで読んだら harness tickets に進む）
 4. `.agent/PLANS.md`
 5. `tickets/README.md`
 6. 対象 ticket

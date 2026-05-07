@@ -7,7 +7,6 @@ Codex / エージェント向けの **チケット制・ADR・契約テスト・
 - [AGENTS.md](AGENTS.md)
 - [docs/platform-truth-index.md](docs/platform-truth-index.md)（docs 探索の入口・プラットフォーム統合索引）
 - [docs/template_scope.md](docs/template_scope.md)
-- [docs/codex_harness_bootstrap.md](docs/codex_harness_bootstrap.md)
 - [CODEX_START_PROMPT.md](CODEX_START_PROMPT.md)
 - [.agent/PLANS.md](.agent/PLANS.md)
 - `.agents/skills/*`
@@ -18,8 +17,8 @@ Codex / エージェント向けの **チケット制・ADR・契約テスト・
 
 1. [CODEX_START_PROMPT.md](CODEX_START_PROMPT.md)
 2. [AGENTS.md](AGENTS.md)
-3. [docs/platform-truth-index.md](docs/platform-truth-index.md)（docs 探索の入口）
-4. [docs/template_scope.md](docs/template_scope.md)
+3. [docs/template_scope.md](docs/template_scope.md)
+4. [docs/platform-truth-index.md](docs/platform-truth-index.md)（docs 探索の入口）
 5. [tickets/README.md](tickets/README.md)
 
 ## Fork 時
@@ -33,7 +32,7 @@ Codex / エージェント向けの **チケット制・ADR・契約テスト・
 - **日常（CI / ローカル）:** `pnpm check` — lint, contracts, ADR discipline, typecheck, build, smoke 一覧確認。
 - **提出前:** `pnpm run verify:pre-release` — 上記 + Playwright smoke 実走。URL / 認証情報が必要。
 
-提出時は [docs/release-gate-matrix.md](docs/release-gate-matrix.md) を確認し、[docs/reviewer-packet.md](docs/reviewer-packet.md) の evidence を更新すること。正本ファイルの一覧は [docs/platform-truth-index.md](docs/platform-truth-index.md) を参照。
+提出時は [docs/release-gate-matrix.md](docs/release-gate-matrix.md) を確認し、[docs/reviewer-packet.md](docs/reviewer-packet.md) の evidence を更新すること。プラットフォーム統合の正本索引は [docs/platform-truth-index.md](docs/platform-truth-index.md)、テンプレ境界は [docs/template_scope.md](docs/template_scope.md) を参照。
 
 ## Runtime notes
 

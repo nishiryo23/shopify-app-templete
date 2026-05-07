@@ -5,8 +5,8 @@ launch 前に、structured logs / metrics / alerts / retention sweep を repo tr
 
 ## Read first
 - `tickets/operability/O-001-observability-telemetry-retention-sweeps.md`
-- `docs/shopify_app_technical_spec_complete.md`
-- `docs/shopify_app_requirements_definition_complete.md`
+- `docs/platform-truth-index.md`
+- `docs/template_scope.md`
 - `adr/0006-aws-as-launch-infrastructure.md`
 - `adr/0007-db-queue-artifact-and-provenance-crypto-truth.md`
 - `.agents/skills/app-review-readiness/SKILL.md`

@@ -9,13 +9,14 @@ function readProjectFile(relativePath) {
   return readFileSync(path.join(rootDir, relativePath), "utf8");
 }
 
-test("technical spec points review metadata at repo-local truth documents", () => {
-  const spec = readProjectFile("docs/shopify_app_technical_spec_complete.md");
+test("platform truth index points review metadata at repo-local truth documents", () => {
+  const index = readProjectFile("docs/platform-truth-index.md");
 
-  assert.match(spec, /## 11\.4 review metadata/);
-  assert.match(spec, /docs\/app-review-metadata\.md/);
-  assert.match(spec, /docs\/reviewer-packet\.md/);
-  assert.match(spec, /docs\/release-gate-matrix\.md/);
+  assert.match(index, /## Review \/ Submission/);
+  assert.match(index, /docs\/app-review-metadata\.md/);
+  assert.match(index, /docs\/reviewer-packet\.md/);
+  assert.match(index, /docs\/release-gate-matrix\.md/);
+  assert.match(index, /docs\/dev-store-smoke-checklist\.md/);
 });
 
 test("review metadata doc enumerates required submission fields and blocker sentinel", () => {

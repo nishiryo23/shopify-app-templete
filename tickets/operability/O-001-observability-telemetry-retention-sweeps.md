@@ -4,7 +4,7 @@
 launch 前に監視・retention・redact と整合する telemetry を完成させる。
 
 ## Read first
-- `docs/shopify_app_technical_spec_complete.md`
+- `docs/platform-truth-index.md`
 - `.agents/skills/app-review-readiness/SKILL.md`
 
 ## Scope

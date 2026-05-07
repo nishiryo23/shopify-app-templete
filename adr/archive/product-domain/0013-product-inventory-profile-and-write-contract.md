@@ -43,6 +43,6 @@ inventory は location ごとの row identity と compare-and-set write を持�
 
 ## References
 - `tickets/product-domain/PD-006-inventory-pipeline.md`
-- `docs/shopify_app_requirements_definition_complete.md`
-- `docs/shopify_app_technical_spec_complete.md`
+- `docs/template_scope.md`
+- `docs/platform-truth-index.md`
 - `adr/0005-product-domain-parity-mvp-boundary.md`

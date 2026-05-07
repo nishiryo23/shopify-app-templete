@@ -5,7 +5,7 @@ repo 共通の一般 lint を追加し、`pnpm check` で guardrail と contract
 
 ## Read first
 - `tickets/harness/H-002-quality-gates-and-architecture-guardrails.md`
-- `docs/codex_harness_bootstrap.md`
+- `CODEX_START_PROMPT.md`
 - `adr/0001-repo-truth-and-codex-harness.md`
 - `https://nyosegawa.github.io/posts/harness-engineering-best-practices-2026/`
 - `https://eslint.org/docs/latest/use/getting-started`

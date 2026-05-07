@@ -5,7 +5,7 @@ install / reinstall 後の bootstrap と、encrypted offline token 保存と、q
 
 ## Read first
 - `tickets/platform/P-002-shop-bootstrap-offline-token-scope-truth.md`
-- `docs/shopify_app_technical_spec_complete.md`
+- `docs/platform-truth-index.md`
 - `.agents/skills/shopify-lifecycle/SKILL.md`
 - `adr/0002-embedded-auth-and-token-exchange.md`
 - `adr/0004-app-specific-https-webhooks-only.md`

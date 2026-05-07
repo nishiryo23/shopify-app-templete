@@ -4,8 +4,8 @@
 `shop/redact` 実行中に外部 artifact 削除が先行しても、DB failure や lease loss で S3 と DB が不整合にならないようにする。
 
 ## Read first
-- `docs/shopify_app_requirements_definition_complete.md`
-- `docs/shopify_app_technical_spec_complete.md`
+- `docs/template_scope.md`
+- `docs/platform-truth-index.md`
 - `adr/0004-app-specific-https-webhooks-only.md`
 - `adr/0018-webhook-inbox-raw-payload-retention-boundary.md`
 - `/Users/nishimuraryousuke/.codex/skills/shopify-review-loop/references/loop-procedure.md`

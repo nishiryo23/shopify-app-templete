@@ -4,7 +4,7 @@
 AWS を launch 標準インフラとして起動できる最小構成を作る。
 
 ## Read first
-- `docs/shopify_app_technical_spec_complete.md`
+- `docs/platform-truth-index.md`
 - `adr/0006-aws-as-launch-infrastructure.md`
 
 ## Scope

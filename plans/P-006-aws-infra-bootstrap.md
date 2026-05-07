@@ -5,7 +5,7 @@ AWS launch 基盤の bootstrap を repo 上で成立させ、`web` / `worker` / 
 
 ## Read first
 - `tickets/platform/P-006-aws-infra-bootstrap.md`
-- `docs/shopify_app_technical_spec_complete.md`
+- `docs/platform-truth-index.md`
 - `adr/0006-aws-as-launch-infrastructure.md`
 - `adr/0007-db-queue-artifact-and-provenance-crypto-truth.md`
 - `.agents/skills/adr-discipline/SKILL.md`
