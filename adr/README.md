@@ -22,6 +22,9 @@
 - 0018: webhook inbox raw payload retention boundary
 - 0019: app review metadata and reviewer packet truth
 - 0021: harness template scope（ドメイン非同梱）
+- 0022: Polaris admin UI baseline and conventions
+- 0023: empty minimal access scopes baseline
+- 0024: API version single truth and CI gate
 
 ## Archive
 

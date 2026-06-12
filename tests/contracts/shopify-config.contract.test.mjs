@@ -32,6 +32,66 @@ test("shopify app config whitelists the React Router auth callback", () => {
   assert.doesNotMatch(config, /https:\/\/example\.com\/api\/auth/);
 });
 
+test("admin API version is a single truth shared by server code and webhook config", () => {
+  const server = readProjectFile("app/shopify.server.ts");
+  const config = readProjectFile("shopify.app.toml");
+
+  // ApiVersion enum 名 → バージョン文字列。バージョン更新時は server / toml / この map を同時に更新する（ADR-0024）。
+  const apiVersionByEnumName = {
+    January26: "2026-01",
+  };
+
+  const serverMatch = server.match(/apiVersion: ApiVersion\.(\w+)/);
+  assert.ok(serverMatch, "shopify.server.ts must declare apiVersion: ApiVersion.<Name>");
+
+  const expectedVersion = apiVersionByEnumName[serverMatch[1]];
+  assert.ok(
+    expectedVersion,
+    `unknown ApiVersion.${serverMatch[1]} — update the apiVersionByEnumName map together with the version bump (ADR-0024)`,
+  );
+
+  const tomlMatch = config.match(/api_version = "([0-9]{4}-[0-9]{2})"/);
+  assert.ok(tomlMatch, "shopify.app.toml must declare webhooks api_version");
+  assert.equal(
+    tomlMatch[1],
+    expectedVersion,
+    "shopify.app.toml webhooks api_version must match ApiVersion in shopify.server.ts (ADR-0024)",
+  );
+
+  const offlineAdmin = readProjectFile("workers/offline-admin.mjs");
+  const workerMatch = offlineAdmin.match(/apiVersion: ApiVersion\.(\w+)/);
+  assert.ok(workerMatch, "offline admin worker must declare apiVersion: ApiVersion.<Name>");
+  assert.equal(
+    workerMatch[1],
+    serverMatch[1],
+    "worker ApiVersion must match shopify.server.ts (ADR-0024)",
+  );
+});
+
+test("template baseline keeps access scopes empty and treats SCOPES as optional", () => {
+  const config = readProjectFile("shopify.app.toml");
+  const server = readProjectFile("app/shopify.server.ts");
+  const offlineAdmin = readProjectFile("workers/offline-admin.mjs");
+  const workerBootstrap = readProjectFile("workers/bootstrap.mjs");
+
+  assert.match(config, /scopes = ""/, "template baseline must request no access scopes (ADR-0023)");
+  assert.match(
+    server,
+    /SCOPES\?\.split\(","\)\s*\.map\(\(scope\) => scope\.trim\(\)\)\s*\.filter\(Boolean\)/m,
+    "empty SCOPES must not become [\"\"] in shopify.server.ts",
+  );
+  assert.match(
+    offlineAdmin,
+    /SCOPES\?\.split\(","\)\s*\.map\(\(scope\) => scope\.trim\(\)\)\s*\.filter\(Boolean\)/m,
+    "empty SCOPES must not become [\"\"] in the offline admin worker",
+  );
+  assert.doesNotMatch(
+    workerBootstrap,
+    /"SCOPES"/,
+    "worker bootstrap must not require SCOPES (ADR-0023)",
+  );
+});
+
 test("shopify app config declares app-specific lifecycle webhooks", () => {
   const config = readProjectFile("shopify.app.toml");
   const webConfig = readProjectFile("shopify.web.toml");

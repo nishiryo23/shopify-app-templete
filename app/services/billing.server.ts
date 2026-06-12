@@ -3,6 +3,7 @@ import { redirect } from "react-router";
 
 import { authenticateAndBootstrapShop } from "./auth-bootstrap.server";
 import { deriveCurrentInstallationEntitlement } from "~/domain/billing/current-installation.mjs";
+import { derivePlanSelectionUrl } from "~/domain/billing/managed-pricing-url.mjs";
 import { queryCurrentAppInstallation } from "~/platform/shopify/current-app-installation.server";
 
 type DerivedBillingEntitlement = ReturnType<typeof deriveCurrentInstallationEntitlement>;
@@ -25,6 +26,7 @@ export type BillingEntitlement = Omit<DerivedBillingEntitlement, "checkedAt"> & 
 
 export type BillingGateLoaderData = {
   entitlement: BillingEntitlement;
+  planSelectionUrl: string | null;
 };
 
 async function readCurrentBillingEntitlement(request: Request): Promise<BillingEntitlement> {
@@ -33,6 +35,21 @@ async function readCurrentBillingEntitlement(request: Request): Promise<BillingE
   return queryCurrentAppInstallationEntitlement(authContext.admin, {
     shopDomain: authContext.session.shop,
   });
+}
+
+async function readCurrentBillingGate(request: Request): Promise<BillingGateLoaderData> {
+  const authContext = await authenticateAndBootstrapShop(request);
+  const entitlement = await queryCurrentAppInstallationEntitlement(authContext.admin, {
+    shopDomain: authContext.session.shop,
+  });
+
+  return {
+    entitlement,
+    planSelectionUrl: derivePlanSelectionUrl({
+      appHandle: process.env.SHOPIFY_APP_HANDLE,
+      shopDomain: authContext.session.shop,
+    }),
+  };
 }
 
 export async function queryCurrentAppInstallationEntitlement(
@@ -68,21 +85,18 @@ export async function queryCurrentAppInstallationEntitlement(
 }
 
 export async function loadPricingGate({ request }: LoaderFunctionArgs): Promise<BillingGateLoaderData> {
-  return {
-    entitlement: await readCurrentBillingEntitlement(request),
-  };
+  return readCurrentBillingGate(request);
 }
 
 export async function loadWelcomeGate({ request }: LoaderFunctionArgs): Promise<BillingGateLoaderData> {
-  const entitlement = await readCurrentBillingEntitlement(request);
+  const gate = await readCurrentBillingGate(request);
+  const { entitlement } = gate;
 
   if (entitlement.state === "ACTIVE_PAID") {
     throw redirect("/app");
   }
 
-  return {
-    entitlement,
-  };
+  return gate;
 }
 
 export async function loadBillingRefresh({ request }: LoaderFunctionArgs) {

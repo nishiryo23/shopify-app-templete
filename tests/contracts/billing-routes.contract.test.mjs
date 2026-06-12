@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
+import { derivePlanSelectionUrl } from "../../domain/billing/managed-pricing-url.mjs";
+
 const rootDir = path.resolve(import.meta.dirname, "../..");
 
 function readProjectFile(relativePath) {
@@ -34,6 +36,53 @@ test("pricing route uses shared gate data and refresh endpoint", () => {
   assert.match(pricingRoute, /load\("\/app\/billing\/refresh"\)/);
   assert.match(pricingRoute, /Shopify の最新の契約状態をもとに表示しています/);
   assert.doesNotMatch(pricingRoute, /P-003 で pricing gate を実装する前の最小 shell/);
+});
+
+test("plan selection deep link derivation is guarded and trigger-only", () => {
+  assert.equal(
+    derivePlanSelectionUrl({ appHandle: "demo-app", shopDomain: "example.myshopify.com" }),
+    "https://admin.shopify.com/store/example/charges/demo-app/pricing_plans",
+  );
+  assert.equal(
+    derivePlanSelectionUrl({ appHandle: "", shopDomain: "example.myshopify.com" }),
+    null,
+    "missing app handle must hide the deep link",
+  );
+  assert.equal(
+    derivePlanSelectionUrl({ appHandle: undefined, shopDomain: "example.myshopify.com" }),
+    null,
+    "unset SHOPIFY_APP_HANDLE must hide the deep link",
+  );
+  assert.equal(
+    derivePlanSelectionUrl({ appHandle: "demo-app", shopDomain: "shop.example.com" }),
+    null,
+    "custom shop domains must hide the deep link",
+  );
+  assert.equal(
+    derivePlanSelectionUrl({ appHandle: "demo app!", shopDomain: "example.myshopify.com" }),
+    null,
+    "invalid handles must not be interpolated into the admin URL",
+  );
+
+  const url = derivePlanSelectionUrl({ appHandle: "demo-app", shopDomain: "example.myshopify.com" });
+  assert.doesNotMatch(url, /charge_id|\?/, "deep link must stay trigger-only without query shortcuts");
+});
+
+test("billing gate loaders expose the plan selection url from the service layer", () => {
+  const service = readProjectFile("app/services/billing.server.ts");
+
+  assert.match(service, /derivePlanSelectionUrl/);
+  assert.match(service, /planSelectionUrl: string \| null/);
+  assert.match(service, /SHOPIFY_APP_HANDLE/);
+});
+
+test("pricing route renders a guarded plan selection CTA with top-level navigation", () => {
+  const pricingRoute = readProjectFile("app/routes/app.pricing.tsx");
+
+  assert.match(pricingRoute, /data-testid="pricing-plan-selection-cta"/);
+  assert.match(pricingRoute, /target="_top"/);
+  assert.match(pricingRoute, /\{planSelectionUrl \? \(/, "CTA must not render without a derived URL");
+  assert.match(pricingRoute, /getPlanSelectionCtaLabel/, "CTA label must come from admin copy");
 });
 
 test("welcome route redirects active paid shops and ignores query-parameter shortcuts", () => {

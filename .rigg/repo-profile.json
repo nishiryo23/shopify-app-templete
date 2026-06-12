@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "displayName": "shopify-app-harness-template",
+  "mode": "cursor",
+  "standardsDocs": [
+    "AGENTS.md",
+    "CODEX_START_PROMPT.md",
+    "docs/template_scope.md",
+    "docs/platform-truth-index.md",
+    ".agent/PLANS.md",
+    "tickets/README.md",
+    "README.md",
+    ".github/workflows/ci.yml"
+  ],
+  "verifyCommands": [
+    "pnpm check"
+  ],
+  "greenfieldDefault": false,
+  "reviewScopeNote": "Shopify embedded app harness template. Default review scope is the current uncommitted diff, branch, or commit only. Do not add product-domain features, scopes, billing truth changes, webhook policy changes, or shop-specific webhooks unless an active ticket and ADR explicitly authorize them. For Shopify-specific validity, use official Shopify documentation as the source of truth.",
+  "forbiddenChanges": [
+    "Do not change shopify.app.toml, access scopes, managed pricing or billing truth, webhook policy, or privacy/delete contracts unless the active ticket and ADR explicitly require it.",
+    "Do not add Orders, Customers, or Discounts scopes by default.",
+    "Do not introduce direct Admin API access, REST Admin API usage, off-platform billing, or shop-specific webhooks.",
+    "Do not auto-commit."
+  ]
+}

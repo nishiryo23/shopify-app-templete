@@ -1,0 +1,14 @@
+id: adopt-existing-repo
+steps:
+  - id: generate_profile
+    type: shell
+    with:
+      command: node scripts/rigg-adopt-existing-repo.mjs
+      stdout:
+        mode: text
+
+  - id: write_profile
+    type: write_file
+    with:
+      path: .rigg/repo-profile.json
+      content: ${{ steps.generate_profile.result }}

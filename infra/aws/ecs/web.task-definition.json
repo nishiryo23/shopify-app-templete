@@ -24,6 +24,7 @@
         { "name": "PORT", "value": "3000" },
         { "name": "SHOPIFY_API_KEY", "value": "__SHOPIFY_API_KEY__" },
         { "name": "SHOPIFY_APP_URL", "value": "__SHOPIFY_APP_URL__" },
+        { "name": "SHOPIFY_APP_HANDLE", "value": "__SHOPIFY_APP_HANDLE__" },
         { "name": "SCOPES", "value": "__SCOPES__" },
         { "name": "AWS_REGION", "value": "__AWS_REGION__" },
         { "name": "S3_ARTIFACT_BUCKET", "value": "__S3_ARTIFACT_BUCKET__" },

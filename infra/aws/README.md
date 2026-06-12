@@ -40,7 +40,8 @@
 - `PORT` (`web` のみ)
 - `SHOPIFY_API_KEY`
 - `SHOPIFY_APP_URL`
-- `SCOPES`
+- `SHOPIFY_APP_HANDLE` (`web` のみ・optional。Managed Pricing plan selection deep link 用。空なら CTA 非表示)
+- `SCOPES`（optional。テンプレ既定は空＝ADR-0023。scope を使うドメイン機能を追加したときに設定）
 - `AWS_REGION`
 - `S3_ARTIFACT_BUCKET`
 - `S3_ARTIFACT_PREFIX`

@@ -20,6 +20,7 @@ truth_sources:
 
 | ファイル | 説明 |
 | --- | --- |
+| admin-ui-guidelines.md | 管理画面 UI の品質規約（Polaris / 状態設計 / testid） |
 | app-review-metadata.md | App Store 提出用 review metadata の正本フィールド |
 | codex-sdk-review-loop.md | Codex SDK による shopify review ループ実行メモ |
 | dev-store-smoke-checklist.md | dev store / reviewer 向け smoke チェックリスト |
@@ -85,6 +86,7 @@ App Store 審査・提出前ゲートの repo 内正本は次に固定する。
 | `app/routes/app.welcome.tsx` | welcome / entitlement refresh |
 | `domain/billing/entitlement-state.mjs` | subscription status → entitlement mapping |
 | `domain/billing/current-installation.mjs` | currentAppInstallation query |
+| `domain/billing/managed-pricing-url.mjs` | plan selection deep link URL（trigger only, `SHOPIFY_APP_HANDLE`） |
 
 **関連 ADR:** [0003-managed-pricing-as-billing-source-of-truth](../adr/0003-managed-pricing-as-billing-source-of-truth.md)
 

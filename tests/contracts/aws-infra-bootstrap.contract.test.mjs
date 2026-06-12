@@ -50,6 +50,7 @@ const fixtureReplacements = Object.freeze({
   SCOPES: "read_products,write_products",
   SHOPIFY_API_KEY: "test-api-key",
   SHOPIFY_API_SECRET_ARN: "arn:aws:secretsmanager:ap-northeast-1:123:secret:shopify-api",
+  SHOPIFY_APP_HANDLE: "shopify-app-template",
   SHOPIFY_APP_URL: "https://example.com",
   TELEMETRY_PSEUDONYM_KEY_SECRET_ARN:
     "arn:aws:secretsmanager:ap-northeast-1:123:secret:telemetry",
@@ -106,7 +107,12 @@ test("deploy workflow includes migrate before web and worker updates", () => {
   assert.match(workflow, /Missing required secret: SHOPIFY_CLI_PARTNERS_TOKEN/);
   assert.match(workflow, /Validate required Shopify app config/);
   assert.match(workflow, /Missing required workflow env:/);
-  assert.match(workflow, /SHOPIFY_API_KEY SHOPIFY_APP_URL SCOPES/);
+  assert.match(workflow, /for name in SHOPIFY_API_KEY SHOPIFY_APP_URL; do/);
+  assert.doesNotMatch(
+    workflow,
+    /for name in [^\n]*SCOPES/,
+    "SCOPES must stay optional in the deploy workflow validation (ADR-0023)",
+  );
   assert.ok(
     workflow.indexOf("Register and run migration task") <
       workflow.indexOf("Update web service"),
@@ -993,6 +999,23 @@ test("worker validation fails fast when telemetry pseudonym key is missing", () 
       }),
     /Missing required worker secrets: TELEMETRY_PSEUDONYM_KEY/,
   );
+});
+
+test("worker validation allows SCOPES to be omitted (empty minimal scope baseline)", () => {
+  const config = validateWorkerEnvironment({
+    AWS_REGION: "ap-northeast-1",
+    DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/template",
+    QUEUE_LEASE_MS: "300000",
+    QUEUE_POLL_INTERVAL_MS: "30000",
+    S3_ARTIFACT_BUCKET: "template-artifacts",
+    S3_ARTIFACT_PREFIX: "artifacts",
+    SHOPIFY_API_KEY: "test-api-key",
+    SHOPIFY_API_SECRET: "secret",
+    SHOPIFY_APP_URL: "https://example.com",
+    SHOP_TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 2).toString("base64"),
+  });
+
+  assert.equal(config.awsRegion, "ap-northeast-1");
 });
 
 test("worker validation allows telemetry pseudonym key to be omitted outside production", () => {

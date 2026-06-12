@@ -1,0 +1,335 @@
+id: review-branch
+inputs:
+  base_branch:
+    type: string
+    description: Base branch to diff against
+steps:
+  - id: load_profile
+    type: shell
+    with:
+      command: node scripts/rigg-read-profile.mjs .rigg/repo-profile.json --check-docs
+      stdout:
+        mode: json
+
+  - id: ensure_codex_version
+    type: shell
+    with:
+      stdout:
+        mode: none
+      command: node scripts/rigg-check-codex-version.mjs
+
+  - id: ensure_cursor_auth
+    if: ${{ steps.load_profile.result.mode == "cursor" }}
+    type: shell
+    with:
+      stdout:
+        mode: none
+      command: node scripts/rigg-check-cursor-auth.mjs
+
+  - id: baseline_snapshot
+    type: shell
+    with:
+      command: node scripts/rigg-worktree-snapshot.mjs
+      stdout:
+        mode: json
+
+  - id: init_state
+    type: shell
+    with:
+      stdout:
+        mode: none
+      command: |
+        cat <<'EOF' | node scripts/rigg-review-state.mjs init --state-file ".rigg-review-state.json"
+        ${{ toJSON(steps.baseline_snapshot.result) }}
+        EOF
+
+  - id: remediation
+    type: loop
+    max: 6
+    until: ${{ len(steps.review.result.findings) == 0 || len(steps.triage_mode.result.payload.findings) == 0 }}
+    steps:
+      - id: review
+        type: codex
+        with:
+          kind: review
+          model: gpt-5.5
+          target:
+            type: base
+            branch: ${{ inputs.base_branch }}
+
+      - id: record_review
+        type: shell
+        with:
+          stdout:
+            mode: none
+          command: |
+            cat <<'EOF' | node scripts/rigg-review-state.mjs record --state-file ".rigg-review-state.json" --iteration "${{ run.iteration }}" --section review
+            ${{ toJSON(steps.review.result) }}
+            EOF
+
+      - id: triage_mode
+        type: branch
+        cases:
+          - if: ${{ steps.load_profile.result.mode == "cursor" }}
+            steps:
+              - id: triage_cursor
+                type: shell
+                with:
+                  stdout:
+                    mode: json
+                  command: |
+                    set -o pipefail
+
+                    if [ "${{ len(steps.review.result.findings) }}" -eq 0 ]; then
+                      printf '%s\n' '{"findings":[],"directives":[],"discarded":[],"oscillations":[]}'
+                      exit 0
+                    fi
+
+                    cursor agent --force --approve-mcps --print --output-format json --trust --model composer-2.5-fast "$(cat <<'EOF'
+                    You are triaging code review findings for the diff against `${{ inputs.base_branch }}`.
+                    Perform all analysis silently.
+
+                    Read these repository standards first:
+                    - ${{ join(steps.load_profile.result.standardsDocs, "\n- ") }}
+
+                    Additional repo scope note:
+                    ${{ steps.load_profile.result.reviewScopeNote }}
+
+                    Forbidden changes:
+                    - ${{ join(steps.load_profile.result.forbiddenChanges, "\n- ") }}
+
+                    Read `.rigg-review-state.json` before deciding on oscillations or sticky directives.
+                    Only keep findings that are factually correct, relevant to the current diff, and actionable.
+
+                    Findings:
+                    ${{ toJSON(steps.review.result) }}
+
+                    Your ENTIRE response must be a single JSON object.
+                    No text before or after.
+                    No markdown fences.
+                    No explanation.
+                    ONLY the JSON object with this shape:
+                    {"findings":[],"directives":[],"discarded":[],"oscillations":[]}
+                    EOF
+                    )" | node scripts/rigg-cursor-headless.mjs json
+            exports:
+              payload: ${{ steps.triage_cursor.result }}
+          - else:
+            steps:
+              - id: triage_codex_raw
+                type: codex
+                with:
+                  kind: turn
+                  model: gpt-5.5
+                  prompt: |
+                    Triage code review findings for the diff against `${{ inputs.base_branch }}`.
+
+                    Read these repository standards first:
+                    - ${{ join(steps.load_profile.result.standardsDocs, "\n- ") }}
+
+                    Additional repo scope note:
+                    ${{ steps.load_profile.result.reviewScopeNote }}
+
+                    Forbidden changes:
+                    - ${{ join(steps.load_profile.result.forbiddenChanges, "\n- ") }}
+
+                    Read `.rigg-review-state.json` before deciding on oscillations or sticky directives.
+                    Only keep findings that are factually correct, relevant to the current diff, and actionable.
+
+                    Findings:
+                    ${{ toJSON(steps.review.result) }}
+
+                    Return only a JSON object with this exact shape:
+                    {"findings":[],"directives":[],"discarded":[],"oscillations":[]}
+
+              - id: triage_codex_parse
+                type: shell
+                with:
+                  stdout:
+                    mode: json
+                  command: |
+                    cat <<'EOF' | node scripts/rigg-extract-json-suffix.mjs
+                    ${{ steps.triage_codex_raw.result }}
+                    EOF
+            exports:
+              payload: ${{ steps.triage_codex_parse.result }}
+
+      - id: record_triage
+        type: shell
+        with:
+          stdout:
+            mode: none
+          command: |
+            cat <<'EOF' | node scripts/rigg-review-state.mjs record --state-file ".rigg-review-state.json" --iteration "${{ run.iteration }}" --section triage
+            ${{ toJSON(steps.triage_mode.result.payload) }}
+            EOF
+
+      - id: capture_pre_fix_snapshot
+        if: ${{ len(steps.triage_mode.result.payload.findings) > 0 }}
+        type: shell
+        with:
+          stdout:
+            mode: none
+          command: node scripts/rigg-review-state.mjs capture --state-file ".rigg-review-state.json" --iteration "${{ run.iteration }}" --slot before_fix_snapshot
+
+      - id: fix
+        if: ${{ len(steps.triage_mode.result.payload.findings) > 0 }}
+        type: codex
+        with:
+          kind: turn
+          model: gpt-5.5
+          prompt: |
+            Apply root-cause fixes for triaged findings in the diff against `${{ inputs.base_branch }}`.
+
+            Read these repository standards first:
+            - ${{ join(steps.load_profile.result.standardsDocs, "\n- ") }}
+
+            Additional repo scope note:
+            ${{ steps.load_profile.result.reviewScopeNote }}
+
+            Forbidden changes:
+            - ${{ join(steps.load_profile.result.forbiddenChanges, "\n- ") }}
+
+            Findings:
+            ${{ toJSON(steps.triage_mode.result.payload.findings) }}
+
+            Directives:
+            ${{ toJSON(steps.triage_mode.result.payload.directives) }}
+
+      - id: post_fix_flow
+        type: branch
+        cases:
+          - if: ${{ len(steps.triage_mode.result.payload.findings) > 0 }}
+            steps:
+              - id: run_verify
+                type: shell
+                with:
+                  stdout:
+                    mode: json
+                  command: node scripts/rigg-run-verify.mjs .rigg/repo-profile.json
+
+              - id: validate_mode
+                type: branch
+                cases:
+                  - if: ${{ steps.load_profile.result.mode == "cursor" }}
+                    steps:
+                      - id: validate_cursor
+                        type: shell
+                        with:
+                          stdout:
+                            mode: json
+                          command: |
+                            set -o pipefail
+                            cursor agent --force --approve-mcps --print --output-format json --trust --model composer-2.5-fast "$(cat <<'EOF'
+                            You are validating whether the diff against `${{ inputs.base_branch }}` fully resolves the triaged findings.
+                            Perform all analysis silently.
+
+                            Read these repository standards first:
+                            - ${{ join(steps.load_profile.result.standardsDocs, "\n- ") }}
+
+                            Triaged findings:
+                            ${{ toJSON(steps.triage_mode.result.payload.findings) }}
+
+                            Verify results:
+                            ${{ toJSON(steps.run_verify.result) }}
+
+                            Your ENTIRE response must be a single JSON object.
+                            No text before or after.
+                            No markdown fences.
+                            No explanation.
+                            ONLY the JSON object with this shape:
+                            {"status":"ok","summary":"Short plain-text validation summary."}
+                            Use `needs_attention` when the fixes are incomplete or regressed.
+                            EOF
+                            )" | node scripts/rigg-cursor-headless.mjs json
+                    exports:
+                      payload: ${{ steps.validate_cursor.result }}
+                  - else:
+                    steps:
+                      - id: validate_codex_raw
+                        type: codex
+                        with:
+                          kind: turn
+                          model: gpt-5.5
+                          prompt: |
+                            Validate whether the diff against `${{ inputs.base_branch }}` fully resolves the triaged findings.
+
+                            Read these repository standards first:
+                            - ${{ join(steps.load_profile.result.standardsDocs, "\n- ") }}
+
+                            Triaged findings:
+                            ${{ toJSON(steps.triage_mode.result.payload.findings) }}
+
+                            Verify results:
+                            ${{ toJSON(steps.run_verify.result) }}
+
+                            Return only a JSON object with this exact shape:
+                            {"status":"ok","summary":"Short plain-text validation summary."}
+                            Use `needs_attention` when the fixes are incomplete or regressed.
+
+                      - id: validate_codex_parse
+                        type: shell
+                        with:
+                          stdout:
+                            mode: json
+                          command: |
+                            cat <<'EOF' | node scripts/rigg-extract-json-suffix.mjs
+                            ${{ steps.validate_codex_raw.result }}
+                            EOF
+                    exports:
+                      payload: ${{ steps.validate_codex_parse.result }}
+
+              - id: capture_post_validate_snapshot
+                type: shell
+                with:
+                  stdout:
+                    mode: none
+                  command: node scripts/rigg-review-state.mjs capture --state-file ".rigg-review-state.json" --iteration "${{ run.iteration }}" --slot after_validate_snapshot
+
+            exports:
+              verify: ${{ steps.run_verify.result }}
+              validate: ${{ steps.validate_mode.result.payload }}
+          - else:
+            steps:
+              - id: post_fix_defaults
+                type: shell
+                with:
+                  stdout:
+                    mode: json
+                  command: |
+                    printf '%s\n' '{"verify":{"ok":true,"commands":[]},"validate":{"status":"ok","summary":"No triaged findings remained after review."}}'
+            exports:
+              verify: ${{ steps.post_fix_defaults.result.verify }}
+              validate: ${{ steps.post_fix_defaults.result.validate }}
+
+      - id: record_verify
+        if: ${{ len(steps.triage_mode.result.payload.findings) > 0 }}
+        type: shell
+        with:
+          stdout:
+            mode: none
+          command: |
+            cat <<'EOF' | node scripts/rigg-review-state.mjs record --state-file ".rigg-review-state.json" --iteration "${{ run.iteration }}" --section verify
+            ${{ toJSON(steps.post_fix_flow.result.verify) }}
+            EOF
+
+      - id: record_validate
+        if: ${{ len(steps.triage_mode.result.payload.findings) > 0 }}
+        type: shell
+        with:
+          stdout:
+            mode: none
+          command: |
+            cat <<'EOF' | node scripts/rigg-review-state.mjs record --state-file ".rigg-review-state.json" --iteration "${{ run.iteration }}" --section validate
+            ${{ toJSON(steps.post_fix_flow.result.validate) }}
+            EOF
+
+    exports:
+      final_findings: ${{ len(steps.triage_mode.result.payload.findings) }}
+
+  - id: final_summary
+    type: shell
+    with:
+      command: node scripts/rigg-review-summary.mjs .rigg-review-state.json "${{ steps.load_profile.result.mode }}"
+      stdout:
+        mode: json

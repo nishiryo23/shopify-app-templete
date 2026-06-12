@@ -15,6 +15,7 @@ description: Copy this skill when adding a new app domain after the harness temp
 2. `tickets/` に ticket を追加し、`plans/<id>.md` を作る。
 3. route contract / retention / billing / webhook に触れるなら **先に ADR**。
 4. `tests/contracts/` に acceptance を追加し、`pnpm check` を緑にする。
+5. UI を伴う場合は `.agents/skills/polaris-admin-ui/SKILL.md` に従い、UI acceptance criteria（loading / empty / error / feedback の 4 状態、shell testid、`app/utils/admin-copy.ts` への文言集約）を ticket の Acceptance に含める。
 
 ## Truth
 

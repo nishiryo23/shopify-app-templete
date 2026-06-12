@@ -9,8 +9,9 @@ embedded = true
 automatically_update_urls_on_dev = true
 include_config_on_deploy = true
 
+# api_version は app/shopify.server.ts の ApiVersion と同期させる（ADR-0024。contract で検証）
 [webhooks]
-api_version = "2026-04"
+api_version = "2026-01"
 
 [[webhooks.subscriptions]]
 topics = [ "app/uninstalled" ]
@@ -26,7 +27,8 @@ uri = "/webhooks/compliance"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "read_inventory,read_online_store_navigation,read_products,write_files,write_inventory,write_online_store_navigation,write_products"
+# テンプレ baseline は空（ADR-0023）。scope はドメイン機能の ticket + ADR で追加する。
+scopes = ""
 
 [auth]
 redirect_urls = [ "https://example.com/auth/callback" ]

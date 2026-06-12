@@ -259,7 +259,9 @@ function getWorkerShopify(prisma) {
     future: {
       expiringOfflineAccessTokens: true,
     },
-    scopes: process.env.SCOPES?.split(","),
+    scopes: process.env.SCOPES?.split(",")
+      .map((scope) => scope.trim())
+      .filter(Boolean),
     sessionStorage: new WorkerShopSessionStorage(prisma),
     ...(process.env.SHOP_CUSTOM_DOMAIN
       ? { customShopDomains: [process.env.SHOP_CUSTOM_DOMAIN] }

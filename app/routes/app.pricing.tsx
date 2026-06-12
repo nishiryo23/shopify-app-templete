@@ -7,7 +7,10 @@ import {
   type BillingEntitlement,
   type BillingGateLoaderData,
 } from "~/app/services/billing.server";
-import { getEntitlementStateLabel } from "~/app/utils/admin-copy";
+import {
+  getEntitlementStateLabel,
+  getPlanSelectionCtaLabel,
+} from "~/app/utils/admin-copy";
 
 export const loader = (args: LoaderFunctionArgs) => loadPricingGate(args);
 
@@ -45,14 +48,27 @@ function renderPricingStateCopy(state: string) {
   return {
     actionHref: null,
     actionLabel: null,
-    description: "有効な契約が確認できません。課金状態を確認してください。",
+    description: "有効な契約が確認できません。プランを選択して利用を開始してください。",
     heading: "未契約です",
     testId: "pricing-gate-not-entitled",
   };
 }
 
+function planSelectionCtaVariant(state: string) {
+  if (state === "NOT_ENTITLED") {
+    return "primary" as const;
+  }
+
+  if (state === "ACTIVE_PAID") {
+    return "plain" as const;
+  }
+
+  return undefined;
+}
+
 export default function PricingRoute() {
-  const { entitlement: initialEntitlement } = useLoaderData() as BillingGateLoaderData;
+  const { entitlement: initialEntitlement, planSelectionUrl } =
+    useLoaderData() as BillingGateLoaderData;
   const refreshFetcher = useFetcher<BillingEntitlement>();
   const entitlement = refreshFetcher.data ?? initialEntitlement;
   const stateCopy = renderPricingStateCopy(entitlement.state);
@@ -83,6 +99,17 @@ export default function PricingRoute() {
                     ) : null}
                     <Text as="p" tone="subdued">最終確認: {entitlement.checkedAt}</Text>
                     <InlineStack gap="300">
+                      {planSelectionUrl ? (
+                        <div data-testid="pricing-plan-selection-cta">
+                          <Button
+                            target="_top"
+                            url={planSelectionUrl}
+                            variant={planSelectionCtaVariant(entitlement.state)}
+                          >
+                            {getPlanSelectionCtaLabel(entitlement.state)}
+                          </Button>
+                        </div>
+                      ) : null}
                       <Button
                         disabled={refreshFetcher.state !== "idle"}
                         onClick={() => refreshFetcher.load("/app/billing/refresh")}

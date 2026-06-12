@@ -34,6 +34,7 @@
 ## Validation
 - unit / integration / contract / smoke
 - `pnpm check`
+- UI 変更時: admin-ui-conventions contract と 4 状態（loading / empty / error / feedback）の確認
 - 追加で必要な確認
 
 ## Risks / open questions

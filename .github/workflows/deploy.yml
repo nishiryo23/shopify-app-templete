@@ -108,6 +108,7 @@ jobs:
       LOG_GROUP: /ecs/shopify-app-template
       SHOPIFY_API_KEY: ${{ vars.SHOPIFY_API_KEY }}
       SHOPIFY_APP_URL: ${{ vars.SHOPIFY_APP_URL }}
+      SHOPIFY_APP_HANDLE: ${{ vars.SHOPIFY_APP_HANDLE }}
       SCOPES: ${{ vars.SCOPES }}
       S3_ARTIFACT_PREFIX: artifacts
       LOG_LEVEL: info
@@ -135,7 +136,7 @@ jobs:
 
       - name: Validate required Shopify app config
         run: |
-          for name in SHOPIFY_API_KEY SHOPIFY_APP_URL SCOPES; do
+          for name in SHOPIFY_API_KEY SHOPIFY_APP_URL; do
             if [ -z "${!name}" ]; then
               echo "Missing required workflow env: ${name}"
               exit 1
@@ -160,6 +161,7 @@ jobs:
             LOG_GROUP="${LOG_GROUP}"
             SHOPIFY_API_KEY="${SHOPIFY_API_KEY}"
             SHOPIFY_APP_URL="${SHOPIFY_APP_URL}"
+            SHOPIFY_APP_HANDLE="${SHOPIFY_APP_HANDLE}"
             SCOPES="${SCOPES}"
             S3_ARTIFACT_BUCKET="${ARTIFACT_BUCKET}"
             S3_ARTIFACT_PREFIX="${S3_ARTIFACT_PREFIX}"

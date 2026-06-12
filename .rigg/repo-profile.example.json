@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "displayName": "replace-me",
+  "mode": "cursor",
+  "standardsDocs": [],
+  "verifyCommands": [],
+  "greenfieldDefault": false,
+  "reviewScopeNote": "",
+  "forbiddenChanges": []
+}

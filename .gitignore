@@ -19,3 +19,6 @@ playwright/.auth/
 .env
 .env.local
 .env.*.local
+
+# Rigg local review state
+.rigg-review-state.json

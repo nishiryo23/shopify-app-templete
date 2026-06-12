@@ -39,7 +39,4 @@ export default defineConfig({
   build: {
     assetsInlineLimit: 0,
   },
-  optimizeDeps: {
-    include: ["@shopify/app-bridge-react"],
-  },
 }) satisfies UserConfig;

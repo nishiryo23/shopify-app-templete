@@ -26,9 +26,6 @@ importers:
       '@react-router/serve':
         specifier: ^7.12.0
         version: 7.13.1(react-router@7.13.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(typescript@5.9.3)
-      '@shopify/app-bridge-react':
-        specifier: ^4.2.4
-        version: 4.2.10(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@shopify/polaris':
         specifier: ^13.0.0
         version: 13.9.5(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -1372,15 +1369,6 @@ packages:
 
   '@shopify/api-codegen-preset@1.2.2':
     resolution: {integrity: sha512-NizmrrrxmoIBfrGv/qvrm1ZytkGsFfeaMj14Gj+IDx6JZAK9A72jsTIyQ7DTTKWMPB6F4d7E20dygA7SEYPVEw==}
-
-  '@shopify/app-bridge-react@4.2.10':
-    resolution: {integrity: sha512-/VhfsxIvWcK7w5rBY97WdSTApLEg+Z2dT9Zc+idAUiAi48R64nYalXDUG8ar5xRoINHFC/w+9WxYViAazpgfew==}
-    peerDependencies:
-      react: '*'
-      react-dom: '*'
-
-  '@shopify/app-bridge-types@0.7.0':
-    resolution: {integrity: sha512-A/DiGIjCBdd45ijMDKLgXrrGG68so3d25Yaeo0lv8ruWeljHGn3sA+UU1o/5BptSPkikDkgPPl8EQDxe4/KShw==}
 
   '@shopify/graphql-client@1.4.2':
     resolution: {integrity: sha512-C/fEyx6BZmTGeJv0HSsduhfn5ZbkXk0nePkyo0+xXxorP1I+uvx9pobdFxTfiPnOrh+P6QiKzBgIviksnSo4YA==}
@@ -5281,16 +5269,6 @@ snapshots:
       - supports-color
       - typescript
       - utf-8-validate
-
-  '@shopify/app-bridge-react@4.2.10(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
-    dependencies:
-      '@shopify/app-bridge-types': 0.7.0
-      react: 18.3.1
-      react-dom: 18.3.1(react@18.3.1)
-
-  '@shopify/app-bridge-types@0.7.0':
-    dependencies:
-      '@standard-schema/spec': 1.1.0
 
   '@shopify/graphql-client@1.4.2': {}
 
