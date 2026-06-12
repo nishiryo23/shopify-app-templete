@@ -27,6 +27,7 @@ Create `adr/0023-empty-minimal-access-scopes-baseline.md`.
 - `shopify.app.toml` の scopes が空で、`pnpm check` が通る
 - `SCOPES` 未設定でも web / worker が起動検証を通過する（contract で検証）
 - `SCOPES=""` が `[""]` として shopifyApp に渡らない
+- 空 scope baseline で保存される `grantedScopes: []` は bootstrap 済みの有効状態として扱い、`lastBootstrapAt` を freshness sentinel にする
 - deploy workflow の必須検証が `SHOPIFY_API_KEY` / `SHOPIFY_APP_URL` のみになる
 
 ## Validation

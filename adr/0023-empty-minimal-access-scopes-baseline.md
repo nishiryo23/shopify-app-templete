@@ -17,6 +17,7 @@
   - `workers/bootstrap.mjs` の必須 env 検証から `SCOPES` を外す。
   - deploy workflow の必須検証は `SHOPIFY_API_KEY` / `SHOPIFY_APP_URL` のみとし、`SCOPES` は空のまま task definition に渡す。
 - granted scope の truth は引き続き `currentAppInstallation.accessScopes` query（ADR-0002）。
+- 空 scope baseline では `currentAppInstallation.accessScopes` の結果が空配列になることが正規状態なので、`Shop.grantedScopes: []` は未 bootstrap sentinel にしない。bootstrap freshness は `lastBootstrapAt` の有無で判定する。
 
 ## Consequences
 

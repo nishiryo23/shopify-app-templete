@@ -16,7 +16,7 @@ async function shouldBootstrapShopState(shopDomain: string) {
     return true;
   }
 
-  return bootstrapState.grantedScopes.length === 0;
+  return false;
 }
 
 async function bootstrapShopStateBestEffort(authContext: Awaited<ReturnType<typeof authenticate.admin>>) {

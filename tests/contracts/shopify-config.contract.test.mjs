@@ -327,6 +327,8 @@ test("authenticated admin loaders bootstrap shop state and custom session storag
   assert.match(authBootstrap, /const authContext = await authenticate\.admin\(request\);/);
   assert.match(authBootstrap, /const bootstrapState = await shopStateStore\.getBootstrapState\(shopDomain\);/);
   assert.match(authBootstrap, /if \(!bootstrapState\.lastBootstrapAt\) \{\s+return true;\s+\}/m);
+  assert.match(authBootstrap, /if \(!bootstrapState\.lastBootstrapAt\) \{\s+return true;\s+\}\s+return false;/m);
+  assert.doesNotMatch(authBootstrap, /grantedScopes\.length\s*===\s*0/);
   assert.match(authBootstrap, /if \(!\(await shouldBootstrapShopState\(authContext\.session\.shop\)\)\) \{\s+return;\s+\}/m);
   assert.match(authBootstrap, /try \{\s+await bootstrapShopState\(\{\s+scopes: authContext\.scopes,\s+shopDomain: authContext\.session\.shop,\s+store: shopStateStore,\s+\}\);\s+\} catch \(error\) \{/m);
   assert.match(authBootstrap, /console\.error\("Failed to bootstrap shop state after authentication"/);
