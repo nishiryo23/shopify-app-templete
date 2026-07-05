@@ -13,6 +13,7 @@ const UNCONFIGURED = "UNCONFIGURED_BEFORE_SUBMISSION";
 const DEFAULT_DATABASE_URL =
   "postgresql://127.0.0.1:5432/shopify_app_template_dev?schema=public";
 const CANONICAL_TEMPLATE_REPOSITORIES = new Set(["nishiryo23/shopify-app-templete"]);
+const SHOPIFY_APP_GID_PATTERN = /^gid:\/\/shopify\/App\/\d+$/;
 
 const INPUT_SPECS = Object.freeze([
   {
@@ -32,6 +33,14 @@ const INPUT_SPECS = Object.freeze([
     required: true,
   },
   {
+    key: "shopifyAppGid",
+    flag: "shopify-app-gid",
+    env: "SHOPIFY_APP_GID",
+    fallbackEnv: "INIT_SHOPIFY_APP_GID",
+    label: "Shopify app GID (gid://shopify/App/...)",
+    required: true,
+  },
+  {
     key: "appUrl",
     flag: "production-url",
     aliases: ["app-url"],
@@ -47,6 +56,20 @@ const INPUT_SPECS = Object.freeze([
     fallbackEnv: "INIT_DATABASE_URL",
     label: "Local DATABASE_URL",
     defaultValue: DEFAULT_DATABASE_URL,
+  },
+  {
+    key: "partnerApiOrgId",
+    flag: "partner-api-org-id",
+    env: "PARTNER_API_ORG_ID",
+    fallbackEnv: "INIT_PARTNER_API_ORG_ID",
+    label: "Partner API organization ID (optional)",
+  },
+  {
+    key: "partnerApiAccessToken",
+    flag: "partner-api-access-token",
+    env: "PARTNER_API_ACCESS_TOKEN",
+    fallbackEnv: "INIT_PARTNER_API_ACCESS_TOKEN",
+    label: "Partner API access token (optional)",
   },
   {
     key: "supportEmail",
@@ -112,14 +135,15 @@ Usage:
     --confirm-fork \\
     --app-name "My App" \\
     --app-handle my-app \\
+    --shopify-app-gid gid://shopify/App/1234567890 \\
     --production-url https://app.example.com \\
     --support-email support@example.com \\
     --privacy-policy-url https://app.example.com/privacy \\
     --reviewer-dev-store reviewer-store.myshopify.com
 
 Flags:
-  --app-name, --app-handle, --production-url
-  --database-url
+  --app-name, --app-handle, --shopify-app-gid, --production-url
+  --database-url, --partner-api-org-id, --partner-api-access-token
   --support-email, --submission-contact-email, --privacy-policy-url
   --reviewer-dev-store, --dry-run-date, --verified-by
   --shop-token-encryption-key
@@ -136,8 +160,8 @@ Safety:
   is passed.
 
 Environment alternatives:
-  INIT_APP_NAME, SHOPIFY_APP_HANDLE, SHOPIFY_APP_URL,
-  DATABASE_URL, SHOP_TOKEN_ENCRYPTION_KEY,
+  INIT_APP_NAME, SHOPIFY_APP_HANDLE, SHOPIFY_APP_GID, SHOPIFY_APP_URL,
+  DATABASE_URL, PARTNER_API_ORG_ID, PARTNER_API_ACCESS_TOKEN, SHOP_TOKEN_ENCRYPTION_KEY,
   SHOPIFY_SUPPORT_EMAIL, SHOPIFY_SUBMISSION_CONTACT_EMAIL,
   SHOPIFY_PRIVACY_POLICY_URL, SHOPIFY_REVIEWER_DEV_STORE,
   SHOPIFY_REVIEW_DRY_RUN_DATE, SHOPIFY_REVIEW_VERIFIED_BY`;
@@ -278,7 +302,7 @@ async function promptForMissingValues(values, options, env) {
 
   try {
     for (const spec of INPUT_SPECS) {
-      if (spec.key === "shopTokenEncryptionKey") {
+      if (spec.key === "shopTokenEncryptionKey" || spec.key === "partnerApiAccessToken") {
         continue;
       }
 
@@ -323,11 +347,14 @@ export async function resolveInputs(values = {}, options = {}, env = process.env
   const normalized = {
     appName: trimValue(resolved.appName),
     appHandle: trimValue(resolved.appHandle),
+    shopifyAppGid: trimValue(resolved.shopifyAppGid),
     appUrl: normalizeHttpsUrl(resolved.appUrl, {
       label: "Production app URL",
       originOnly: true,
     }),
     databaseUrl: trimValue(resolved.databaseUrl) || DEFAULT_DATABASE_URL,
+    partnerApiOrgId: trimValue(resolved.partnerApiOrgId),
+    partnerApiAccessToken: trimValue(resolved.partnerApiAccessToken),
     supportEmail: trimValue(resolved.supportEmail),
     submissionContactEmail: trimValue(resolved.submissionContactEmail) || trimValue(resolved.supportEmail),
     privacyPolicyUrl: normalizeHttpsUrl(resolved.privacyPolicyUrl, {
@@ -380,6 +407,7 @@ function validateInputs(input) {
   const missing = Object.entries({
     appName: input.appName,
     appHandle: input.appHandle,
+    shopifyAppGid: input.shopifyAppGid,
     appUrl: input.appUrl,
     supportEmail: input.supportEmail,
     submissionContactEmail: input.submissionContactEmail,
@@ -401,6 +429,14 @@ function validateInputs(input) {
 
   if (!/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(input.appHandle)) {
     throw new Error("Shopify app handle must be lowercase letters, numbers, and hyphens.");
+  }
+
+  if (!SHOPIFY_APP_GID_PATTERN.test(input.shopifyAppGid)) {
+    throw new Error("SHOPIFY_APP_GID must use gid://shopify/App/<numeric id> format (placeholders are rejected).");
+  }
+
+  if (input.partnerApiOrgId && !/^[A-Za-z0-9_-]+$/.test(input.partnerApiOrgId)) {
+    throw new Error("PARTNER_API_ORG_ID must be a Partner organization id path segment.");
   }
 
   for (const [name, value] of [
@@ -501,11 +537,23 @@ function getEnvValue(source, key) {
 }
 
 export function updateEnvSource(source, input) {
-  return [
+  let updated = [
     ["DATABASE_URL", input.databaseUrl],
     ["SHOP_TOKEN_ENCRYPTION_KEY", input.shopTokenEncryptionKey],
     ["SHOPIFY_APP_HANDLE", input.appHandle],
+    ["SHOPIFY_APP_GID", input.shopifyAppGid],
   ].reduce((current, [key, value]) => setEnvValue(current, key, value), source);
+
+  for (const [key, value] of [
+    ["PARTNER_API_ORG_ID", input.partnerApiOrgId],
+    ["PARTNER_API_ACCESS_TOKEN", input.partnerApiAccessToken],
+  ]) {
+    if (trimValue(value)) {
+      updated = setEnvValue(updated, key, value);
+    }
+  }
+
+  return updated;
 }
 
 function replaceMarkdownTableValue(source, field, value) {
@@ -594,6 +642,14 @@ export function findResidualPlaceholders(files) {
         violations.push({
           file: relativePath,
           message: "SHOP_TOKEN_ENCRYPTION_KEY must be a base64-encoded 32-byte secret.",
+        });
+      }
+
+      const shopifyAppGid = getEnvValue(source, "SHOPIFY_APP_GID");
+      if (!SHOPIFY_APP_GID_PATTERN.test(shopifyAppGid)) {
+        violations.push({
+          file: relativePath,
+          message: "SHOPIFY_APP_GID must use gid://shopify/App/<numeric id> format (placeholders are rejected).",
         });
       }
     }
@@ -1047,9 +1103,10 @@ Manual follow-up:
    gh variable set SHOPIFY_APP_HANDLE --body "${input.appHandle}"
    gh variable set SHOPIFY_APP_URL --body "${input.appUrl}"
 2. Ensure deploy task rendering receives SHOPIFY_APP_HANDLE for the web task definition.
-3. Keep scopes and domain webhooks unchanged unless a domain ticket + ADR updates them.
-4. Do not run shopify app config link after this script unless you re-run this script afterward.
-${runChecks ? "" : "5. Run pnpm install && pnpm run setup && pnpm check before review."}
+3. Set SHOPIFY_APP_GID, PARTNER_API_ORG_ID, and PARTNER_API_ACCESS_TOKEN in deployment env/secrets before billing entitlement refresh.
+4. Keep scopes and domain webhooks unchanged unless a domain ticket + ADR updates them.
+5. Do not run shopify app config link after this script unless you re-run this script afterward.
+${runChecks ? "" : "6. Run pnpm install && pnpm run setup && pnpm check before review."}
 `);
 }
 

@@ -15,6 +15,9 @@ const rootDir = path.resolve(import.meta.dirname, "../..");
 const fixedSecret = Buffer.alloc(32, 7).toString("base64");
 const existingSecret = Buffer.alloc(32, 8).toString("base64");
 const rotatedSecret = Buffer.alloc(32, 9).toString("base64");
+const appGid = "gid://shopify/App/1234567890";
+const partnerOrgId = "987654321";
+const partnerAccessToken = "partner-api-token";
 
 function projectPath(relativePath) {
   return path.join(rootDir, relativePath);
@@ -77,8 +80,11 @@ function input(overrides = {}) {
   return {
     appName: "Receipt Lens",
     appHandle: "receipt-lens",
+    shopifyAppGid: appGid,
     appUrl: "https://receipt-lens.example.test",
     databaseUrl: "postgresql://127.0.0.1:5432/receipt_lens_dev?schema=public",
+    partnerApiOrgId: partnerOrgId,
+    partnerApiAccessToken: partnerAccessToken,
     supportEmail: "support@example.test",
     submissionContactEmail: "review@example.test",
     privacyPolicyUrl: "https://receipt-lens.example.test/privacy",
@@ -151,6 +157,9 @@ test("fork init script updates fork files and preserves production webhook and s
   assert.match(env, /DATABASE_URL="postgresql:\/\/127\.0\.0\.1:5432\/receipt_lens_dev\?schema=public"/);
   assert.match(env, new RegExp(`SHOP_TOKEN_ENCRYPTION_KEY="${fixedSecret}"`));
   assert.match(env, /SHOPIFY_APP_HANDLE="receipt-lens"/);
+  assert.match(env, /SHOPIFY_APP_GID="gid:\/\/shopify\/App\/1234567890"/);
+  assert.match(env, /PARTNER_API_ORG_ID="987654321"/);
+  assert.match(env, /PARTNER_API_ACCESS_TOKEN="partner-api-token"/);
 
   const metadata = await readFile(path.join(tempRoot, "docs/app-review-metadata.md"), "utf8");
   assert.match(metadata, /\| Support email \| `support@example\.test` \|/);
@@ -161,6 +170,27 @@ test("fork init script updates fork files and preserves production webhook and s
   assert.match(reviewerPacket, /- Reviewer \/ dev store: `receipt-lens-review\.myshopify\.com`/);
   assert.match(reviewerPacket, /- Dry-run date: `2026-07-05`/);
   assert.match(reviewerPacket, /- Verified by: `review@example\.test`/);
+});
+
+test("fork init allows optional Partner API organization values to remain placeholders", async () => {
+  const tempRoot = await createForkFixture();
+
+  const files = await initializeNewApp({
+    rootDir: tempRoot,
+    confirmedFork: true,
+    input: input({
+      partnerApiOrgId: "",
+      partnerApiAccessToken: "",
+    }),
+    runChecks: false,
+  });
+
+  assert.equal(findResidualPlaceholders(files).length, 0);
+
+  const env = await readFile(path.join(tempRoot, ".env"), "utf8");
+  assert.match(env, /SHOPIFY_APP_GID="gid:\/\/shopify\/App\/1234567890"/);
+  assert.match(env, /PARTNER_API_ORG_ID="replace-with-partner-organization-id"/);
+  assert.match(env, /PARTNER_API_ACCESS_TOKEN="replace-with-partner-api-access-token"/);
 });
 
 test("fork init preserves dollar signs in replacement values", async () => {
@@ -423,7 +453,11 @@ test("fork init supports non-interactive flags and env defaults", async () => {
     "Receipt Lens",
     "--handle",
     "receipt-lens",
+    "--shopify-app-gid",
+    appGid,
     "--production-url=https://receipt-lens.example.test",
+    "--partner-api-org-id",
+    partnerOrgId,
     "--support-email",
     "support@example.test",
     "--privacy-policy-url",
@@ -436,6 +470,7 @@ test("fork init supports non-interactive flags and env defaults", async () => {
     INIT_SUBMISSION_CONTACT_EMAIL: "review@example.test",
     INIT_VERIFIED_BY: "review@example.test",
     INIT_DRY_RUN_DATE: "2026-07-05",
+    PARTNER_API_ACCESS_TOKEN: partnerAccessToken,
     SHOP_TOKEN_ENCRYPTION_KEY: fixedSecret,
   });
 
@@ -444,6 +479,9 @@ test("fork init supports non-interactive flags and env defaults", async () => {
   assert.equal(options.rotateShopTokenKey, true);
   assert.equal(options.runChecks, false);
   assert.equal(resolved.appHandle, "receipt-lens");
+  assert.equal(resolved.shopifyAppGid, appGid);
+  assert.equal(resolved.partnerApiOrgId, partnerOrgId);
+  assert.equal(resolved.partnerApiAccessToken, partnerAccessToken);
   assert.equal(resolved.submissionContactEmail, "review@example.test");
   assert.equal(resolved.verifiedBy, "review@example.test");
   assert.equal(resolved.shopTokenEncryptionKey, fixedSecret);
@@ -457,6 +495,26 @@ test("fork init normalizes production app URL to origin only", async () => {
   );
 
   assert.equal(resolved.appUrl, "https://receipt-lens.example.test");
+});
+
+test("fork init requires SHOPIFY_APP_GID in gid://shopify/App/... format", async () => {
+  await assert.rejects(
+    resolveInputs(input({ shopifyAppGid: "" }), { nonInteractive: true }, {}),
+    /shopifyAppGid/,
+  );
+
+  for (const shopifyAppGid of [
+    "gid://shopify/Product/1234567890",
+    "https://partners.shopify.com/1234567890",
+    "1234567890",
+    "gid://shopify/App/replace-with-app-gid",
+  ]) {
+    await assert.rejects(
+      resolveInputs(input({ shopifyAppGid }), { nonInteractive: true }, {}),
+      /SHOPIFY_APP_GID/,
+      shopifyAppGid,
+    );
+  }
 });
 
 test("fork init rejects production app URL path query hash and userinfo", async () => {
@@ -482,5 +540,37 @@ test("fork init rejects privacy policy URL userinfo", async () => {
       {},
     ),
     /Privacy policy URL must not include username or password/,
+  );
+});
+
+test("fork init flags the .env.example SHOPIFY_APP_GID placeholder as residual", () => {
+  const violations = findResidualPlaceholders({
+    ".env": [
+      'SHOPIFY_APP_HANDLE="demo-handle"',
+      `SHOP_TOKEN_ENCRYPTION_KEY="${fixedSecret}"`,
+      'SHOPIFY_APP_GID="gid://shopify/App/replace-with-app-gid"',
+    ].join("\n"),
+  });
+  assert.equal(violations.length, 1);
+  assert.match(violations[0].message, /SHOPIFY_APP_GID/);
+
+  const numericViolations = findResidualPlaceholders({
+    ".env": [
+      'SHOPIFY_APP_HANDLE="demo-handle"',
+      `SHOP_TOKEN_ENCRYPTION_KEY="${fixedSecret}"`,
+      `SHOPIFY_APP_GID="${appGid}"`,
+    ].join("\n"),
+  });
+  assert.equal(numericViolations.length, 0);
+});
+
+test("fork init never prompts for PARTNER_API_ACCESS_TOKEN interactively", async () => {
+  // The interactive path requires a TTY and cannot be driven from this test
+  // harness, so pin the no-echo guarantee at the source level: the prompt
+  // loop must skip the secret specs before calling rl.question.
+  const source = await readProjectFile("scripts/init-new-app.mjs");
+  assert.match(
+    source,
+    /spec\.key === "shopTokenEncryptionKey" \|\| spec\.key === "partnerApiAccessToken"/,
   );
 });

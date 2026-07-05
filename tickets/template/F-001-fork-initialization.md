@@ -24,6 +24,9 @@ fork したリポジトリを自分のアプリとして動かすための初期
 
 ### 2. Secrets / 環境変数
 - [ ] `.env` を `.env.example` から作成し、`DATABASE_URL` と `SHOP_TOKEN_ENCRYPTION_KEY`（script が未設定時のみ `node:crypto` で生成）を設定する。既存 key は offline token 復号の正本なので、rotation は `--rotate-shop-token-key` を明示し、既存 token の移行計画がある場合だけ行う
+- [ ] Partner Dashboard の対象 App エントリで `SHOPIFY_APP_GID` を確認し、`node scripts/init-new-app.mjs --confirm-fork` の入力に渡す。`gid://shopify/App/...` 形式で、個々の App ごとに異なるため fork ごとに必須。
+- [ ] Partner Dashboard の organization id を確認し、`PARTNER_API_ORG_ID` として控える。Partner API endpoint の `https://partners.shopify.com/{organization_id}/api/2026-07/graphql.json` に入る組織単位の値で、初回 fork で確認した後は同一組織内の fork で使い回せる。
+- [ ] Partner API access token を発行し、`PARTNER_API_ACCESS_TOKEN` として secret manager / deploy env に保存する。**token の Partner API client には対象 organization 所属で `Manage apps` permission が必要**（`activeSubscription` の access requirement。権限不足だと初回 billing refresh が失敗する）。組織単位の値で、初回 fork で発行した後は同一組織内の fork で使い回せる。ただしスコープ設定や運用方針で app を跨がない token にする場合は fork ごとに発行する。初回発行前の fork では script 入力を空にしてプレースホルダを残してよいが、billing entitlement の初回 refresh までに実値を設定する。token は script の対話 prompt では入力しない（画面 echo を避けるため env / flag / secret manager 経由のみ）。
 - [ ] 本番用 secrets（`SHOPIFY_API_SECRET` / `TELEMETRY_PSEUDONYM_KEY` 等）を Secrets Manager に作成し、deploy workflow の input に ARN を渡す（`infra/aws/README.md`）
 
 ### 3. Scopes（必要時のみ）
