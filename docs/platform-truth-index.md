@@ -22,11 +22,13 @@ truth_sources:
 | --- | --- |
 | admin-ui-guidelines.md | 管理画面 UI の品質規約（Polaris / 状態設計 / testid） |
 | app-review-metadata.md | App Store 提出用 review metadata の正本フィールド |
+| app-store-listing-assets.md | リスティング資産（画像・動画・説明文）の制作テンプレと提出前チェック |
 | codex-sdk-review-loop.md | Codex SDK による shopify review ループ実行メモ |
 | dev-store-smoke-checklist.md | dev store / reviewer 向け smoke チェックリスト |
 | platform-truth-index.md | 本ファイル。プラットフォーム統合の索引と前提 |
 | release-gate-matrix.md | 提出前・日常ゲートの matrix |
 | reviewer-packet.md | reviewer と dev store dry-run 用パケット |
+| shopify-review-promotions.md | 派生 repo からの知見をテンプレへ昇格させるキュー |
 | shopify_local_development.md | Shopify CLI・トンネル URL・ローカル worker |
 | template_scope.md | テンプレに含むもの／含めないもの |
 
@@ -46,6 +48,7 @@ App Store 審査・提出前ゲートの repo 内正本は次に固定する。
 - `docs/reviewer-packet.md` — reviewer と dev store dry-run で共有する経路の正本
 - `docs/release-gate-matrix.md` — submission 前の readiness gate の正本
 - `docs/dev-store-smoke-checklist.md` — reviewer path と一致する smoke 手順の正本
+- `docs/app-store-listing-assets.md` — リスティング資産（画像・動画・説明文）チェックリストの正本
 
 提出前の詳細手順は `docs/release-gate-matrix.md` を起点に辿る。
 

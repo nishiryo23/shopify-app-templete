@@ -46,12 +46,16 @@
 | 14 | `tickets/platform/P-007-managed-pricing-plan-selection-deeplink.md` | done |
 | 15 | `tickets/platform/P-008-minimal-empty-access-scopes.md` | done |
 | 16 | `tickets/harness/H-017-ci-gate-and-config-sync.md` | done |
+| 17 | `tickets/platform/P-009-growth-kit.md` | pending（テンプレ本体に配布・収益化装置を実装する。2026-07 テンプレレビュー起票） |
 
-### Phase F: Template initialization（fork 時のみ）
+### Phase F: Template initialization（fork 導線）
+
+F-001 は **fork したリポジトリで実行**する。F-002 は **テンプレ本体で** fork 導線をスクリプト化する（実装は P-009 と独立、どちらを先に着手してもよい）。
 
 | # | Ticket | Status |
 | --- | --- | --- |
 | F | `tickets/template/F-001-fork-initialization.md` | pending（fork したリポジトリで実行する） |
+| F | `tickets/template/F-002-fork-init-script.md` | pending（テンプレ本体で実装する。2026-07 テンプレレビュー起票） |
 
 ## ドメイン機能
 

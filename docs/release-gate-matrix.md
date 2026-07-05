@@ -27,6 +27,7 @@ App Store submission 前に必要な readiness gate を 1 つの matrix で確�
 | Dev-store smoke complete | `docs/dev-store-smoke-checklist.md` | `pnpm run test:smoke` を reviewer path 相当の URL で完走する | dry-run 未実施または evidence 未更新 |
 | Fatal-free primary routes | embedded `/app`, `/app/pricing`, invalid-session paths | reviewer/admin URL でも fatal-free に表示される | fatal UI error or missing storage state |
 | Contract/build gate complete | `pnpm check` | lint, contracts, ADR discipline, typecheck, build, smoke **一覧** が通る（実走は別行の Dev-store smoke） | any `pnpm check` failure |
+| Listing assets ready | `docs/app-store-listing-assets.md` | アイコン 1200x1200 / スクショ 1600x900 ×3〜6 / screencast / 説明文が揃い、禁止事項（統計/数値データ claim・成果保証・価格の Pricing details 欄以外への掲載・レビュー/証言/評価スコア・Shopify 商標の不適切使用）に抵触しない | 資産未作成、screencast 欠落、または禁止表現の残存 |
 
 ## Submission rule
 1. `docs/app-review-metadata.md` に sentinel が残っている場合は提出しない。
