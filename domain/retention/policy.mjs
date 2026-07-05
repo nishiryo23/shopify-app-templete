@@ -3,6 +3,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export const RAW_TELEMETRY_RETENTION_DAYS = 7;
 export const WEBHOOK_PAYLOAD_RETENTION_DAYS = 7;
 export const JOB_ATTEMPT_RETENTION_DAYS = 30;
+export const FUNNEL_EVENT_RETENTION_DAYS = 90;
 
 export function addDays(value, days) {
   return new Date(value.getTime() + (days * DAY_MS));
@@ -23,4 +24,8 @@ export function buildWebhookPayloadRedactionCutoff(sweepExecutedAt = new Date())
 
 export function buildJobAttemptRetentionCutoff(now = new Date()) {
   return addDays(now, -JOB_ATTEMPT_RETENTION_DAYS);
+}
+
+export function buildFunnelEventRetentionCutoff(now = new Date()) {
+  return addDays(now, -FUNNEL_EVENT_RETENTION_DAYS);
 }

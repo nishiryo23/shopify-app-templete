@@ -74,6 +74,22 @@ export const HOME_COPY = {
   title: "ホーム",
 } as const;
 
+export const GROWTH_COPY = {
+  onboardingCompleteLabel: "完了",
+  onboardingErrorBody: "チェックリストを読み込めませんでした。時間をおいて再読み込みしてください。",
+  onboardingErrorTitle: "セットアップ状況を取得できませんでした",
+  onboardingFeedbackCompleted: "チェックリストを更新しました",
+  onboardingFeedbackInvalid: "このステップは完了として記録できません",
+  onboardingHeading: "オンボーディングチェックリスト",
+  onboardingIncompleteLabel: "未完了",
+  onboardingProgressLabel: "進捗",
+  reviewBody: "利用後の率直な意見を任意で共有できます。投稿内容や投稿有無による特典はありません。",
+  reviewDismissLabel: "今後表示しない",
+  reviewDismissedTitle: "レビュー依頼を今後表示しません",
+  reviewHeading: "Shopify App Store で体験を共有",
+  reviewOpenLabel: "レビュー画面を開く",
+} as const;
+
 export const LOGIN_COPY = {
   description: "開発ストアのドメインを入力するか、Shopify 管理画面のアプリから開いてください。",
   invalidShopError: "有効なショップドメインを入力してください。",

@@ -5,7 +5,10 @@ import {
   ARTIFACT_RETENTION_DAYS,
   resolveArtifactRetentionUntil,
 } from "../../domain/artifacts/retention.mjs";
-import { buildWebhookPayloadRedactionCutoff } from "../../domain/retention/policy.mjs";
+import {
+  buildFunnelEventRetentionCutoff,
+  buildWebhookPayloadRedactionCutoff,
+} from "../../domain/retention/policy.mjs";
 import {
   SYSTEM_RETENTION_SWEEP_KIND,
   SYSTEM_STUCK_JOB_SWEEP_KIND,
@@ -193,6 +196,16 @@ test("retention sweep redacts aged webhook payloads regardless of processing sta
           }];
         },
       },
+      funnelEvent: {
+        async deleteMany({ where }) {
+          assert.deepEqual(where, {
+            occurredAt: {
+              lte: buildFunnelEventRetentionCutoff(now),
+            },
+          });
+          return { count: 6 };
+        },
+      },
       jobAttempt: {
         async deleteMany({ where }) {
           assert.deepEqual(where.job.OR, [
@@ -231,6 +244,7 @@ test("retention sweep redacts aged webhook payloads regardless of processing sta
     storage_retry_needed: 0,
   });
   assert.equal(result.attemptsDeleted, 3);
+  assert.equal(result.funnelEventsDeleted, 6);
   assert.equal(result.redactedWebhookRows, 4);
   assert.equal(result.unresolvedWebhookResidueCount, 2);
   assert.equal(markedDeleted.length, 1);
@@ -274,15 +288,20 @@ test("retention sweep stops before destructive follow-up work when the lease fen
       },
       job: { id: "system-job-lease-lost", kind: SYSTEM_RETENTION_SWEEP_KIND },
       prisma: {
-        artifact: {
-          async findMany() {
-            return [{
-              bucket: "private-artifacts",
-              objectKey: "jobs/job-1/result.json",
-            }];
-          },
+      artifact: {
+        async findMany() {
+          return [{
+            bucket: "private-artifacts",
+            objectKey: "jobs/job-1/result.json",
+          }];
         },
-        jobAttempt: {
+      },
+      funnelEvent: {
+        async deleteMany() {
+          throw new Error("funnel pruning should not run after lease loss");
+        },
+      },
+      jobAttempt: {
           async deleteMany() {
             deletedAttemptsCalls += 1;
             return { count: 0 };
@@ -338,17 +357,22 @@ test("retention sweep fails after continuing other retention duties when artifac
       },
       job: { id: "system-job-1", kind: SYSTEM_RETENTION_SWEEP_KIND },
       prisma: {
-        artifact: {
-          async findMany() {
-            return [{
-              bucket: "private-artifacts",
-              contentType: "application/json",
-              metadata: { artifact: true },
-              objectKey: "jobs/job-1/result.json",
-            }];
-          },
+      artifact: {
+        async findMany() {
+          return [{
+            bucket: "private-artifacts",
+            contentType: "application/json",
+            metadata: { artifact: true },
+            objectKey: "jobs/job-1/result.json",
+          }];
         },
-        jobAttempt: {
+      },
+      funnelEvent: {
+        async deleteMany() {
+          return { count: 1 };
+        },
+      },
+      jobAttempt: {
           async deleteMany() {
             return { count: 2 };
           },
@@ -408,15 +432,20 @@ test("retention sweep fails after keeping redaction and attempt pruning running 
       },
       job: { id: "system-job-1", kind: SYSTEM_RETENTION_SWEEP_KIND },
       prisma: {
-        artifact: {
-          async findMany() {
-            return [{
-              bucket: "private-artifacts",
-              objectKey: "jobs/job-1/result.json",
-            }];
-          },
+      artifact: {
+        async findMany() {
+          return [{
+            bucket: "private-artifacts",
+            objectKey: "jobs/job-1/result.json",
+          }];
         },
-        jobAttempt: {
+      },
+      funnelEvent: {
+        async deleteMany() {
+          return { count: 2 };
+        },
+      },
+      jobAttempt: {
           async deleteMany() {
             return { count: 5 };
           },

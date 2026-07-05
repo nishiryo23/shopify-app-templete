@@ -250,7 +250,7 @@ test("app uninstall cleanup deletes sessions by shop even without an offline ses
 
   assert.match(
     handler,
-    /if \(normalizedTopic === "app\/uninstalled"\) \{\s+await prisma\.session\.deleteMany\(\{ where: \{ shop \} \}\);/m,
+    /if \(normalizedTopic === "app\/uninstalled"\) \{[\s\S]+await recordUninstalledFunnelEventBestEffort\(\{ shopDomain: shop \}\);\s+await deleteRawGrowthStateForShop\(\{ prismaClient: prisma, shopDomain: shop \}\);\s+await prisma\.session\.deleteMany\(\{ where: \{ shop \} \}\);/m,
   );
   assert.match(
     handler,
@@ -280,9 +280,11 @@ test("lifecycle webhooks go through durable ingress before side effects", () => 
   const complianceRoute = readProjectFile("app/routes/webhooks.compliance.tsx");
 
   assert.doesNotMatch(handler, /^if \(process\.env\.NODE_ENV === "production"\)/m);
+  assert.doesNotMatch(handler, /requireWebhookTelemetryConfiguration/);
+  assert.doesNotMatch(handler, /requireTelemetryPseudonymKey/);
   assert.match(
     handler,
-    /export async function enqueueWebhookInboxEvent\(\{ request \}: ActionFunctionArgs\) \{\s+requireWebhookTelemetryConfiguration\(process\.env\);/m,
+    /export async function enqueueWebhookInboxEvent\(\{ request \}: ActionFunctionArgs\) \{\s+const rawBody = await request\.text\(\);\s+const ingressResult = await processWebhookIngress\(/m,
   );
   assert.match(
     handler,

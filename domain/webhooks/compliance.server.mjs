@@ -3,6 +3,8 @@ import path from "node:path";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 
 import { createArtifactStorageFromEnv } from "../artifacts/factory.mjs";
+import { buildFunnelEventShopWhere } from "../growth/funnel-contract.mjs";
+import { assertTelemetryPseudonymKeyFingerprint } from "../growth/pseudonym-key.mjs";
 
 export const COMPLIANCE_TOPICS = Object.freeze([
   "customers/data_request",
@@ -149,6 +151,7 @@ async function restoreArtifacts({
  *     };
  *     $transaction: <T>(callback: (tx: any) => Promise<T>) => Promise<T>;
  *   };
+ *   env?: Record<string, string | undefined>;
  *   preserveDeliveryKey?: string;
  *   preserveJobId?: string;
  *   processedAt?: Date;
@@ -159,12 +162,18 @@ async function restoreArtifacts({
 export async function eraseShopData({
   artifactStorage = createArtifactStorageFromEnv(),
   assertJobLeaseActive = () => {},
+  env = process.env,
   prisma,
   preserveDeliveryKey,
   preserveJobId,
   processedAt = new Date(),
   shopDomain,
 }) {
+  const funnelEventWhere = buildFunnelEventShopWhere({ env, shopDomain });
+  if (funnelEventWhere) {
+    await assertTelemetryPseudonymKeyFingerprint({ env, prismaClient: prisma });
+  }
+
   const artifacts = await prisma.artifact.findMany({
     select: {
       contentType: true,
@@ -213,6 +222,18 @@ export async function eraseShopData({
       const deletedShopStates = await tx.shop.deleteMany({
         where: { shopDomain },
       });
+      const deletedOnboardingProgress = await tx.onboardingProgress.deleteMany({
+        where: { shopDomain },
+      });
+      const deletedReviewRequestState = await tx.reviewRequestState.deleteMany({
+        where: { shopDomain },
+      });
+      const deletedGrowthState = await tx.growthState.deleteMany({
+        where: { shopDomain },
+      });
+      const deletedFunnelEvents = funnelEventWhere
+        ? await tx.funnelEvent.deleteMany({ where: funnelEventWhere })
+        : { count: 0 };
 
       if (preserveDeliveryKey) {
         await tx.webhookInbox.updateMany({
@@ -235,8 +256,12 @@ export async function eraseShopData({
 
       return {
         deletedArtifacts: deletedArtifactRows.count,
+        deletedFunnelEvents: deletedFunnelEvents.count,
+        deletedGrowthState: deletedGrowthState.count,
         deletedJobLeases: deletedJobLeases.count,
         deletedJobs: deletedJobs.count,
+        deletedOnboardingProgress: deletedOnboardingProgress.count,
+        deletedReviewRequestState: deletedReviewRequestState.count,
         deletedSessions: deletedSessions.count,
         deletedShopStates: deletedShopStates.count,
         deletedWebhookInboxRows: deletedWebhookInboxRows.count,

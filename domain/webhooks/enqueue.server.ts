@@ -5,10 +5,13 @@ import { createPrismaShopStateStore } from "../../app/services/prisma-shop-state
 import { createPrismaJobQueue } from "../jobs/prisma-job-queue.mjs";
 import { enqueueOrFindActiveWebhookShopRedactJob } from "./compliance-jobs.mjs";
 import { buildMetadataOnlyWebhookInboxData, isComplianceTopic } from "./compliance.server.mjs";
-import { requireTelemetryPseudonymKey } from "../telemetry/emf.mjs";
 import { createTelemetry } from "../telemetry/index.mjs";
 import { buildWebhookDeliveryKey, processWebhookIngress } from "./inbox-contract.mjs";
 import { createPrismaWebhookInboxStore } from "./prisma-inbox-store.mjs";
+import {
+  deleteRawGrowthStateForShop,
+  recordUninstalledFunnelEvent,
+} from "../growth/funnel.server";
 
 const shopStateStore = createPrismaShopStateStore(prisma);
 const jobQueue = createPrismaJobQueue(prisma);
@@ -16,12 +19,6 @@ const jobQueue = createPrismaJobQueue(prisma);
 const telemetry = createTelemetry({
   service: "web",
 });
-
-function requireWebhookTelemetryConfiguration(env = process.env) {
-  if (env.NODE_ENV === "production") {
-    requireTelemetryPseudonymKey(env);
-  }
-}
 
 function normalizeTopic(topic: string) {
   return topic.toLowerCase();
@@ -41,8 +38,42 @@ function requireHeader(headers: Headers, name: string) {
   return value.trim();
 }
 
+function resolveErrorCode(error: unknown) {
+  if (error instanceof Error && error.name) {
+    return error.name;
+  }
+
+  return "unknown-error";
+}
+
+function emitWebhookTelemetryEvent(args: Parameters<typeof telemetry.emitEvent>[0]) {
+  try {
+    telemetry.emitEvent(args);
+  } catch (error) {
+    console.error("Failed to emit webhook telemetry", {
+      errorCode: resolveErrorCode(error),
+      event: args.event,
+    });
+  }
+}
+
+async function recordUninstalledFunnelEventBestEffort({ shopDomain }: { shopDomain: string }) {
+  try {
+    await recordUninstalledFunnelEvent({
+      prismaClient: prisma,
+      shopDomain,
+    });
+  } catch (error) {
+    emitWebhookTelemetryEvent({
+      error: { code: resolveErrorCode(error) },
+      event: "growth.uninstalled_snapshot.record_failed",
+      level: "warn",
+      shopDomain,
+    });
+  }
+}
+
 export async function enqueueWebhookInboxEvent({ request }: ActionFunctionArgs) {
-  requireWebhookTelemetryConfiguration(process.env);
   const rawBody = await request.text();
   const ingressResult = await processWebhookIngress({
     headers: request.headers,
@@ -74,7 +105,7 @@ export async function enqueueWebhookInboxEvent({ request }: ActionFunctionArgs) 
     return new Response(null, { status: 500 });
   }
 
-  telemetry.emitEvent({
+  emitWebhookTelemetryEvent({
     deliveryKey,
     event: "webhook.received",
     jobKind: null,
@@ -83,7 +114,7 @@ export async function enqueueWebhookInboxEvent({ request }: ActionFunctionArgs) 
   });
 
   if (!ingressResult.enqueued && inboxEvent.processedAt) {
-    telemetry.emitEvent({
+    emitWebhookTelemetryEvent({
       deliveryKey,
       event: "webhook.duplicate",
       shopDomain: shop,
@@ -93,13 +124,15 @@ export async function enqueueWebhookInboxEvent({ request }: ActionFunctionArgs) 
   }
 
   if (normalizedTopic === "app/uninstalled") {
+    await recordUninstalledFunnelEventBestEffort({ shopDomain: shop });
+    await deleteRawGrowthStateForShop({ prismaClient: prisma, shopDomain: shop });
     await prisma.session.deleteMany({ where: { shop } });
     await shopStateStore.deleteShop(shop);
     await prisma.webhookInbox.update({
       where: { deliveryKey },
       data: { processedAt: new Date() },
     });
-    telemetry.emitEvent({
+    emitWebhookTelemetryEvent({
       deliveryKey,
       event: "webhook.processed",
       shopDomain: shop,
@@ -115,7 +148,7 @@ export async function enqueueWebhookInboxEvent({ request }: ActionFunctionArgs) 
       where: { deliveryKey },
       data: { processedAt: new Date() },
     });
-    telemetry.emitEvent({
+    emitWebhookTelemetryEvent({
       deliveryKey,
       event: "webhook.processed",
       shopDomain: shop,
@@ -137,7 +170,7 @@ export async function enqueueWebhookInboxEvent({ request }: ActionFunctionArgs) 
       return new Response(null, { status: 500 });
     }
 
-    telemetry.emitEvent({
+    emitWebhookTelemetryEvent({
       deliveryKey,
       event: "webhook.deferred",
       jobId: job.id,
@@ -154,7 +187,7 @@ export async function enqueueWebhookInboxEvent({ request }: ActionFunctionArgs) 
       where: { deliveryKey },
       data: buildMetadataOnlyWebhookInboxData({ processedAt: new Date() }),
     });
-    telemetry.emitEvent({
+    emitWebhookTelemetryEvent({
       deliveryKey,
       event: "webhook.processed",
       shopDomain: shop,
@@ -168,7 +201,7 @@ export async function enqueueWebhookInboxEvent({ request }: ActionFunctionArgs) 
     where: { deliveryKey },
     data: { processedAt: new Date() },
   });
-  telemetry.emitEvent({
+  emitWebhookTelemetryEvent({
     deliveryKey,
     event: "webhook.processed",
     shopDomain: shop,

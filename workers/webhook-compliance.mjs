@@ -3,6 +3,7 @@ import { eraseShopData } from "../domain/webhooks/compliance.server.mjs";
 export async function runWebhookShopRedactJob({
   artifactStorage,
   assertJobLeaseActive = () => {},
+  env = process.env,
   job,
   now = new Date(),
   prisma,
@@ -21,6 +22,7 @@ export async function runWebhookShopRedactJob({
   return eraseShopData({
     artifactStorage,
     assertJobLeaseActive,
+    env,
     preserveDeliveryKey: deliveryKey,
     preserveJobId: job.id,
     prisma,

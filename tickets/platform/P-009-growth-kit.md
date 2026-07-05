@@ -33,6 +33,12 @@
 - [ ] shop 識別子以外を保存する場合は `TELEMETRY_PSEUDONYM_KEY` による既存の偽名化方針に従う
 - [ ] metadata allowlist・保持期間・削除経路を contract test 化する
 
+### 収束レビュー後の root-cause 不変条件
+
+- onboarding / activated の idempotency は `createMany({ skipDuplicates: true })` と条件付き `updateMany` で実装し、interactive transaction 内で unique violation を catch して続行しない。
+- `TelemetryPseudonymKeyFingerprint` 行が欠落し、かつ既存 `FunnelEvent` が 1 件でもある場合は、現在キーを正本化せず consistency error で fail-fast する。復旧は旧 `TELEMETRY_PSEUDONYM_KEY` と fingerprint 行の復元、または全 `FunnelEvent.shopHash` の削除/再書き換え migration を明示してから fingerprint を再作成する。
+- `app/uninstalled` は snapshot 記録と raw growth cleanup を分離する。snapshot insert / shopHash 解決 / fingerprint mismatch が失敗しても `OnboardingProgress`、`GrowthState`、`ReviewRequestState` cleanup と webhook processed を進める。
+
 ### (b) オンボーディングチェックリスト
 
 - [ ] ステップ定義レジストリ（id / タイトル / 完了判定 fn）＋ `OnboardingProgress` 永続化

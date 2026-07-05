@@ -37,6 +37,59 @@ model Shop {
   updatedAt               DateTime @updatedAt
 }
 
+model GrowthState {
+  shopDomain               String    @id
+  installedAt              DateTime?
+  activatedAt              DateTime?
+  lastEntitlementState     String?
+  lastEntitlementCheckedAt DateTime?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+}
+
+model OnboardingProgress {
+  id          String   @id @default(cuid())
+  shopDomain  String
+  stepId      String
+  completedAt DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([shopDomain, stepId])
+  @@index([shopDomain, completedAt])
+}
+
+model ReviewRequestState {
+  shopDomain             String    @id
+  askedAt                DateTime?
+  dismissedAt            DateTime?
+  dismissedPermanently   Boolean   @default(false)
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+}
+
+model FunnelEvent {
+  id         String   @id @default(cuid())
+  shopHash   String
+  event      String
+  dedupeKey  String?
+  occurredAt DateTime @default(now())
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([occurredAt])
+  @@index([event, occurredAt])
+  @@index([shopHash, occurredAt])
+  @@unique([shopHash, event, dedupeKey])
+}
+
+model TelemetryPseudonymKeyFingerprint {
+  id                String   @id
+  fingerprintSha256 String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
 model WebhookInbox {
   id               String   @id @default(cuid())
   deliveryKey      String   @unique

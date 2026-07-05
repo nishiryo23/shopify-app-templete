@@ -1,6 +1,7 @@
 import { emitEvent, emitMetric, TELEMETRY_METRICS } from "../domain/telemetry/emf.mjs";
 import { createPrismaArtifactCatalog } from "../domain/artifacts/prisma-artifact-catalog.mjs";
 import {
+  buildFunnelEventRetentionCutoff,
   buildWebhookPayloadRedactionCutoff,
   buildJobAttemptRetentionCutoff,
 } from "../domain/retention/policy.mjs";
@@ -194,6 +195,13 @@ export async function runSystemRetentionSweepJob({
     },
   });
 
+  assertJobLeaseActive();
+  const deletedFunnelEvents = await prisma.funnelEvent.deleteMany({
+    where: {
+      occurredAt: { lte: buildFunnelEventRetentionCutoff(now) },
+    },
+  });
+
   const artifactCleanupFailures = artifactSummary.catalog_retry_needed + artifactSummary.storage_retry_needed;
   assertJobLeaseActive();
   if (artifactCleanupFailures > 0) {
@@ -233,6 +241,7 @@ export async function runSystemRetentionSweepJob({
     artifactsMissing: artifactSummary.already_missing,
     artifactsRetryNeeded: artifactSummary.catalog_retry_needed,
     attemptsDeleted: deletedAttempts.count,
+    funnelEventsDeleted: deletedFunnelEvents.count,
     jobId: job?.id ?? null,
     redactedWebhookRows: redactedWebhookRows.count,
     unresolvedWebhookResidueCount: unprocessedResidueCount,
@@ -241,6 +250,7 @@ export async function runSystemRetentionSweepJob({
   return {
     artifactSummary,
     attemptsDeleted: deletedAttempts.count,
+    funnelEventsDeleted: deletedFunnelEvents.count,
     redactedWebhookRows: redactedWebhookRows.count,
     unresolvedWebhookResidueCount: unprocessedResidueCount,
   };

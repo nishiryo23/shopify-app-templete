@@ -30,6 +30,15 @@ export function requireTelemetryPseudonymKey(env = process.env) {
   return parseBase64Secret(env[TELEMETRY_PSEUDONYM_KEY_ENV], TELEMETRY_PSEUDONYM_KEY_ENV);
 }
 
+export function fingerprintTelemetryPseudonymKey(env = process.env) {
+  const key = requireTelemetryPseudonymKey(env);
+
+  return crypto
+    .createHash("sha256")
+    .update(key)
+    .digest("hex");
+}
+
 function resolveEnvironmentName(env = process.env) {
   return env.NODE_ENV || "development";
 }

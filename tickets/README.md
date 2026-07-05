@@ -46,7 +46,7 @@
 | 14 | `tickets/platform/P-007-managed-pricing-plan-selection-deeplink.md` | done |
 | 15 | `tickets/platform/P-008-minimal-empty-access-scopes.md` | done |
 | 16 | `tickets/harness/H-017-ci-gate-and-config-sync.md` | done |
-| 17 | `tickets/platform/P-009-growth-kit.md` | pending（テンプレ本体に配布・収益化装置を実装する。2026-07 テンプレレビュー起票） |
+| 17 | `tickets/platform/P-009-growth-kit.md` | done（ADR-0026。テンプレ本体に Growth Kit v1 を実装） |
 
 ### Phase F: Template initialization（fork 導線）
 

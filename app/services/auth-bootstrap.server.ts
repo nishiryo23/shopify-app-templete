@@ -1,7 +1,9 @@
 import prisma from "../db.server";
 import { authenticate } from "../shopify.server";
+import { logGrowthBestEffortFailure } from "./growth-telemetry.server";
 import { createPrismaShopStateStore } from "./prisma-shop-state-store.server";
 import { bootstrapShopState } from "./shop-state.server";
+import { recordInstalledFunnelEvent } from "~/domain/growth/funnel.server";
 
 const shopStateStore = createPrismaShopStateStore(prisma);
 
@@ -38,10 +40,26 @@ async function bootstrapShopStateBestEffort(authContext: Awaited<ReturnType<type
   }
 }
 
+async function recordInstalledFunnelEventBestEffort(shopDomain: string) {
+  try {
+    await recordInstalledFunnelEvent({
+      prismaClient: prisma,
+      shopDomain,
+    });
+  } catch (error) {
+    logGrowthBestEffortFailure({
+      error,
+      event: "growth.installed.record_failed",
+      shopDomain,
+    });
+  }
+}
+
 export async function authenticateAndBootstrapShop(request: Request) {
   const authContext = await authenticate.admin(request);
 
   await bootstrapShopStateBestEffort(authContext);
+  await recordInstalledFunnelEventBestEffort(authContext.session.shop);
 
   return authContext;
 }

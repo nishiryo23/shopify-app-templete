@@ -9,6 +9,10 @@ import {
   eraseShopData,
   isComplianceTopic,
 } from "../../domain/webhooks/compliance.server.mjs";
+import {
+  fingerprintTelemetryPseudonymKey,
+  hashShopDomain,
+} from "../../domain/telemetry/emf.mjs";
 
 const rootDir = path.resolve(import.meta.dirname, "../..");
 
@@ -52,6 +56,9 @@ test("metadata-only inbox payload helper clears raw payload and preserves proces
 test("shop redact erases shop-bound artifacts and persisted shop state", async () => {
   const deletedObjectKeys = [];
   const deleted = [];
+  const env = {
+    TELEMETRY_PSEUDONYM_KEY: Buffer.alloc(32, 5).toString("base64"),
+  };
 
   const result = await eraseShopData({
     artifactStorage: {
@@ -60,7 +67,13 @@ test("shop redact erases shop-bound artifacts and persisted shop state", async (
         return true;
       },
     },
+    env,
     prisma: {
+      telemetryPseudonymKeyFingerprint: {
+        async findUnique() {
+          return { fingerprintSha256: fingerprintTelemetryPseudonymKey(env) };
+        },
+      },
       artifact: {
         async findMany({ where }) {
           assert.deepEqual(where, { shopDomain: "example.myshopify.com" });
@@ -102,6 +115,30 @@ test("shop redact erases shop-bound artifacts and persisted shop state", async (
               return { count: 1 };
             },
           },
+          onboardingProgress: {
+            async deleteMany(args) {
+              deleted.push(["onboardingProgress", args]);
+              return { count: 2 };
+            },
+          },
+          reviewRequestState: {
+            async deleteMany(args) {
+              deleted.push(["reviewRequestState", args]);
+              return { count: 1 };
+            },
+          },
+          growthState: {
+            async deleteMany(args) {
+              deleted.push(["growthState", args]);
+              return { count: 1 };
+            },
+          },
+          funnelEvent: {
+            async deleteMany(args) {
+              deleted.push(["funnelEvent", args]);
+              return { count: 6 };
+            },
+          },
           webhookInbox: {
             async deleteMany(args) {
               deleted.push(["webhookInbox", args]);
@@ -126,13 +163,23 @@ test("shop redact erases shop-bound artifacts and persisted shop state", async (
       ["jobLease", { shopDomain: "example.myshopify.com" }],
       ["session", { shop: "example.myshopify.com" }],
       ["shop", { shopDomain: "example.myshopify.com" }],
+      ["onboardingProgress", { shopDomain: "example.myshopify.com" }],
+      ["reviewRequestState", { shopDomain: "example.myshopify.com" }],
+      ["growthState", { shopDomain: "example.myshopify.com" }],
+      ["funnelEvent", {
+        shopHash: hashShopDomain("example.myshopify.com", env),
+      }],
       ["webhookInbox", { shopDomain: "example.myshopify.com" }],
     ],
   );
   assert.deepEqual(result, {
     deletedArtifacts: 2,
+    deletedFunnelEvents: 6,
+    deletedGrowthState: 1,
     deletedJobLeases: 1,
     deletedJobs: 3,
+    deletedOnboardingProgress: 2,
+    deletedReviewRequestState: 1,
     deletedSessions: 4,
     deletedShopStates: 1,
     deletedWebhookInboxRows: 5,
@@ -158,6 +205,7 @@ test("shop redact restores deleted artifacts when the database purge fails", asy
           return true;
         },
       },
+      env: { NODE_ENV: "development" },
       prisma: {
         artifact: {
           async findMany() {
@@ -232,6 +280,7 @@ test("shop redact restores already-deleted artifacts when a later external delet
           return true;
         },
       },
+      env: { NODE_ENV: "development" },
       prisma: {
         artifact: {
           async findMany() {
@@ -302,6 +351,7 @@ test("shop redact still restores deleted artifacts after the lease fence is lost
           return true;
         },
       },
+      env: { NODE_ENV: "development" },
       assertJobLeaseActive() {
         assertCalls += 1;
         if (assertCalls >= 5) {
@@ -367,6 +417,7 @@ test("shop redact preserves the current delivery as a processed metadata-only in
         return true;
       },
     },
+    env: { NODE_ENV: "development" },
     preserveDeliveryKey: "delivery-1",
     prisma: {
       artifact: {
@@ -403,6 +454,24 @@ test("shop redact preserves the current delivery as a processed metadata-only in
           shop: {
             async deleteMany(args) {
               deleted.push(["shop", args]);
+              return { count: 0 };
+            },
+          },
+          onboardingProgress: {
+            async deleteMany(args) {
+              deleted.push(["onboardingProgress", args]);
+              return { count: 0 };
+            },
+          },
+          reviewRequestState: {
+            async deleteMany(args) {
+              deleted.push(["reviewRequestState", args]);
+              return { count: 0 };
+            },
+          },
+          growthState: {
+            async deleteMany(args) {
+              deleted.push(["growthState", args]);
               return { count: 0 };
             },
           },
@@ -454,6 +523,7 @@ test("shop redact can preserve the active compliance job and lease until finaliz
         return true;
       },
     },
+    env: { NODE_ENV: "development" },
     preserveJobId: "job-redact-active",
     prisma: {
       artifact: {
@@ -493,6 +563,24 @@ test("shop redact can preserve the active compliance job and lease until finaliz
               return { count: 0 };
             },
           },
+          onboardingProgress: {
+            async deleteMany(args) {
+              deleted.push(["onboardingProgress", args]);
+              return { count: 0 };
+            },
+          },
+          reviewRequestState: {
+            async deleteMany(args) {
+              deleted.push(["reviewRequestState", args]);
+              return { count: 0 };
+            },
+          },
+          growthState: {
+            async deleteMany(args) {
+              deleted.push(["growthState", args]);
+              return { count: 0 };
+            },
+          },
           webhookInbox: {
             async deleteMany(args) {
               deleted.push(["webhookInbox", args]);
@@ -513,6 +601,9 @@ test("shop redact can preserve the active compliance job and lease until finaliz
       ["jobLease", { jobId: { not: "job-redact-active" }, shopDomain: "example.myshopify.com" }],
       ["session", { shop: "example.myshopify.com" }],
       ["shop", { shopDomain: "example.myshopify.com" }],
+      ["onboardingProgress", { shopDomain: "example.myshopify.com" }],
+      ["reviewRequestState", { shopDomain: "example.myshopify.com" }],
+      ["growthState", { shopDomain: "example.myshopify.com" }],
       ["webhookInbox", { shopDomain: "example.myshopify.com" }],
     ],
   );

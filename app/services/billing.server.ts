@@ -1,9 +1,15 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { redirect } from "react-router";
 
+import prisma from "../db.server";
 import { authenticateAndBootstrapShop } from "./auth-bootstrap.server";
+import { logGrowthBestEffortFailure } from "./growth-telemetry.server";
 import { deriveCurrentInstallationEntitlement } from "~/domain/billing/current-installation.mjs";
 import { derivePlanSelectionUrl } from "~/domain/billing/managed-pricing-url.mjs";
+import {
+  recordPlanSelectionViewed,
+  rememberEntitlementState,
+} from "~/domain/growth/funnel.server";
 import { queryCurrentAppInstallation } from "~/platform/shopify/current-app-installation.server";
 
 type DerivedBillingEntitlement = ReturnType<typeof deriveCurrentInstallationEntitlement>;
@@ -29,6 +35,56 @@ export type BillingGateLoaderData = {
   planSelectionUrl: string | null;
 };
 
+async function rememberEntitlementStateBestEffort({
+  entitlement,
+  shopDomain,
+}: {
+  entitlement: BillingEntitlement;
+  shopDomain: string;
+}) {
+  try {
+    await rememberEntitlementState({
+      checkedAt: new Date(entitlement.checkedAt),
+      entitlementState: entitlement.state,
+      prismaClient: prisma,
+      shopDomain,
+      subscriptionNamePresent: Boolean(entitlement.subscriptionName),
+      subscriptionStatus: entitlement.sourceStatus,
+    });
+  } catch (error) {
+    logGrowthBestEffortFailure({
+      error,
+      event: "growth.entitlement_state.remember_failed",
+      shopDomain,
+    });
+  }
+}
+
+async function recordPlanSelectionViewedBestEffort({
+  entitlement,
+  hasPlanSelectionUrl,
+  shopDomain,
+}: {
+  entitlement: BillingEntitlement;
+  hasPlanSelectionUrl: boolean;
+  shopDomain: string;
+}) {
+  try {
+    await recordPlanSelectionViewed({
+      entitlementState: entitlement.state,
+      hasPlanSelectionUrl,
+      prismaClient: prisma,
+      shopDomain,
+    });
+  } catch (error) {
+    logGrowthBestEffortFailure({
+      error,
+      event: "growth.plan_selection_viewed.record_failed",
+      shopDomain,
+    });
+  }
+}
+
 async function readCurrentBillingEntitlement(request: Request): Promise<BillingEntitlement> {
   const authContext = await authenticateAndBootstrapShop(request);
 
@@ -37,18 +93,30 @@ async function readCurrentBillingEntitlement(request: Request): Promise<BillingE
   });
 }
 
-async function readCurrentBillingGate(request: Request): Promise<BillingGateLoaderData> {
+async function readCurrentBillingGate(
+  request: Request,
+  { recordPlanSelectionView = false }: { recordPlanSelectionView?: boolean } = {},
+): Promise<BillingGateLoaderData> {
   const authContext = await authenticateAndBootstrapShop(request);
   const entitlement = await queryCurrentAppInstallationEntitlement(authContext.admin, {
     shopDomain: authContext.session.shop,
   });
+  const planSelectionUrl = derivePlanSelectionUrl({
+    appHandle: process.env.SHOPIFY_APP_HANDLE,
+    shopDomain: authContext.session.shop,
+  });
+
+  if (recordPlanSelectionView) {
+    await recordPlanSelectionViewedBestEffort({
+      entitlement,
+      hasPlanSelectionUrl: Boolean(planSelectionUrl),
+      shopDomain: authContext.session.shop,
+    });
+  }
 
   return {
     entitlement,
-    planSelectionUrl: derivePlanSelectionUrl({
-      appHandle: process.env.SHOPIFY_APP_HANDLE,
-      shopDomain: authContext.session.shop,
-    }),
+    planSelectionUrl,
   };
 }
 
@@ -78,14 +146,24 @@ export async function queryCurrentAppInstallationEntitlement(
     },
   });
 
-  return {
+  const checkedAt = new Date();
+  const entitlementResult = {
     ...entitlement,
-    checkedAt: new Date().toISOString(),
+    checkedAt: checkedAt.toISOString(),
   };
+
+  if (shopDomain) {
+    await rememberEntitlementStateBestEffort({
+      entitlement: entitlementResult,
+      shopDomain,
+    });
+  }
+
+  return entitlementResult;
 }
 
 export async function loadPricingGate({ request }: LoaderFunctionArgs): Promise<BillingGateLoaderData> {
-  return readCurrentBillingGate(request);
+  return readCurrentBillingGate(request, { recordPlanSelectionView: true });
 }
 
 export async function loadWelcomeGate({ request }: LoaderFunctionArgs): Promise<BillingGateLoaderData> {

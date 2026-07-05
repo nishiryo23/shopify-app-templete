@@ -66,6 +66,7 @@ test("shop redact worker erases shop data using the leased job payload", async (
         return true;
       },
     },
+    env: { NODE_ENV: "development" },
     job: {
       id: "job-redact-active",
       kind: WEBHOOK_SHOP_REDACT_KIND,
@@ -110,6 +111,24 @@ test("shop redact worker erases shop data using the leased job payload", async (
           shop: {
             async deleteMany() {
               calls.push(["shop.deleteMany"]);
+              return { count: 0 };
+            },
+          },
+          onboardingProgress: {
+            async deleteMany() {
+              calls.push(["onboardingProgress.deleteMany"]);
+              return { count: 0 };
+            },
+          },
+          reviewRequestState: {
+            async deleteMany() {
+              calls.push(["reviewRequestState.deleteMany"]);
+              return { count: 0 };
+            },
+          },
+          growthState: {
+            async deleteMany() {
+              calls.push(["growthState.deleteMany"]);
               return { count: 0 };
             },
           },

@@ -6,6 +6,8 @@ import {
   queryCurrentAppInstallationEntitlement,
   type BillingEntitlement,
 } from "./billing.server";
+import { loadGrowthHomeData, type GrowthHomeData } from "./growth.server";
+import { logGrowthBestEffortFailure } from "./growth-telemetry.server";
 
 export async function loadEmbeddedAppShell({ request }: LoaderFunctionArgs) {
   await authenticateAndBootstrapShop(request);
@@ -16,14 +18,44 @@ export async function loadEmbeddedAppShell({ request }: LoaderFunctionArgs) {
 
 export type AppHomeLoaderData = {
   entitlement: BillingEntitlement | null;
+  growth: GrowthHomeData | null;
 };
+
+async function loadGrowthHomeDataGracefully({
+  entitlement,
+  shopDomain,
+}: {
+  entitlement: BillingEntitlement | null;
+  shopDomain: string;
+}) {
+  try {
+    return await loadGrowthHomeData({
+      entitlement,
+      shopDomain,
+    });
+  } catch (error) {
+    logGrowthBestEffortFailure({
+      error,
+      event: "growth.home_data.load_failed",
+      shopDomain,
+    });
+
+    return null;
+  }
+}
 
 export async function loadAppHome({ request }: LoaderFunctionArgs): Promise<AppHomeLoaderData> {
   const authContext = await authenticateAndBootstrapShop(request);
 
   try {
+    const entitlement = await queryCurrentAppInstallationEntitlement(authContext.admin, {
+      shopDomain: authContext.session.shop,
+    });
+
     return {
-      entitlement: await queryCurrentAppInstallationEntitlement(authContext.admin, {
+      entitlement,
+      growth: await loadGrowthHomeDataGracefully({
+        entitlement,
         shopDomain: authContext.session.shop,
       }),
     };
@@ -37,7 +69,13 @@ export async function loadAppHome({ request }: LoaderFunctionArgs): Promise<AppH
       shopDomain: authContext.session.shop,
     });
 
-    return { entitlement: null };
+    return {
+      entitlement: null,
+      growth: await loadGrowthHomeDataGracefully({
+        entitlement: null,
+        shopDomain: authContext.session.shop,
+      }),
+    };
   }
 }
 
