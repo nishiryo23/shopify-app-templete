@@ -5,7 +5,11 @@
 ## Objective
 fork したリポジトリを自分のアプリとして動かすための初期化（識別子・URL・metadata の置換）を、truth を壊さずに行う。
 
+> F-002 以降、この手順の反復作業は production `shopify app config link` 後の
+> `node scripts/init-new-app.mjs --confirm-fork` を正本にする。本 ticket は Partner Dashboard 操作、scope 追加判断、dev store smoke など、script が自動化しない判断事項の checklist として残す。
+
 ## Read first
+- `scripts/init-new-app.mjs`（F-002。fork 初期化 script の正本）
 - `README.md`（Fork 時）
 - `docs/template_scope.md` / `docs/platform-truth-index.md`
 - `adr/0023-empty-minimal-access-scopes-baseline.md`（scope 追加の手順）
@@ -15,11 +19,11 @@ fork したリポジトリを自分のアプリとして動かすための初期
 
 ### 1. アプリ識別子と URL
 - [ ] Partner Dashboard でアプリを作成し、`shopify app config link` で `shopify.app.toml` を紐づける（`client_id` / `name` が置換される）
-- [ ] `application_url` と `[auth].redirect_urls` を本番 URL に置換する（`https://example.com` を残さない）
+- [ ] `node scripts/init-new-app.mjs --confirm-fork` を実行し、`application_url` と `[auth].redirect_urls` を origin-only の本番 URL に置換する（`https://example.com` を残さない）。`shopify app config link` は config file を上書きするため、script の後に再実行した場合は script も再実行する。
 - [ ] `SHOPIFY_APP_HANDLE` を設定する（Partner Dashboard のアプリ handle）。設定先: `.env` / GitHub Actions `vars.SHOPIFY_APP_HANDLE` / web task definition。未設定の間は pricing 画面の plan selection CTA が表示されない（ADR-0003）
 
 ### 2. Secrets / 環境変数
-- [ ] `.env` を `.env.example` から作成し、`DATABASE_URL` と `SHOP_TOKEN_ENCRYPTION_KEY`（`openssl rand -base64 32`）を設定する
+- [ ] `.env` を `.env.example` から作成し、`DATABASE_URL` と `SHOP_TOKEN_ENCRYPTION_KEY`（script が未設定時のみ `node:crypto` で生成）を設定する。既存 key は offline token 復号の正本なので、rotation は `--rotate-shop-token-key` を明示し、既存 token の移行計画がある場合だけ行う
 - [ ] 本番用 secrets（`SHOPIFY_API_SECRET` / `TELEMETRY_PSEUDONYM_KEY` 等）を Secrets Manager に作成し、deploy workflow の input に ARN を渡す（`infra/aws/README.md`）
 
 ### 3. Scopes（必要時のみ）

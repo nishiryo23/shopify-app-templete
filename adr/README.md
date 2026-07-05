@@ -25,6 +25,7 @@
 - 0022: Polaris admin UI baseline and conventions
 - 0023: empty minimal access scopes baseline
 - 0024: API version single truth and CI gate
+- 0025: fork initialization script truth
 
 ## Archive
 

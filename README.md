@@ -26,7 +26,7 @@ Codex / エージェント向けの **チケット制・ADR・契約テスト・
 [tickets/template/F-001-fork-initialization.md](tickets/template/F-001-fork-initialization.md) のチェックリストに従う。要約:
 
 1. Partner Dashboard でアプリを作成し、`shopify app config link` で [shopify.app.toml](shopify.app.toml) を自分のアプリに紐づける（`client_id` / `name` を置換）。
-2. `.env` を [.env.example](.env.example) からコピーし、`DATABASE_URL` と暗号化キーを設定。`SHOPIFY_APP_HANDLE` も設定する（pricing の plan selection CTA に必要）。
+2. `node scripts/init-new-app.mjs --confirm-fork` を実行し、URL / review metadata / `.env` を同期する。既存 `SHOP_TOKEN_ENCRYPTION_KEY` は保持され、rotation は `--rotate-shop-token-key` 明示時のみ行う。
 3. `pnpm install && pnpm run setup && pnpm check`
 
 ## 検証ゲート
