@@ -133,6 +133,12 @@ test("shop redact erases shop-bound artifacts and persisted shop state", async (
               return { count: 1 };
             },
           },
+          billingEntitlementSnapshot: {
+            async deleteMany(args) {
+              deleted.push(["billingEntitlementSnapshot", args]);
+              return { count: 1 };
+            },
+          },
           funnelEvent: {
             async deleteMany(args) {
               deleted.push(["funnelEvent", args]);
@@ -166,6 +172,7 @@ test("shop redact erases shop-bound artifacts and persisted shop state", async (
       ["onboardingProgress", { shopDomain: "example.myshopify.com" }],
       ["reviewRequestState", { shopDomain: "example.myshopify.com" }],
       ["growthState", { shopDomain: "example.myshopify.com" }],
+      ["billingEntitlementSnapshot", { shopDomain: "example.myshopify.com" }],
       ["funnelEvent", {
         shopHash: hashShopDomain("example.myshopify.com", env),
       }],
@@ -174,6 +181,7 @@ test("shop redact erases shop-bound artifacts and persisted shop state", async (
   );
   assert.deepEqual(result, {
     deletedArtifacts: 2,
+    deletedBillingEntitlementSnapshots: 1,
     deletedFunnelEvents: 6,
     deletedGrowthState: 1,
     deletedJobLeases: 1,
@@ -475,6 +483,12 @@ test("shop redact preserves the current delivery as a processed metadata-only in
               return { count: 0 };
             },
           },
+          billingEntitlementSnapshot: {
+            async deleteMany(args) {
+              deleted.push(["billingEntitlementSnapshot", args]);
+              return { count: 0 };
+            },
+          },
           webhookInbox: {
             async deleteMany(args) {
               deleted.push(["webhookInbox", args]);
@@ -581,6 +595,12 @@ test("shop redact can preserve the active compliance job and lease until finaliz
               return { count: 0 };
             },
           },
+          billingEntitlementSnapshot: {
+            async deleteMany(args) {
+              deleted.push(["billingEntitlementSnapshot", args]);
+              return { count: 0 };
+            },
+          },
           webhookInbox: {
             async deleteMany(args) {
               deleted.push(["webhookInbox", args]);
@@ -604,6 +624,7 @@ test("shop redact can preserve the active compliance job and lease until finaliz
       ["onboardingProgress", { shopDomain: "example.myshopify.com" }],
       ["reviewRequestState", { shopDomain: "example.myshopify.com" }],
       ["growthState", { shopDomain: "example.myshopify.com" }],
+      ["billingEntitlementSnapshot", { shopDomain: "example.myshopify.com" }],
       ["webhookInbox", { shopDomain: "example.myshopify.com" }],
     ],
   );

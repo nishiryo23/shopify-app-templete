@@ -4,7 +4,7 @@ import { redirect } from "react-router";
 import prisma from "../db.server";
 import { authenticateAndBootstrapShop } from "./auth-bootstrap.server";
 import type { BillingEntitlement } from "./billing.server";
-import { queryCurrentAppInstallationEntitlement } from "./billing.server";
+import { queryPartnerApiBillingEntitlement } from "./billing.server";
 import {
   buildEmptyWeeklyFunnelSummary,
   completeOnboardingStep,
@@ -239,9 +239,21 @@ export async function completeOnboardingStepAction({ request }: ActionFunctionAr
 export async function openReviewRequest({ request }: LoaderFunctionArgs) {
   const authContext = await authenticateAndBootstrapShop(request);
   const shopDomain = authContext.session.shop;
-  const entitlement = await queryCurrentAppInstallationEntitlement(authContext.admin, {
-    shopDomain,
-  });
+  let entitlement: BillingEntitlement;
+
+  try {
+    entitlement = await queryPartnerApiBillingEntitlement({
+      allowStaleFallback: false,
+      forceRefresh: true,
+      shopDomain,
+    });
+  } catch (error) {
+    console.warn("Review request gate skipped because live Partner API entitlement check failed.", {
+      error,
+      shopDomain,
+    });
+    throw redirect("/app");
+  }
   const growthState = await readGrowthState({ prismaClient: prisma, shopDomain });
   const checklist = await readOnboardingChecklist({
     entitlementState: entitlement.state,

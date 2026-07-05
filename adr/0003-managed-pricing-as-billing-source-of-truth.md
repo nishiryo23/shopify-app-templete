@@ -1,6 +1,8 @@
 # ADR-0003 Managed pricing as billing source of truth
 
-- Status: Accepted
+- Status: Superseded for billing entitlement truth by ADR-0027
+
+> Superseded note: this ADR records the historical P-003/P-007 design that used Admin API `currentAppInstallation` as billing truth. P-010 replaces billing entitlement truth with Partner API `activeSubscription(appId, shopId)` in ADR-0027. Keep this file for history only; do not use it as the current billing implementation source.
 
 ## Context
 welcome link と webhook は遅延・非同期のため、billing truth を別に持つ必要がある。

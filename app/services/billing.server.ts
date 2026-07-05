@@ -4,36 +4,117 @@ import { redirect } from "react-router";
 import prisma from "../db.server";
 import { authenticateAndBootstrapShop } from "./auth-bootstrap.server";
 import { logGrowthBestEffortFailure } from "./growth-telemetry.server";
-import { deriveCurrentInstallationEntitlement } from "~/domain/billing/current-installation.mjs";
+import { resolveBillingEntitlement } from "~/domain/billing/entitlement-resolver.mjs";
 import { derivePlanSelectionUrl } from "~/domain/billing/managed-pricing-url.mjs";
+import { createPartnerApiClient } from "~/domain/billing/partner-api-client.mjs";
+import {
+  buildPaidPlanHandleAllowlist,
+  normalizePlanHandle,
+} from "~/domain/billing/partner-entitlement.mjs";
 import {
   recordPlanSelectionViewed,
   rememberEntitlementState,
 } from "~/domain/growth/funnel.server";
-import { queryCurrentAppInstallation } from "~/platform/shopify/current-app-installation.server";
 
-type DerivedBillingEntitlement = ReturnType<typeof deriveCurrentInstallationEntitlement>;
+type EntitlementState =
+  | "ACTIVE_PAID"
+  | "PENDING_APPROVAL"
+  | "PAYMENT_HOLD"
+  | "NOT_ENTITLED";
 
-type MultipleActiveSubscriptionDetails = {
-  activeSubscriptionCount: number;
-  statuses: Array<string | null>;
-  subscriptionIds: Array<string | null>;
+type ResolvedBillingEntitlement = {
+  activeItemHandles: string[];
+  checkedAt: string | null;
+  currentBillingCycle: unknown | null;
+  hasActiveSubscription: boolean;
+  legacySubscriptionId: string | null;
+  pendingUpdate: unknown | null;
+  planHandle: string | null;
+  price: unknown | null;
+  state: string;
+  trialEndsAt: string | null;
 };
 
-type FallbackSubscriptionDetails = {
-  fallbackStatus: string | null;
-  isTerminal: boolean | null;
-  subscriptionId: string | null;
-};
-
-export type BillingEntitlement = Omit<DerivedBillingEntitlement, "checkedAt"> & {
+export type BillingEntitlement = {
+  activeItemHandles: string[];
   checkedAt: string;
+  currentBillingCycle: unknown | null;
+  hasActiveSubscription: boolean;
+  legacySubscriptionId: string | null;
+  pendingUpdate: unknown | null;
+  planHandle: string | null;
+  price: unknown | null;
+  state: EntitlementState;
+  trialEndsAt: string | null;
 };
 
 export type BillingGateLoaderData = {
   entitlement: BillingEntitlement;
   planSelectionUrl: string | null;
 };
+
+const SHOP_HANDLE_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
+const MYSHOPIFY_SUFFIX = ".myshopify.com";
+
+function normalizeShopDomain(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function normalizeReturnedShopParameter(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const normalized = value.trim().toLowerCase();
+
+  if (normalized.endsWith(MYSHOPIFY_SUFFIX)) {
+    return normalized;
+  }
+
+  return SHOP_HANDLE_PATTERN.test(normalized) ? `${normalized}${MYSHOPIFY_SUFFIX}` : null;
+}
+
+function isPlanSelectionReturnForShop(request: Request, shopDomain: string) {
+  const url = new URL(request.url);
+  const returnedPlanHandle = normalizePlanHandle(url.searchParams.get("plan_handle"));
+  const returnedShop = normalizeReturnedShopParameter(url.searchParams.get("shop"));
+
+  return Boolean(returnedPlanHandle && returnedShop === normalizeShopDomain(shopDomain));
+}
+
+function isEntitlementState(value: string): value is EntitlementState {
+  return (
+    value === "ACTIVE_PAID"
+    || value === "PENDING_APPROVAL"
+    || value === "PAYMENT_HOLD"
+    || value === "NOT_ENTITLED"
+  );
+}
+
+function normalizeResolvedBillingEntitlement(
+  entitlement: ResolvedBillingEntitlement,
+): BillingEntitlement {
+  if (!entitlement.checkedAt) {
+    throw new Error("Billing entitlement resolver returned no checkedAt timestamp.");
+  }
+
+  if (!isEntitlementState(entitlement.state)) {
+    throw new Error(`Billing entitlement resolver returned unknown state: ${entitlement.state}`);
+  }
+
+  return {
+    activeItemHandles: entitlement.activeItemHandles,
+    checkedAt: entitlement.checkedAt,
+    currentBillingCycle: entitlement.currentBillingCycle,
+    hasActiveSubscription: entitlement.hasActiveSubscription,
+    legacySubscriptionId: entitlement.legacySubscriptionId,
+    pendingUpdate: entitlement.pendingUpdate,
+    planHandle: entitlement.planHandle,
+    price: entitlement.price,
+    state: entitlement.state,
+    trialEndsAt: entitlement.trialEndsAt,
+  };
+}
 
 async function rememberEntitlementStateBestEffort({
   entitlement,
@@ -48,8 +129,8 @@ async function rememberEntitlementStateBestEffort({
       entitlementState: entitlement.state,
       prismaClient: prisma,
       shopDomain,
-      subscriptionNamePresent: Boolean(entitlement.subscriptionName),
-      subscriptionStatus: entitlement.sourceStatus,
+      subscriptionNamePresent: Boolean(entitlement.planHandle),
+      subscriptionStatus: null,
     });
   } catch (error) {
     logGrowthBestEffortFailure({
@@ -88,17 +169,25 @@ async function recordPlanSelectionViewedBestEffort({
 async function readCurrentBillingEntitlement(request: Request): Promise<BillingEntitlement> {
   const authContext = await authenticateAndBootstrapShop(request);
 
-  return queryCurrentAppInstallationEntitlement(authContext.admin, {
+  return queryPartnerApiBillingEntitlement({
     shopDomain: authContext.session.shop,
   });
 }
 
 async function readCurrentBillingGate(
   request: Request,
-  { recordPlanSelectionView = false }: { recordPlanSelectionView?: boolean } = {},
+  {
+    forceRefreshOnPlanSelectionReturn = false,
+    recordPlanSelectionView = false,
+  }: {
+    forceRefreshOnPlanSelectionReturn?: boolean;
+    recordPlanSelectionView?: boolean;
+  } = {},
 ): Promise<BillingGateLoaderData> {
   const authContext = await authenticateAndBootstrapShop(request);
-  const entitlement = await queryCurrentAppInstallationEntitlement(authContext.admin, {
+  const entitlement = await queryPartnerApiBillingEntitlement({
+    forceRefresh: forceRefreshOnPlanSelectionReturn
+      && isPlanSelectionReturnForShop(request, authContext.session.shop),
     shopDomain: authContext.session.shop,
   });
   const planSelectionUrl = derivePlanSelectionUrl({
@@ -120,46 +209,52 @@ async function readCurrentBillingGate(
   };
 }
 
-export async function queryCurrentAppInstallationEntitlement(
-  admin: Parameters<typeof queryCurrentAppInstallation>[0],
+export async function queryPartnerApiBillingEntitlement(
   {
+    allowStaleFallback = true,
     logger = console,
+    forceRefresh = false,
     shopDomain,
   }: {
-    logger?: Pick<typeof console, "warn">;
-    shopDomain?: string;
-  } = {},
+    allowStaleFallback?: boolean;
+    forceRefresh?: boolean;
+    logger?: typeof console;
+    shopDomain: string;
+  },
 ): Promise<BillingEntitlement> {
-  const data = await queryCurrentAppInstallation(admin);
-  const entitlement = deriveCurrentInstallationEntitlement(data.currentAppInstallation, {
-    logMultipleActiveSubscriptions(details: MultipleActiveSubscriptionDetails) {
-      logger.warn("Detected multiple active Shopify app subscriptions; using first subscription.", {
-        ...details,
-        shopDomain: shopDomain ?? null,
-      });
-    },
-    logFallbackSubscriptionSelection(details: FallbackSubscriptionDetails) {
-      logger.warn("Falling back to latest Shopify app subscription because activeSubscriptions is empty.", {
-        ...details,
-        shopDomain: shopDomain ?? null,
-      });
-    },
+  const normalizedShopDomain = normalizeShopDomain(shopDomain);
+  const shopSnapshot = await prisma.shop.findUnique({
+    select: { shopGid: true },
+    where: { shopDomain: normalizedShopDomain },
   });
 
-  const checkedAt = new Date();
-  const entitlementResult = {
-    ...entitlement,
-    checkedAt: checkedAt.toISOString(),
-  };
-
-  if (shopDomain) {
-    await rememberEntitlementStateBestEffort({
-      entitlement: entitlementResult,
-      shopDomain,
-    });
+  if (!shopSnapshot?.shopGid) {
+    throw new Error("Shop GID snapshot is required before Partner API billing refresh.");
   }
 
-  return entitlementResult;
+  const entitlement = normalizeResolvedBillingEntitlement(await resolveBillingEntitlement({
+    allowStaleFallback,
+    forceRefresh,
+    logger,
+    paidPlanHandles: buildPaidPlanHandleAllowlist({
+      testPlanHandlesEnv: process.env.BILLING_TEST_PLAN_HANDLES,
+    }),
+    partnerApiClient: createPartnerApiClient({
+      accessToken: process.env.PARTNER_API_ACCESS_TOKEN,
+      organizationId: process.env.PARTNER_API_ORG_ID,
+    }),
+    partnerAppId: process.env.SHOPIFY_APP_GID,
+    partnerShopId: shopSnapshot.shopGid,
+    prismaClient: prisma,
+    shopDomain: normalizedShopDomain,
+  }));
+
+  await rememberEntitlementStateBestEffort({
+    entitlement,
+    shopDomain: normalizedShopDomain,
+  });
+
+  return entitlement;
 }
 
 export async function loadPricingGate({ request }: LoaderFunctionArgs): Promise<BillingGateLoaderData> {
@@ -167,7 +262,9 @@ export async function loadPricingGate({ request }: LoaderFunctionArgs): Promise<
 }
 
 export async function loadWelcomeGate({ request }: LoaderFunctionArgs): Promise<BillingGateLoaderData> {
-  const gate = await readCurrentBillingGate(request);
+  const gate = await readCurrentBillingGate(request, {
+    forceRefreshOnPlanSelectionReturn: true,
+  });
   const { entitlement } = gate;
 
   if (entitlement.state === "ACTIVE_PAID") {

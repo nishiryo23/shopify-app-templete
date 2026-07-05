@@ -2944,7 +2944,10 @@ function evaluateFile(relativePath, source) {
     }
 
     for (const token of directAdminCodeTokens) {
-      if (executableContent.includes(token)) {
+      if (
+        executableContent.includes(token) &&
+        !(token === "admin.graphql(" && isAllowedAuthenticatedShopGidBootstrap(relativePath, content))
+      ) {
         violations.push({
           code: "no-direct-admin-api-access",
           message: `direct Shopify Admin API token detected: ${token}`,
@@ -3076,6 +3079,17 @@ function evaluateFile(relativePath, source) {
   return dedupeViolations(violations);
 }
 
+function isAllowedAuthenticatedShopGidBootstrap(relativePath, executableContent) {
+  return (
+    relativePath === "app/services/shop-state.server.ts" &&
+    executableContent.includes("export const CURRENT_SHOP_GID_QUERY") &&
+    executableContent.includes("query CurrentShopGid") &&
+    /shop\s*\{\s*id\s*\}/.test(executableContent) &&
+    executableContent.includes("queryCurrentShopGid") &&
+    executableContent.includes("gid://shopify/Shop/")
+  );
+}
+
 function dedupeViolations(violations) {
   const seen = new Set();
   return violations.filter((violation) => {
@@ -3164,6 +3178,7 @@ export {
   collectExportedRouteHandlers,
   collectResolvedStringBindings,
   collectVariableAssignments,
+  isAllowedAuthenticatedShopGidBootstrap,
   isDeclarationFile,
   isSourceFile,
   isWebhookRouteFile,

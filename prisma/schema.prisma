@@ -29,6 +29,7 @@ model Session {
 
 model Shop {
   shopDomain              String   @id
+  shopGid                 String?
   offlineSessionId        String?  @unique
   encryptedOfflineSession Json?
   grantedScopes           String[]
@@ -45,6 +46,27 @@ model GrowthState {
   lastEntitlementCheckedAt DateTime?
   createdAt                DateTime  @default(now())
   updatedAt                DateTime  @updatedAt
+}
+
+model BillingEntitlementSnapshot {
+  shopDomain            String   @id
+  partnerAppId          String
+  partnerShopId         String
+  activeItemHandles     Json?
+  planHandle            String?
+  legacySubscriptionId  String?
+  price                 Json?
+  currentBillingCycle   Json?
+  trialEndsAt           DateTime?
+  pendingUpdate         Json?
+  hasActiveSubscription Boolean  @default(false)
+  entitlementState      String
+  checkedAt             DateTime
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([checkedAt])
+  @@index([entitlementState])
 }
 
 model OnboardingProgress {

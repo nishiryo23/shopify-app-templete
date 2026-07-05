@@ -47,6 +47,7 @@
 | 15 | `tickets/platform/P-008-minimal-empty-access-scopes.md` | done |
 | 16 | `tickets/harness/H-017-ci-gate-and-config-sync.md` | done |
 | 17 | `tickets/platform/P-009-growth-kit.md` | done（ADR-0026。テンプレ本体に Growth Kit v1 を実装） |
+| 18 | `tickets/platform/P-010-partner-api-billing-truth.md` | done（ADR-0027。Partner API `activeSubscription` + DB snapshot TTL resolver へ billing truth を移行） |
 
 ### Phase F: Template initialization（fork 導線）
 

@@ -18,6 +18,10 @@ async function shouldBootstrapShopState(shopDomain: string) {
     return true;
   }
 
+  if (!bootstrapState.shopGid) {
+    return true;
+  }
+
   return false;
 }
 
@@ -28,6 +32,7 @@ async function bootstrapShopStateBestEffort(authContext: Awaited<ReturnType<type
 
   try {
     await bootstrapShopState({
+      admin: authContext.admin,
       scopes: authContext.scopes,
       shopDomain: authContext.session.shop,
       store: shopStateStore,

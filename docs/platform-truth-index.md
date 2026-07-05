@@ -10,6 +10,7 @@ truth_sources:
   - adr/0004-app-specific-https-webhooks-only.md
   - adr/0007-db-queue-artifact-and-provenance-crypto-truth.md
   - adr/0018-webhook-inbox-raw-payload-retention-boundary.md
+  - adr/0027-partner-api-billing-entitlement-truth.md
 ---
 
 # プラットフォーム統合の正本索引
@@ -87,11 +88,13 @@ App Store 審査・提出前ゲートの repo 内正本は次に固定する。
 | `app/services/billing.server.ts` | billing 関連 helper |
 | `app/routes/app.pricing.tsx` | pricing page |
 | `app/routes/app.welcome.tsx` | welcome / entitlement refresh |
+| `domain/billing/entitlement-resolver.mjs` | DB snapshot + TTL entitlement resolver |
 | `domain/billing/entitlement-state.mjs` | subscription status → entitlement mapping |
-| `domain/billing/current-installation.mjs` | currentAppInstallation query |
 | `domain/billing/managed-pricing-url.mjs` | plan selection deep link URL（trigger only, `SHOPIFY_APP_HANDLE`） |
+| `domain/billing/partner-api-client.mjs` | Partner API `activeSubscription(appId, shopId)` client |
+| `domain/billing/partner-entitlement.mjs` | plan handle allowlist entitlement mapping |
 
-**関連 ADR:** [0003-managed-pricing-as-billing-source-of-truth](../adr/0003-managed-pricing-as-billing-source-of-truth.md)
+**関連 ADR:** [0027-partner-api-billing-entitlement-truth](../adr/0027-partner-api-billing-entitlement-truth.md), [0003-managed-pricing-as-billing-source-of-truth](../adr/0003-managed-pricing-as-billing-source-of-truth.md)（旧仕様）
 
 ## Worker / ジョブキュー
 

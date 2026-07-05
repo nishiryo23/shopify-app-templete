@@ -149,6 +149,12 @@ function createEraseShopDataPrisma({ fingerprintStore, funnelDeleteCount = 0 }) 
               return { count: 0 };
             },
           },
+          billingEntitlementSnapshot: {
+            async deleteMany(args) {
+              deleted.push(["billingEntitlementSnapshot", args]);
+              return { count: 0 };
+            },
+          },
           funnelEvent: {
             async deleteMany(args) {
               deleted.push(["funnelEvent", args]);
@@ -383,9 +389,10 @@ test("growth schema keeps FunnelEvent pseudonymous and shop-redact deletes all g
   assert.match(schema, /model TelemetryPseudonymKeyFingerprint \{/);
   assert.match(compliance, /tx\.funnelEvent\.deleteMany/);
   assert.match(compliance, /tx\.onboardingProgress\.deleteMany/);
-  assert.match(compliance, /tx\.reviewRequestState\.deleteMany/);
-  assert.match(compliance, /tx\.growthState\.deleteMany/);
-});
+    assert.match(compliance, /tx\.reviewRequestState\.deleteMany/);
+    assert.match(compliance, /tx\.growthState\.deleteMany/);
+    assert.match(compliance, /tx\.billingEntitlementSnapshot\.deleteMany/);
+  });
 
 test("shop redact deletes current-key FunnelEvents, skips hash delete without a key, and fails fast on key mismatch", async () => {
   const matchingFingerprintStore = createFingerprintStore({
@@ -512,10 +519,10 @@ test("growth routes delegate to app services and uninstall webhook separates sna
   assert.match(reviewRoute, /openReviewRequest/);
   assert.match(reviewRoute, /dismissReviewRequest/);
   assert.match(summaryRoute, /loadWeeklyFunnelSummary/);
-  assert.match(
-    webhookHandler,
-    /await recordUninstalledFunnelEventBestEffort\(\{ shopDomain: shop \}\);\s+await deleteRawGrowthStateForShop\(\{ prismaClient: prisma, shopDomain: shop \}\);\s+await prisma\.session\.deleteMany/m,
-  );
+    assert.match(
+      webhookHandler,
+      /await recordUninstalledFunnelEventBestEffort\(\{ shopDomain: shop \}\);\s+await deleteRawGrowthStateForShop\(\{ prismaClient: prisma, shopDomain: shop \}\);\s+await prisma\.billingEntitlementSnapshot\.deleteMany\(\{ where: \{ shopDomain: shop \} \}\);\s+await prisma\.session\.deleteMany/m,
+    );
   assert.doesNotMatch(webhookHandler, /requireWebhookTelemetryConfiguration/);
   assert.doesNotMatch(webhookHandler, /requireTelemetryPseudonymKey/);
   assert.match(webhookHandler, /function emitWebhookTelemetryEvent/);
@@ -533,7 +540,7 @@ test("review request open rechecks entitlement and marks asked only with a condi
 
   assert.match(
     growthService,
-    /const entitlement = await queryCurrentAppInstallationEntitlement\(authContext\.admin, \{\s+shopDomain,\s+\}\);/m,
+    /entitlement = await queryPartnerApiBillingEntitlement\(\{\s+allowStaleFallback: false,\s+forceRefresh: true,\s+shopDomain,\s+\}\);/m,
   );
   assert.match(
     growthService,

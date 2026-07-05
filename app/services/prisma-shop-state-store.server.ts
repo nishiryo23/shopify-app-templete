@@ -13,6 +13,7 @@ export function createPrismaShopStateStore(prisma: PrismaClient): ShopStateStore
         select: {
           grantedScopes: true,
           lastBootstrapAt: true,
+          shopGid: true,
         },
       });
     },
@@ -29,17 +30,19 @@ export function createPrismaShopStateStore(prisma: PrismaClient): ShopStateStore
         },
       });
     },
-    async upsertShopBootstrap({ grantedScopes, lastBootstrapAt, shopDomain }) {
+    async upsertShopBootstrap({ grantedScopes, lastBootstrapAt, shopDomain, shopGid }) {
       await prisma.shop.upsert({
         where: { shopDomain },
         update: {
           grantedScopes,
           lastBootstrapAt,
+          shopGid,
         },
         create: {
           shopDomain,
           grantedScopes,
           lastBootstrapAt,
+          shopGid,
         },
       });
     },

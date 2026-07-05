@@ -10,8 +10,8 @@ export const ENTITLEMENT_STATES = Object.freeze({
   NOT_ENTITLED: "NOT_ENTITLED",
 });
 
-export function mapSubscriptionStatusToEntitlement(status) {
-  if (PAID_STATUSES.has(status)) {
+export function mapAllowlistedSubscriptionStatusToEntitlement(status) {
+  if (status === null || status === undefined || PAID_STATUSES.has(status)) {
     return ENTITLEMENT_STATES.ACTIVE_PAID;
   }
 

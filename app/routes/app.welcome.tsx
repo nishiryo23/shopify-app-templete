@@ -1,5 +1,5 @@
 import { useLoaderData } from "react-router";
-import { Page, Layout, Card, BlockStack, Text, Button, InlineStack, Badge } from "@shopify/polaris";
+import { Page, Layout, Card, BlockStack, Text, Button, InlineStack } from "@shopify/polaris";
 import type { LoaderFunctionArgs } from "react-router";
 
 import {
@@ -58,9 +58,6 @@ export default function WelcomeRoute() {
                     <Text as="p">{stateCopy.description}</Text>
                     <InlineStack gap="200" align="start">
                       <Text as="p">現在の状態: {entitlementLabel}</Text>
-                      {entitlement.sourceStatus ? (
-                        <Badge tone="info">{`Shopify 状態: ${entitlement.sourceStatus}`}</Badge>
-                      ) : null}
                     </InlineStack>
                     <Text as="p" tone="subdued">
                       この画面を開いただけでは契約は有効になりません。

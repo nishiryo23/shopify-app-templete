@@ -61,9 +61,9 @@ export default function AppIndexRoute() {
                         <Badge tone={getEntitlementStateTone(entitlement.state)}>
                           {getEntitlementStateLabel(entitlement.state, { includeCode: false })}
                         </Badge>
-                        {entitlement.subscriptionName ? (
+                        {entitlement.planHandle ? (
                           <Text as="p">
-                            {HOME_COPY.subscriptionLabel}: {entitlement.subscriptionName}
+                            {HOME_COPY.subscriptionLabel}: {entitlement.planHandle}
                           </Text>
                         ) : null}
                       </InlineStack>

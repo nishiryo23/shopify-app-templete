@@ -1,5 +1,5 @@
 import { useFetcher, useLoaderData } from "react-router";
-import { Page, Layout, Card, BlockStack, Text, Button, InlineStack, Badge } from "@shopify/polaris";
+import { Page, Layout, Card, BlockStack, Text, Button, InlineStack } from "@shopify/polaris";
 import type { LoaderFunctionArgs } from "react-router";
 
 import {
@@ -87,15 +87,12 @@ export default function PricingRoute() {
                     <Text as="p">{stateCopy.description}</Text>
                     <InlineStack gap="200" align="start">
                       <Text as="p">現在の状態: {entitlementLabel}</Text>
-                      {entitlement.sourceStatus ? (
-                        <Badge tone="info">{`Shopify 状態: ${entitlement.sourceStatus}`}</Badge>
-                      ) : null}
                     </InlineStack>
-                    {entitlement.subscriptionName ? (
-                      <Text as="p">契約名: {entitlement.subscriptionName}</Text>
+                    {entitlement.planHandle ? (
+                      <Text as="p">プラン: {entitlement.planHandle}</Text>
                     ) : null}
-                    {entitlement.currentPeriodEnd ? (
-                      <Text as="p">更新期限: {entitlement.currentPeriodEnd}</Text>
+                    {entitlement.trialEndsAt ? (
+                      <Text as="p">トライアル終了: {entitlement.trialEndsAt}</Text>
                     ) : null}
                     <Text as="p" tone="subdued">最終確認: {entitlement.checkedAt}</Text>
                     <InlineStack gap="300">

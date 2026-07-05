@@ -132,6 +132,12 @@ test("shop redact worker erases shop data using the leased job payload", async (
               return { count: 0 };
             },
           },
+          billingEntitlementSnapshot: {
+            async deleteMany(args) {
+              calls.push(["billingEntitlementSnapshot.deleteMany", args]);
+              return { count: 0 };
+            },
+          },
           webhookInbox: {
             async deleteMany() {
               calls.push(["webhookInbox.deleteMany"]);

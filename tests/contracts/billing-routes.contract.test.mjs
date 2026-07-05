@@ -11,14 +11,22 @@ function readProjectFile(relativePath) {
   return readFileSync(path.join(rootDir, relativePath), "utf8");
 }
 
-test("billing service queries active subscriptions only and logs multi-active anomalies", () => {
+test("billing service resolves entitlement through Partner API resolver and DB snapshot", () => {
   const service = readProjectFile("app/services/billing.server.ts");
-  const platformQuery = readProjectFile("platform/shopify/current-app-installation.server.ts");
+  const schema = readProjectFile("prisma/schema.prisma");
 
-  assert.match(service, /queryCurrentAppInstallation\(admin\)/);
-  assert.match(service, /logger\.warn\("Detected multiple active Shopify app subscriptions; using first subscription\."/);
-  assert.match(service, /logger\.warn\("Falling back to latest Shopify app subscription because activeSubscriptions is empty\."/);
-  assert.match(platformQuery, /currentAppInstallation \{[\s\S]+activeSubscriptions \{[\s\S]+allSubscriptions\(first: 1, reverse: true\) \{/m);
+  assert.match(service, /resolveBillingEntitlement/);
+  assert.match(service, /createPartnerApiClient/);
+  assert.match(service, /PARTNER_API_ACCESS_TOKEN/);
+  assert.match(service, /PARTNER_API_ORG_ID/);
+  assert.match(service, /SHOPIFY_APP_GID/);
+  assert.match(service, /shopGid/);
+  assert.match(service, /BILLING_TEST_PLAN_HANDLES/);
+  assert.match(schema, /model BillingEntitlementSnapshot/);
+  assert.match(schema, /legacySubscriptionId\s+String\?/);
+  assert.match(schema, /shopGid\s+String\?/);
+  assert.doesNotMatch(schema, /subscriptionId\s+String\?/);
+  assert.doesNotMatch(service, /queryCurrentAppInstallation|currentAppInstallation|activeSubscriptions|allSubscriptions/);
 });
 
 test("billing refresh route delegates to shared billing loader", () => {
@@ -85,12 +93,51 @@ test("pricing route renders a guarded plan selection CTA with top-level navigati
   assert.match(pricingRoute, /getPlanSelectionCtaLabel/, "CTA label must come from admin copy");
 });
 
-test("welcome route redirects active paid shops and ignores query-parameter shortcuts", () => {
+test("welcome route redirects active paid shops and force-refreshes only plan selection returns", () => {
   const welcomeRoute = readProjectFile("app/routes/app.welcome.tsx");
   const service = readProjectFile("app/services/billing.server.ts");
 
   assert.match(welcomeRoute, /loadWelcomeGate/);
   assert.match(service, /if \(entitlement\.state === "ACTIVE_PAID"\) \{\s+throw redirect\("\/app"\);/m);
+  assert.match(service, /forceRefreshOnPlanSelectionReturn: true/);
+  assert.match(service, /plan_handle/);
+  assert.match(service, /normalizeReturnedShopParameter/);
   assert.match(welcomeRoute, /この画面を開いただけでは契約は有効になりません/);
-  assert.doesNotMatch(welcomeRoute, /charge_id|searchParams|URLSearchParams/);
+  assert.doesNotMatch(`${service}\n${welcomeRoute}`, /charge_id/);
+});
+
+test("billing runtime has no residual currentAppInstallation entitlement reference", () => {
+  const billingRuntimeFiles = [
+    "app/services/app-shell.server.ts",
+    "app/services/billing.server.ts",
+    "app/services/growth.server.ts",
+    "domain/billing/entitlement-resolver.mjs",
+    "domain/billing/entitlement-state.mjs",
+    "domain/billing/managed-pricing-url.mjs",
+    "domain/billing/partner-api-client.mjs",
+    "domain/billing/partner-entitlement.mjs",
+  ];
+
+  for (const relativePath of billingRuntimeFiles) {
+    assert.doesNotMatch(
+      readProjectFile(relativePath),
+      /currentAppInstallation|queryCurrentAppInstallation|activeSubscriptions|allSubscriptions/,
+      `${relativePath} must not retain deprecated billing truth`,
+    );
+  }
+});
+
+test("review request open path requires live Partner API entitlement without stale fallback", () => {
+  const growthService = readProjectFile("app/services/growth.server.ts");
+  const adr = readProjectFile("adr/0027-partner-api-billing-entitlement-truth.md");
+
+  assert.match(
+    growthService,
+    /queryPartnerApiBillingEntitlement\(\{\s+allowStaleFallback: false,\s+forceRefresh: true,\s+shopDomain,/m,
+  );
+  assert.match(
+    growthService,
+    /catch \(error\) \{[\s\S]+throw redirect\("\/app"\);[\s\S]+\}/m,
+  );
+  assert.match(adr, /review prompt gate/);
 });

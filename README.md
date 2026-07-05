@@ -39,7 +39,13 @@ Codex / エージェント向けの **チケット制・ADR・契約テスト・
 ## Runtime notes
 
 - `SHOP_TOKEN_ENCRYPTION_KEY`: offline token 暗号化用の base64（32 byte）。未設定時は開発環境で legacy fallback する場合がある。
+- `SHOPIFY_APP_GID`: 必須。Partner API `activeSubscription(appId, shopId)` の `appId`。`gid://shopify/App/...` 形式。
+- `PARTNER_API_ORG_ID`: 必須。Partner API endpoint の organization id。endpoint は `https://partners.shopify.com/{organization_id}/api/2026-07/graphql.json`。
+- `PARTNER_API_ACCESS_TOKEN`: 必須。Shopify App Pricing entitlement refresh 用の Partner API token。Billing snapshot が未作成または TTL（約 10 分）切れのときに未設定なら refresh は fail-fast する。既存 snapshot がある場合は Partner API 失敗時も直近 snapshot に fallback する。
+- `BILLING_TEST_PLAN_HANDLES`: 任意。公開有料 plan handle は `standard` 固定で、$0 private test plan などを有料扱いにする場合だけカンマ区切りで追加する（例: `pro_plan`。英小文字・数字・hyphen・underscore を許容）。
 - `PROVENANCE_SIGNING_KEY`: 任意。`domain/provenance` を使う機能を追加するときに設定（`.env.example` 参照）。
+
+既存インストールで `Shop.shopGid` が未保存の場合、次回の認証済み Admin bootstrap で `shop { id }` を取得して snapshot に保存する。billing resolver は保存済み `gid://shopify/Shop/...` を Partner API `shopId` に使い、参照ごとに Admin API を叩かない。
 
 ## ローカル開発（トンネル URL）
 

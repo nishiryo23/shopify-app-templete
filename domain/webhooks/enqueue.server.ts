@@ -126,6 +126,7 @@ export async function enqueueWebhookInboxEvent({ request }: ActionFunctionArgs) 
   if (normalizedTopic === "app/uninstalled") {
     await recordUninstalledFunnelEventBestEffort({ shopDomain: shop });
     await deleteRawGrowthStateForShop({ prismaClient: prisma, shopDomain: shop });
+    await prisma.billingEntitlementSnapshot.deleteMany({ where: { shopDomain: shop } });
     await prisma.session.deleteMany({ where: { shop } });
     await shopStateStore.deleteShop(shop);
     await prisma.webhookInbox.update({

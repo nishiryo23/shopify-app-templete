@@ -44,7 +44,7 @@ embedded / pricing / invalid-session document のいずれかで admin reviewer 
 4. `/app/pricing` を開き、埋め込み iframe 側で pricing shell が表示される。
    - `SHOPIFY_APP_HANDLE` 設定済み環境では plan selection CTA（`pricing-plan-selection-cta`）が表示される。
    - 未契約状態で CTA を押すと top-level で Shopify admin の plan selection ページへ遷移する。
-   - プラン承認後に pricing へ戻り「状態を再確認」を押すと、状態が「有効 (ACTIVE_PAID)」になる（deep link 遷移だけでは状態が変わらないことも確認する）。
+   - `SHOPIFY_APP_GID`、`PARTNER_API_ORG_ID`、`PARTNER_API_ACCESS_TOKEN` 設定済み環境で、plan selection 戻り URL の `plan_handle` + `shop` を受けると強制 refresh され、allowlist 対象 plan は「有効 (ACTIVE_PAID)」になる（deep link 遷移や query parameter 自体では状態が変わらないことも確認する）。
 5. invalid session の XHR で `401` と `x-shopify-retry-invalid-session-request: 1` が返る。
 6. invalid session の document request が auth/install 側へ bounce する。
 7. reviewer に案内する URL と手順が上記 smoke path と一致している。

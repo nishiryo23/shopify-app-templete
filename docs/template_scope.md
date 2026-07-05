@@ -7,6 +7,7 @@ truth_sources:
   - tests/fixtures/truth/platform-premises.contracts.json
   - adr/0002-embedded-auth-and-token-exchange.md
   - adr/0004-app-specific-https-webhooks-only.md
+  - adr/0027-partner-api-billing-entitlement-truth.md
 ---
 
 # テンプレートのスコープ
@@ -31,7 +32,8 @@ truth_sources:
 
 - [0001-repo-truth-and-codex-harness](../adr/0001-repo-truth-and-codex-harness.md) — repo-local truth と Codex ハーネス
 - [0002-embedded-auth-and-token-exchange](../adr/0002-embedded-auth-and-token-exchange.md) — 埋め込み認証と token exchange
-- [0003-managed-pricing-as-billing-source-of-truth](../adr/0003-managed-pricing-as-billing-source-of-truth.md) — Managed Pricing を billing truth に置く
+- [0027-partner-api-billing-entitlement-truth](../adr/0027-partner-api-billing-entitlement-truth.md) — Partner API `activeSubscription` を billing truth に置く
+- [0003-managed-pricing-as-billing-source-of-truth](../adr/0003-managed-pricing-as-billing-source-of-truth.md) — Managed Pricing billing truth の旧仕様
 - [0004-app-specific-https-webhooks-only](../adr/0004-app-specific-https-webhooks-only.md) — app-specific / HTTPS only の webhook 方針
 
 ## 意図的に含めないもの

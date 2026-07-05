@@ -248,10 +248,10 @@ test("prisma schema persists queue and artifact foundation tables", () => {
 test("app uninstall cleanup deletes sessions by shop even without an offline session object", () => {
   const handler = readProjectFile("domain/webhooks/enqueue.server.ts");
 
-  assert.match(
-    handler,
-    /if \(normalizedTopic === "app\/uninstalled"\) \{[\s\S]+await recordUninstalledFunnelEventBestEffort\(\{ shopDomain: shop \}\);\s+await deleteRawGrowthStateForShop\(\{ prismaClient: prisma, shopDomain: shop \}\);\s+await prisma\.session\.deleteMany\(\{ where: \{ shop \} \}\);/m,
-  );
+    assert.match(
+      handler,
+      /if \(normalizedTopic === "app\/uninstalled"\) \{[\s\S]+await recordUninstalledFunnelEventBestEffort\(\{ shopDomain: shop \}\);\s+await deleteRawGrowthStateForShop\(\{ prismaClient: prisma, shopDomain: shop \}\);\s+await prisma\.billingEntitlementSnapshot\.deleteMany\(\{ where: \{ shopDomain: shop \} \}\);\s+await prisma\.session\.deleteMany\(\{ where: \{ shop \} \}\);/m,
+    );
   assert.match(
     handler,
     /if \(normalizedTopic === "app\/uninstalled"\) \{[\s\S]+await shopStateStore\.deleteShop\(shop\);/m,
@@ -329,10 +329,10 @@ test("authenticated admin loaders bootstrap shop state and custom session storag
   assert.match(authBootstrap, /const authContext = await authenticate\.admin\(request\);/);
   assert.match(authBootstrap, /const bootstrapState = await shopStateStore\.getBootstrapState\(shopDomain\);/);
   assert.match(authBootstrap, /if \(!bootstrapState\.lastBootstrapAt\) \{\s+return true;\s+\}/m);
-  assert.match(authBootstrap, /if \(!bootstrapState\.lastBootstrapAt\) \{\s+return true;\s+\}\s+return false;/m);
+  assert.match(authBootstrap, /if \(!bootstrapState\.shopGid\) \{\s+return true;\s+\}/m);
   assert.doesNotMatch(authBootstrap, /grantedScopes\.length\s*===\s*0/);
   assert.match(authBootstrap, /if \(!\(await shouldBootstrapShopState\(authContext\.session\.shop\)\)\) \{\s+return;\s+\}/m);
-  assert.match(authBootstrap, /try \{\s+await bootstrapShopState\(\{\s+scopes: authContext\.scopes,\s+shopDomain: authContext\.session\.shop,\s+store: shopStateStore,\s+\}\);\s+\} catch \(error\) \{/m);
+  assert.match(authBootstrap, /try \{\s+await bootstrapShopState\(\{\s+admin: authContext\.admin,\s+scopes: authContext\.scopes,\s+shopDomain: authContext\.session\.shop,\s+store: shopStateStore,\s+\}\);\s+\} catch \(error\) \{/m);
   assert.match(authBootstrap, /console\.error\("Failed to bootstrap shop state after authentication"/);
   assert.match(storage, /if \(session\.isOnline\) \{\s+return this\.onlineStorage\.storeSession\(session\);/m);
   assert.match(storage, /if \(!this\.encryptedOfflineSessionsEnabled\) \{\s+return this\.onlineStorage\.storeSession\(session\);/m);
@@ -348,6 +348,8 @@ test("authenticated admin loaders bootstrap shop state and custom session storag
   assert.match(crypto, /if \(!encodedKey\) \{\s+return null;\s+\}/m);
   assert.match(crypto, /SHOP_TOKEN_ENCRYPTION_KEY is required for encrypted offline session storage/);
   assert.match(bootstrap, /const scopeDetail = await scopes\.query\(\);/);
+  assert.match(bootstrap, /shop\s+\{\s+id\s+\}/);
+  assert.match(bootstrap, /gid:\/\/shopify\/Shop\//);
   assert.match(billing, /const authContext = await authenticateAndBootstrapShop\(request\);/);
   assert.match(billing, /return Response\.json\(entitlement\);/);
 });

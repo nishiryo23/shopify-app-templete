@@ -27,7 +27,7 @@ function deriveStoreHandle(shopDomain) {
 
 /**
  * Managed Pricing の plan selection ページ URL を導出する。
- * deep link は trigger only であり entitlement truth を変えない（ADR-0003）。
+ * deep link は trigger only であり entitlement truth を変えない（ADR-0027）。
  * app handle 未設定や custom domain（myshopify suffix 不一致）では null を返す。
  */
 export function derivePlanSelectionUrl({ appHandle, shopDomain }) {

@@ -3,7 +3,7 @@ import { redirect } from "react-router";
 
 import { authenticateAndBootstrapShop } from "./auth-bootstrap.server";
 import {
-  queryCurrentAppInstallationEntitlement,
+  queryPartnerApiBillingEntitlement,
   type BillingEntitlement,
 } from "./billing.server";
 import { loadGrowthHomeData, type GrowthHomeData } from "./growth.server";
@@ -48,7 +48,7 @@ export async function loadAppHome({ request }: LoaderFunctionArgs): Promise<AppH
   const authContext = await authenticateAndBootstrapShop(request);
 
   try {
-    const entitlement = await queryCurrentAppInstallationEntitlement(authContext.admin, {
+    const entitlement = await queryPartnerApiBillingEntitlement({
       shopDomain: authContext.session.shop,
     });
 

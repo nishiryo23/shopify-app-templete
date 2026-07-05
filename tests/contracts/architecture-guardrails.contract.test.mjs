@@ -6,6 +6,7 @@ import {
   collectExportedRouteHandlers,
   collectResolvedStringBindings,
   collectVariableAssignments,
+  isAllowedAuthenticatedShopGidBootstrap,
   isDeclarationFile,
   isSourceFile,
   isWebhookRouteFile,
@@ -228,5 +229,35 @@ test("tab and newline separated TypeScript operators still preserve handler and 
   assert.deepEqual(
     collectAliasedBindings(assignments, ["axios.get"]),
     ["axios.get", "request"],
+  );
+});
+
+test("guardrail allows only authenticated shop gid bootstrap Admin GraphQL", () => {
+  assert.equal(
+    isAllowedAuthenticatedShopGidBootstrap(
+      "app/services/shop-state.server.ts",
+      `
+        export const CURRENT_SHOP_GID_QUERY = \`#graphql
+          query CurrentShopGid {
+            shop {
+              id
+            }
+          }
+        \`;
+        export async function queryCurrentShopGid(admin) {
+          const response = await admin.graphql(CURRENT_SHOP_GID_QUERY);
+          const shopGid = "gid://shopify/Shop/123";
+          return shopGid;
+        }
+      `,
+    ),
+    true,
+  );
+  assert.equal(
+    isAllowedAuthenticatedShopGidBootstrap(
+      "app/services/billing.server.ts",
+      "await admin.graphql(`query { currentAppInstallation { id } }`);",
+    ),
+    false,
   );
 });

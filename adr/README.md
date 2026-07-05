@@ -15,7 +15,7 @@
 
 - 0001: repo truth and Codex harness
 - 0002: embedded auth and token exchange
-- 0003: managed pricing as billing truth
+- 0003: managed pricing as billing truth（billing entitlement は 0027 に superseded）
 - 0004: app-specific HTTPS webhooks only
 - 0006: AWS as launch infrastructure
 - 0007: DB queue artifact and crypto separation（worker は provenance key を必須としないテンプレに合わせ、ECS からは省略可）
@@ -26,6 +26,8 @@
 - 0023: empty minimal access scopes baseline
 - 0024: API version single truth and CI gate
 - 0025: fork initialization script truth
+- 0026: growth kit funnel privacy and review prompt
+- 0027: Partner API billing entitlement truth
 
 ## Archive
 

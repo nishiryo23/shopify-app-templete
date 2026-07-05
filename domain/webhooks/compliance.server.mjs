@@ -231,6 +231,9 @@ export async function eraseShopData({
       const deletedGrowthState = await tx.growthState.deleteMany({
         where: { shopDomain },
       });
+      const deletedBillingEntitlementSnapshots = await tx.billingEntitlementSnapshot.deleteMany({
+        where: { shopDomain },
+      });
       const deletedFunnelEvents = funnelEventWhere
         ? await tx.funnelEvent.deleteMany({ where: funnelEventWhere })
         : { count: 0 };
@@ -256,6 +259,7 @@ export async function eraseShopData({
 
       return {
         deletedArtifacts: deletedArtifactRows.count,
+        deletedBillingEntitlementSnapshots: deletedBillingEntitlementSnapshots.count,
         deletedFunnelEvents: deletedFunnelEvents.count,
         deletedGrowthState: deletedGrowthState.count,
         deletedJobLeases: deletedJobLeases.count,
